@@ -3,9 +3,5 @@
     "src/app/api/**/*.ts": {
       "runtime": "nodejs18.x"
     }
-  },
-  "env": {
-    "NEXT_PUBLIC_SUPABASE_URL_FIX": "https://fdaqphksmlmupyrsatcz.supabase.co",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY_FIX": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZkYXFwaGtzbWxtdXB5cnNhdGN6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg0NzIwNTMsImV4cCI6MjA3NDA0ODA1M30.l4cLThHBHj13Zxi7FPS1WN_aXl1ZPEpNOMKV35FoP"
   }
 }
