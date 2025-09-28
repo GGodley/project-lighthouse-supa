@@ -5,11 +5,10 @@ const nextConfig = {
   },
   typescript: {
     ignoreBuildErrors: false,
+    tsconfigPath: './tsconfig.json',
   },
   output: 'standalone',
-  experimental: {
-    serverComponentsExternalPackages: ['@supabase/ssr'],
-  },
+  serverExternalPackages: ['@supabase/ssr'],
 }
 
 module.exports = nextConfig

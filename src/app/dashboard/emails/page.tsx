@@ -228,3 +228,5 @@ export default function EmailsPage() {
     </div>
   )
 }
+
+export const dynamic = 'force-dynamic'

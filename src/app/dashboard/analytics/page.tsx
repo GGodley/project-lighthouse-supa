@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Calendar, TrendingUp, Users, DollarSign, Percent } from 'lucide-react';
@@ -358,5 +358,7 @@ const AnalyticsTab = () => {
     </div>
   );
 };
+
+export const dynamic = 'force-dynamic'
 
 export default AnalyticsTab;

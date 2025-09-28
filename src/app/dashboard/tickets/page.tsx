@@ -194,3 +194,5 @@ export default function TicketsPage() {
     </div>
   )
 }
+
+export const dynamic = 'force-dynamic'

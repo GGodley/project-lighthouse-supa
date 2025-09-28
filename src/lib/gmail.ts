@@ -4,9 +4,44 @@ import { Database } from '@/types/database'
 type Profile = Database['public']['Tables']['profiles']['Row']
 type Email = Database['public']['Tables']['emails']['Row']
 
+// Define proper types for Gmail API
+interface GmailMessage {
+  id: string
+  threadId: string
+  subject: string
+  sender: string
+  recipient: string
+  body: string
+  htmlBody: string
+  date: string
+  labels: string[]
+  isRead: boolean
+}
+
+interface GmailHeader {
+  name: string
+  value: string
+}
+
+interface GmailPayload {
+  headers?: GmailHeader[]
+  body?: {
+    data?: string
+  }
+  parts?: GmailPayload[]
+  mimeType?: string
+}
+
+interface GmailMessageData {
+  id: string
+  threadId: string
+  payload?: GmailPayload
+  labelIds?: string[]
+}
+
 export class GmailService {
-  private oauth2Client: any
-  private gmail: any
+  private oauth2Client: any // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private gmail: any // eslint-disable-next-line @typescript-eslint/no-explicit-any
 
   constructor(accessToken: string, refreshToken: string) {
     this.oauth2Client = new google.auth.OAuth2(
@@ -23,7 +58,7 @@ export class GmailService {
     this.gmail = google.gmail({ version: 'v1', auth: this.oauth2Client })
   }
 
-  async getEmails(maxResults: number = 50): Promise<any[]> {
+  async getEmails(maxResults: number = 50): Promise<GmailMessage[]> {
     try {
       const response = await this.gmail.users.messages.list({
         userId: 'me',
@@ -47,7 +82,7 @@ export class GmailService {
     }
   }
 
-  private async getEmailDetails(messageId: string): Promise<any | null> {
+  private async getEmailDetails(messageId: string): Promise<GmailMessage | null> {
     try {
       const response = await this.gmail.users.messages.get({
         userId: 'me',
@@ -55,11 +90,11 @@ export class GmailService {
         format: 'full',
       })
 
-      const message = response.data
+      const message: GmailMessageData = response.data
       const headers = message.payload?.headers || []
       
       const getHeader = (name: string) => 
-        headers.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value
+        headers.find((h: GmailHeader) => h.name.toLowerCase() === name.toLowerCase())?.value
 
       const subject = getHeader('Subject') || 'No Subject'
       const sender = getHeader('From') || 'Unknown Sender'
@@ -83,7 +118,7 @@ export class GmailService {
       }
 
       return {
-        messageId: message.id,
+        id: message.id,
         threadId: message.threadId,
         subject,
         sender,
@@ -143,9 +178,9 @@ export class GmailService {
 }
 
 export async function syncEmailsToDatabase(
-  supabase: any,
+  supabase: any, // eslint-disable-next-line @typescript-eslint/no-explicit-any
   userId: string,
-  emails: any[]
+  emails: GmailMessage[]
 ): Promise<void> {
   try {
     for (const email of emails) {
@@ -154,7 +189,7 @@ export async function syncEmailsToDatabase(
         .from('emails')
         .select('id')
         .eq('user_id', userId)
-        .eq('message_id', email.messageId)
+        .eq('message_id', email.id)
         .single()
 
       if (!existingEmail) {
@@ -171,7 +206,7 @@ export async function syncEmailsToDatabase(
           .insert({
             user_id: userId,
             client_id: client?.id || null,
-            message_id: email.messageId,
+            message_id: email.id,
             thread_id: email.threadId,
             subject: email.subject,
             sender: email.sender,
