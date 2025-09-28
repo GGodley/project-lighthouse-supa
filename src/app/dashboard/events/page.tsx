@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Database } from '@/types/database'
 import { Button } from '@/components/ui/Button'
@@ -19,11 +19,7 @@ export default function EventsPage() {
   const [view, setView] = useState<'upcoming' | 'all'>('upcoming')
   const supabase = createClient()
 
-  useEffect(() => {
-    fetchEvents()
-  }, [view])
-
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
@@ -50,7 +46,11 @@ export default function EventsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase, view])
+
+  useEffect(() => {
+    fetchEvents()
+  }, [fetchEvents, view])
 
   const getEventIcon = (type: string) => {
     switch (type) {

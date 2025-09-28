@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Database } from '@/types/database'
 import { Button } from '@/components/ui/Button'
@@ -21,11 +21,7 @@ export default function TicketsPage() {
   const [priorityFilter, setPriorityFilter] = useState<string>('all')
   const supabase = createClient()
 
-  useEffect(() => {
-    fetchTickets()
-  }, [])
-
-  const fetchTickets = async () => {
+  const fetchTickets = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
@@ -46,7 +42,11 @@ export default function TicketsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    fetchTickets()
+  }, [fetchTickets])
 
   const filteredTickets = tickets.filter(ticket => {
     const matchesSearch = ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||

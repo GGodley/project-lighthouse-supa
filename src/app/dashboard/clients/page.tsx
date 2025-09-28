@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Database } from '@/types/database'
 import { Button } from '@/components/ui/Button'
@@ -15,11 +15,7 @@ export default function ClientsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const supabase = createClient()
 
-  useEffect(() => {
-    fetchClients()
-  }, [])
-
-  const fetchClients = async () => {
+  const fetchClients = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
@@ -37,7 +33,11 @@ export default function ClientsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    fetchClients()
+  }, [fetchClients])
 
   const filteredClients = clients.filter(client => {
     const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

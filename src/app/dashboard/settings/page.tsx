@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Database } from '@/types/database'
 import { Button } from '@/components/ui/Button'
@@ -14,11 +14,7 @@ export default function SettingsPage() {
   const [syncing, setSyncing] = useState(false)
   const supabase = createClient()
 
-  useEffect(() => {
-    fetchProfile()
-  }, [])
-
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
@@ -36,7 +32,11 @@ export default function SettingsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    fetchProfile()
+  }, [fetchProfile])
 
   const syncEmails = async () => {
     setSyncing(true)

@@ -10,6 +10,13 @@ type FeatureRequestData = {
   high_urgency_count: number;
 };
 
+type PostgreSQLError = {
+  message: string;
+  code?: string;
+  hint?: string;
+  details?: string;
+};
+
 export async function GET() {
   const cookieStore = await cookies();
 
@@ -45,10 +52,11 @@ export async function GET() {
     console.log('Raw data received from RPC call:', JSON.stringify(featureRequests, null, 2));
 
     if (functionError) {
-      console.error('PostgreSQL function error:', functionError.message);
-      console.error('Function error details:', functionError);
-      console.error('Function error code:', functionError.code);
-      console.error('Function error hint:', functionError.hint);
+      const error = functionError as PostgreSQLError;
+      console.error('PostgreSQL function error:', error.message);
+      console.error('Function error details:', error);
+      console.error('Function error code:', error.code);
+      console.error('Function error hint:', error.hint);
       return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 

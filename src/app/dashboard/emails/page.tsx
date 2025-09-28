@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { RefreshCw, Search, Mail } from 'lucide-react'
@@ -23,6 +23,33 @@ export default function EmailsPage() {
   const supabase = createClient()
   const router = useRouter()
 
+  const fetchEmails = useCallback(async () => {
+    try {
+      const res = await fetch('/api/emails', { cache: 'no-store' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Failed to load emails (${res.status})`)
+      }
+      const json = await res.json()
+      setEmails(json.emails || [])
+    } catch (error) {
+      console.error('Error fetching emails:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const invokeSync = useCallback(async (session: { provider_token?: string | null; access_token?: string | null }) => {
+    if (!session?.provider_token) return
+    const accessToken = session.access_token
+    const providerToken = session.provider_token
+    const { error } = await supabase.functions.invoke('sync-emails', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: { provider_token: providerToken }
+    })
+    if (error) throw error
+  }, [supabase])
+
   useEffect(() => {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession()
@@ -44,34 +71,7 @@ export default function EmailsPage() {
     return () => {
       authSub.subscription.unsubscribe()
     }
-  }, [])
-
-  const fetchEmails = async () => {
-    try {
-      const res = await fetch('/api/emails', { cache: 'no-store' })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || `Failed to load emails (${res.status})`)
-      }
-      const json = await res.json()
-      setEmails(json.emails || [])
-    } catch (error) {
-      console.error('Error fetching emails:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const invokeSync = async (session: { provider_token?: string | null; access_token?: string | null }) => {
-    if (!session?.provider_token) return
-    const accessToken = session.access_token
-    const providerToken = session.provider_token
-    const { error } = await supabase.functions.invoke('sync-emails', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      body: { provider_token: providerToken }
-    })
-    if (error) throw error
-  }
+  }, [fetchEmails, invokeSync, supabase.auth])
 
   const syncEmails = async () => {
     setSyncing(true)

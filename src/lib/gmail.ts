@@ -1,8 +1,11 @@
-import { google } from 'googleapis'
-import { Database } from '@/types/database'
+import { google, gmail_v1 } from 'googleapis'
+import { OAuth2Client } from 'google-auth-library'
+import { Database } from '@/types/database.types'
+import type { SupabaseClient as SupabaseClientType } from '@supabase/supabase-js'
 
-type Profile = Database['public']['Tables']['profiles']['Row']
-type Email = Database['public']['Tables']['emails']['Row']
+// type Profile = Database['public']['Tables']['profiles']['Row']
+// type Email = Database['public']['Tables']['emails']['Row']
+type SupabaseClient = SupabaseClientType<Database>
 
 // Define proper types for Gmail API
 interface GmailMessage {
@@ -18,30 +21,13 @@ interface GmailMessage {
   isRead: boolean
 }
 
-interface GmailHeader {
-  name: string
-  value: string
-}
-
-interface GmailPayload {
-  headers?: GmailHeader[]
-  body?: {
-    data?: string
-  }
-  parts?: GmailPayload[]
-  mimeType?: string
-}
-
-interface GmailMessageData {
-  id: string
-  threadId: string
-  payload?: GmailPayload
-  labelIds?: string[]
-}
+// Use official Google API types
+type GmailHeader = gmail_v1.Schema$MessagePartHeader
+type GmailMessageData = gmail_v1.Schema$Message
 
 export class GmailService {
-  private oauth2Client: any // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private gmail: any // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private oauth2Client: OAuth2Client
+  private gmail: gmail_v1.Gmail
 
   constructor(accessToken: string, refreshToken: string) {
     this.oauth2Client = new google.auth.OAuth2(
@@ -69,9 +55,11 @@ export class GmailService {
       const emails = []
 
       for (const message of messages) {
-        const email = await this.getEmailDetails(message.id)
-        if (email) {
-          emails.push(email)
+        if (message.id) {
+          const email = await this.getEmailDetails(message.id)
+          if (email) {
+            emails.push(email)
+          }
         }
       }
 
@@ -94,7 +82,7 @@ export class GmailService {
       const headers = message.payload?.headers || []
       
       const getHeader = (name: string) => 
-        headers.find((h: GmailHeader) => h.name.toLowerCase() === name.toLowerCase())?.value
+        headers.find((h: GmailHeader) => h.name?.toLowerCase() === name.toLowerCase())?.value
 
       const subject = getHeader('Subject') || 'No Subject'
       const sender = getHeader('From') || 'Unknown Sender'
@@ -118,8 +106,8 @@ export class GmailService {
       }
 
       return {
-        id: message.id,
-        threadId: message.threadId,
+        id: message.id || '',
+        threadId: message.threadId || '',
         subject,
         sender,
         recipient,
@@ -178,7 +166,7 @@ export class GmailService {
 }
 
 export async function syncEmailsToDatabase(
-  supabase: any, // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient,
   userId: string,
   emails: GmailMessage[]
 ): Promise<void> {
@@ -193,19 +181,19 @@ export async function syncEmailsToDatabase(
         .single()
 
       if (!existingEmail) {
-        // Try to find associated client by email
-        const { data: client } = await supabase
-          .from('clients')
+        // Try to find associated customer by email
+        const { data: customer } = await supabase
+          .from('customers')
           .select('id')
           .eq('user_id', userId)
-          .eq('email', email.sender)
+          .eq('contact_email', email.sender)
           .single()
 
         await supabase
           .from('emails')
           .insert({
             user_id: userId,
-            client_id: client?.id || null,
+            client_id: customer?.id || null,
             message_id: email.id,
             thread_id: email.threadId,
             subject: email.subject,
