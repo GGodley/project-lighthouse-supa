@@ -50,8 +50,9 @@ export default function CustomerProfilePage() {
           }
           const data = await response.json();
           setCustomer(data);
-        } catch (err: any) {
-          setError(err.message);
+        } catch (err: unknown) {
+          const errorMessage = err instanceof Error ? err.message : 'Failed to fetch customer data';
+          setError(errorMessage);
         } finally {
           setLoading(false);
         }
@@ -79,7 +80,7 @@ export default function CustomerProfilePage() {
         <h2 className="text-lg font-semibold text-gray-800 mb-2">Interaction Timeline</h2>
         <p className="text-sm text-gray-500 mb-6">Complete history of calls and emails with detailed summaries.</p>
         <div className="relative pl-6 border-l-2 border-gray-200 space-y-6">
-          {customer?.allInteractions?.map((interaction, index) => (
+          {customer?.allInteractions?.map((interaction) => (
             <div key={interaction.interaction_id} className="relative">
               <div className="absolute -left-[33px] top-1.5 h-4 w-4 rounded-full bg-white border-2 border-gray-300"></div>
               <button onClick={() => setSelectedInteraction(interaction)} className="w-full text-left p-4 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">

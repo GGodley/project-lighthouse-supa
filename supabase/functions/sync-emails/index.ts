@@ -102,7 +102,7 @@ serve(async (req) => {
       const body = await listResp.text();
       throw new Error(`Gmail list failed: ${listResp.status} ${body}`);
     }
-    const listJson: any = await listResp.json();
+    const listJson: { messages?: Array<{ id: string }> } = await listResp.json();
     const messages = Array.isArray(listJson.messages) ? listJson.messages : [];
     console.log("Gmail list count:", messages.length);
 
@@ -122,16 +122,16 @@ serve(async (req) => {
         const padLen = (4 - (b64.length % 4)) % 4;
         const padded = b64 + '='.repeat(padLen);
         return atob(padded);
-      } catch (_) {
+      } catch {
         return undefined;
       }
     };
 
-    const collectBodies = (payload: any): { text?: string; html?: string } => {
+    const collectBodies = (payload: { parts?: Array<{ mimeType?: string; mime_type?: string; body?: { data?: string } }> }): { text?: string; html?: string } => {
       let text: string | undefined;
       let html: string | undefined;
 
-      const visit = (part: any) => {
+      const visit = (part: { mimeType?: string; mime_type?: string; body?: { data?: string }; parts?: Array<unknown> }) => {
         if (!part) return;
         const mime = part.mimeType || part.mime_type;
         if (part.body?.data) {
@@ -149,7 +149,7 @@ serve(async (req) => {
       return { text, html };
     };
 
-    const emailsToStore = await Promise.all(messages.map(async (msg: any) => {
+    const emailsToStore = await Promise.all(messages.map(async (msg: { id: string }) => {
       const msgResp = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`, {
         headers: { Authorization: `Bearer ${providerToken}` },
       });
@@ -157,7 +157,7 @@ serve(async (req) => {
         const body = await msgResp.text();
         throw new Error(`Gmail get message failed: ${msgResp.status} ${body}`);
       }
-      const msgJson: any = await msgResp.json();
+      const msgJson: { payload?: { headers?: Array<{ name: string; value: string }> } } = await msgResp.json();
       const headers: Array<{ name: string; value: string }> = msgJson?.payload?.headers ?? [];
       const subject = headers.find(h => h.name === 'Subject')?.value || 'No Subject';
       const senderHeader = headers.find(h => h.name === 'From')?.value || 'Unknown Sender';
@@ -170,7 +170,7 @@ serve(async (req) => {
       let customerId: string | null = null;
       if (senderEmailOnly) {
         // 1) Try find existing customer by contact_email
-        let { data: customer, error: findErr } = await supabaseAdmin
+        const { data: customer, error: findErr } = await supabaseAdmin
           .from('customers')
           .select('id')
           .eq('contact_email', senderEmailOnly)

@@ -13,7 +13,7 @@ interface DashboardLayoutProps {
 }
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
-  const [user, setUser] = useState<Profile | null>(null)
+  const [, setUser] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
   const router = useRouter()
@@ -35,7 +35,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           .eq('id', authUser.id)
           .maybeSingle()
         setUser(profile ?? null)
-      } catch (_) {
+      } catch {
         setUser(null)
       } finally {
         setLoading(false)

@@ -24,8 +24,9 @@ export async function GET() {
     }
 
     return NextResponse.json({ emails: data ?? [] }, { status: 200 })
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Unknown error' }, { status: 500 })
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }
 

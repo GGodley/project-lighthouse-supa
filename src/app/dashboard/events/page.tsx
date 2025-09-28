@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Database } from '@/types/database'
 import { Button } from '@/components/ui/Button'
-import { Plus, Calendar, Clock, Users, Phone, Mail, CheckCircle, XCircle } from 'lucide-react'
+import { Plus, Calendar, Clock, Users, Phone, Mail, CheckCircle } from 'lucide-react'
 
 type Event = Database['public']['Tables']['events']['Row']
 type Client = Database['public']['Tables']['clients']['Row']

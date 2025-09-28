@@ -81,7 +81,7 @@ export default function AuthForm() {
         <div className="mt-6 text-center">
           <p className="text-xs text-gray-500">
             By continuing, you agree to our Terms of Service and Privacy Policy.
-            We'll access your email to help you manage your customer relationships.
+            We&apos;ll access your email to help you manage your customer relationships.
           </p>
         </div>
       </div>

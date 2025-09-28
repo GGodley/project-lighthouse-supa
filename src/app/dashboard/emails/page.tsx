@@ -6,8 +6,17 @@ import { Button } from '@/components/ui/Button'
 import { RefreshCw, Search, Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
+type Email = {
+  id: string;
+  subject: string;
+  sender: string;
+  snippet: string;
+  received_at: string;
+  created_at: string;
+};
+
 export default function EmailsPage() {
-  const [emails, setEmails] = useState<any[]>([])
+  const [emails, setEmails] = useState<Email[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -53,7 +62,7 @@ export default function EmailsPage() {
     }
   }
 
-  const invokeSync = async (session: any) => {
+  const invokeSync = async (session: { provider_token?: string | null; access_token?: string | null }) => {
     if (!session?.provider_token) return
     const accessToken = session.access_token
     const providerToken = session.provider_token
@@ -102,6 +111,7 @@ export default function EmailsPage() {
   })
 
   const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'Unknown date';
     const date = new Date(dateString)
     const now = new Date()
     const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)

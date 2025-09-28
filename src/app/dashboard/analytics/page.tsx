@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Calendar, TrendingUp, Users, DollarSign, Percent } from 'lucide-react';
@@ -137,8 +137,8 @@ const AnalyticsTab = () => {
           color: 'hsl(214, 31%, 91%)'
         },
         ticks: {
-          callback: function (value: any) {
-            return '$' + value / 1000 + 'K';
+          callback: function (value: number | string) {
+            return '$' + (Number(value) / 1000) + 'K';
           }
         }
       }

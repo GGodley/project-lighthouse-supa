@@ -3,8 +3,15 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
+type FeatureRequestData = {
+  title: string;
+  low_urgency_count: number;
+  medium_urgency_count: number;
+  high_urgency_count: number;
+};
+
 export async function GET() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -50,25 +57,25 @@ export async function GET() {
     console.log('Raw function data:', JSON.stringify(featureRequests, null, 2));
 
     // Transform the data for the chart based on the expected format
-    const labels = featureRequests?.map((item: any) => item.title) || [];
+    const labels = featureRequests?.map((item: FeatureRequestData) => item.title) || [];
     const chartData = {
       labels,
       datasets: [
         {
           label: 'High Urgency',
-          data: featureRequests?.map((item: any) => item.high_urgency_count || 0) || [],
+          data: featureRequests?.map((item: FeatureRequestData) => item.high_urgency_count || 0) || [],
           backgroundColor: 'hsl(4, 85%, 60%)', // Red
           borderRadius: 4
         },
         {
           label: 'Medium Urgency',
-          data: featureRequests?.map((item: any) => item.medium_urgency_count || 0) || [],
+          data: featureRequests?.map((item: FeatureRequestData) => item.medium_urgency_count || 0) || [],
           backgroundColor: 'hsl(41, 95%, 55%)', // Amber
           borderRadius: 4
         },
         {
           label: 'Low Urgency',
-          data: featureRequests?.map((item: any) => item.low_urgency_count || 0) || [],
+          data: featureRequests?.map((item: FeatureRequestData) => item.low_urgency_count || 0) || [],
           backgroundColor: 'hsl(214, 31%, 70%)', // Muted
           borderRadius: 4
         }

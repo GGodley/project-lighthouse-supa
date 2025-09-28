@@ -2,13 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Database } from '@/types/database'
 import { Users, Ticket, Calendar, Mail, TrendingUp, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 
-type Client = Database['public']['Tables']['clients']['Row']
-type Ticket = Database['public']['Tables']['tickets']['Row']
-type Event = Database['public']['Tables']['events']['Row']
+export const dynamic = 'force-dynamic'
+
 
 interface DashboardStats {
   totalClients: number
@@ -30,7 +28,7 @@ export default function DashboardPage() {
   })
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
-  const [recentEmails, setRecentEmails] = useState<any[]>([])
+  const [recentEmails, setRecentEmails] = useState<Array<{ id: string; subject: string; sender: string; received_at: string; snippet: string }>>([])
   const supabase = createClient()
 
   useEffect(() => {
@@ -86,7 +84,7 @@ export default function DashboardPage() {
     fetchDashboardData()
   }, [supabase])
 
-  const invokeSync = async (session: any) => {
+  const invokeSync = async (session: { access_token?: string | null; provider_token?: string | null }) => {
     const accessToken = session.access_token
     const providerToken = session.provider_token
     if (!providerToken) return
@@ -182,7 +180,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600">Welcome back! Here's what's happening with your clients.</p>
+        <p className="text-gray-600">Welcome back! Here&apos;s what&apos;s happening with your clients.</p>
         <div className="mt-4">
           <Button onClick={syncEmails} disabled={syncing} className="flex items-center gap-2">
             <Mail className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />

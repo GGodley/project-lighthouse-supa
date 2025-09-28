@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Database } from '@/types/database'
 import { Button } from '@/components/ui/Button'
-import { Plus, Search, Filter, MoreVertical, Clock, AlertTriangle, CheckCircle } from 'lucide-react'
+import { Plus, Search, MoreVertical, Clock, AlertTriangle, CheckCircle } from 'lucide-react'
 
 type Ticket = Database['public']['Tables']['tickets']['Row']
 type Client = Database['public']['Tables']['clients']['Row']
