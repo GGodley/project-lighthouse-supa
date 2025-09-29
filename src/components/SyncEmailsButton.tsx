@@ -43,27 +43,31 @@ export default function SyncEmailsButton() {
       await supabase.functions.invoke('sync-emails', {
         body: { jobId: job.id, provider_token: providerToken },
       });
-    } catch (invokeError: any) {
-      setMessage(`Error invoking function: ${invokeError.message}`);
+    } catch (invokeError: unknown) {
+      const errMsg = invokeError instanceof Error ? invokeError.message : 'Unknown error invoking function';
+      setMessage(`Error invoking function: ${errMsg}`);
       setSyncStatus('failed');
-      await supabase.from('sync_jobs').update({ status: 'failed', details: invokeError.message }).eq('id', job.id);
+      await supabase.from('sync_jobs').update({ status: 'failed', details: errMsg }).eq('id', job.id);
     }
   };
 
   useEffect(() => {
     if (syncStatus !== 'running') return;
 
+    type SyncJob = Database['public']['Tables']['sync_jobs']['Row'];
+
     const interval = setInterval(async () => {
       const { data: latestJob } = await supabase
         .from('sync_jobs')
-        .select('status, details')
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
 
-      if (latestJob?.status === 'completed' || latestJob?.status === 'failed') {
-        setSyncStatus(latestJob.status as 'completed' | 'failed');
-        setMessage(latestJob.details || `Sync ${latestJob.status}.`);
+      const typedJob = latestJob as SyncJob | null;
+      if (typedJob?.status === 'completed' || typedJob?.status === 'failed') {
+        setSyncStatus(typedJob.status as 'completed' | 'failed');
+        setMessage(typedJob.details || `Sync ${typedJob.status}.`);
         clearInterval(interval);
       }
     }, 5000);
