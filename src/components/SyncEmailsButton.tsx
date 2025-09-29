@@ -19,9 +19,10 @@ export default function SyncEmailsButton() {
       return;
     }
 
+    type SyncJobInsert = Database['public']['Tables']['sync_jobs']['Insert'];
     const { data: job, error: jobError } = await supabase
       .from('sync_jobs')
-      .insert({ user_id: session.user.id, status: 'pending' })
+      .insert({ user_id: session.user.id, status: 'pending' } as SyncJobInsert)
       .select()
       .single();
 
