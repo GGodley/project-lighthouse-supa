@@ -19,10 +19,11 @@ export default function SyncEmailsButton() {
       return;
     }
 
-    type SyncJobInsert = Database['public']['Tables']['sync_jobs']['Insert'];
-    const { data: job, error: jobError } = await supabase
+    // Use an untyped client for the insert to avoid build-time table inference issues on CI
+    const untyped = createClientComponentClient();
+    const { data: job, error: jobError } = await untyped
       .from('sync_jobs')
-      .insert({ user_id: session.user.id, status: 'pending' } as SyncJobInsert)
+      .insert({ user_id: session.user.id, status: 'pending' })
       .select()
       .single();
 
