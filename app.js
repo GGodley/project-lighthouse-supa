@@ -26,7 +26,7 @@ signInBtn.addEventListener('click', async () => {
         options: {
             // Force first-party redirect to avoid popup blockers
             preferRedirect: true,
-            redirectTo: window.location.origin,
+            redirectTo: process.env.NEXT_PUBLIC_SITE_URL || window.location.origin,
             scopes: 'https://www.googleapis.com/auth/gmail.readonly',
             // Ask Google to show consent and grant offline access
             queryParams: {
@@ -120,6 +120,7 @@ syncEmailsBtn.addEventListener('click', async () => {
         const { error: signInError } = await supabaseClient.auth.signInWithOAuth({
             provider: 'google',
             options: {
+                redirectTo: process.env.NEXT_PUBLIC_SITE_URL || window.location.origin,
                 scopes: 'https://www.googleapis.com/auth/gmail.readonly',
             },
         });

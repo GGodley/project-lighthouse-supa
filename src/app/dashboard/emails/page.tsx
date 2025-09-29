@@ -81,6 +81,7 @@ export default function EmailsPage() {
         await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
+            redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/auth/callback`,
             scopes: 'https://www.googleapis.com/auth/gmail.readonly',
             queryParams: { prompt: 'consent', access_type: 'offline' }
           }
