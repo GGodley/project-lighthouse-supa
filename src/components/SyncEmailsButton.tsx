@@ -32,7 +32,7 @@ export default function SyncEmailsButton() {
     }
 
     try {
-      const providerToken = (session as any)?.provider_token as string | undefined;
+      const providerToken = (session as { provider_token?: string })?.provider_token;
       if (!providerToken) {
         setMessage('Error: Missing provider token. Please re-authenticate with Google.');
         setSyncStatus('failed');
