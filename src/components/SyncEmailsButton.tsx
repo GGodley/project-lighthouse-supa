@@ -38,7 +38,7 @@ export default function SyncEmailsButton() {
       if (!providerToken) {
         setMessage('Error: Missing provider token. Please re-authenticate with Google.');
         setSyncStatus('failed');
-        await supabase.from('sync_jobs').update({ status: 'failed', details: 'Missing provider_token from session' }).eq('id', job.id);
+        await untyped.from('sync_jobs').update({ status: 'failed', details: 'Missing provider_token from session' }).eq('id', job.id);
         return;
       }
 
@@ -49,7 +49,7 @@ export default function SyncEmailsButton() {
       const errMsg = invokeError instanceof Error ? invokeError.message : 'Unknown error invoking function';
       setMessage(`Error invoking function: ${errMsg}`);
       setSyncStatus('failed');
-      await supabase.from('sync_jobs').update({ status: 'failed', details: errMsg }).eq('id', job.id);
+      await untyped.from('sync_jobs').update({ status: 'failed', details: errMsg }).eq('id', job.id);
     }
   };
 
