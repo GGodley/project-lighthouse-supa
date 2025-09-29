@@ -24,6 +24,7 @@ export type Database = {
           last_interaction_at: string | null
           mrr: number | null
           name: string
+          overall_sentiment: string | null
           renewal_date: string | null
           status: Database["public"]["Enums"]["customer_status"] | null
           user_id: string | null
@@ -37,6 +38,7 @@ export type Database = {
           last_interaction_at?: string | null
           mrr?: number | null
           name: string
+          overall_sentiment?: string | null
           renewal_date?: string | null
           status?: Database["public"]["Enums"]["customer_status"] | null
           user_id?: string | null
@@ -50,6 +52,7 @@ export type Database = {
           last_interaction_at?: string | null
           mrr?: number | null
           name?: string
+          overall_sentiment?: string | null
           renewal_date?: string | null
           status?: Database["public"]["Enums"]["customer_status"] | null
           user_id?: string | null
@@ -68,6 +71,7 @@ export type Database = {
           received_at: string | null
           recipient: string | null
           sender: string | null
+          sentiment: string | null
           snippet: string | null
           subject: string | null
           summary: string | null
@@ -84,6 +88,7 @@ export type Database = {
           received_at?: string | null
           recipient?: string | null
           sender?: string | null
+          sentiment?: string | null
           snippet?: string | null
           subject?: string | null
           summary?: string | null
@@ -100,6 +105,7 @@ export type Database = {
           received_at?: string | null
           recipient?: string | null
           sender?: string | null
+          sentiment?: string | null
           snippet?: string | null
           subject?: string | null
           summary?: string | null
@@ -308,6 +314,33 @@ export type Database = {
           provider?: string | null
           provider_id?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      sync_jobs: {
+        Row: {
+          created_at: string
+          details: string | null
+          id: number
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          details?: string | null
+          id?: number
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          details?: string | null
+          id?: number
+          status?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
