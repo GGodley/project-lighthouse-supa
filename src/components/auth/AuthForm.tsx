@@ -15,7 +15,11 @@ export default function AuthForm() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: process.env.NEXT_PUBLIC_SITE_URL || `${window.location.origin}/auth/callback`,
+          redirectTo: process.env.NEXT_PUBLIC_SITE_URL ? 
+            (process.env.NEXT_PUBLIC_SITE_URL.startsWith('http') ? 
+              process.env.NEXT_PUBLIC_SITE_URL : 
+              `https://${process.env.NEXT_PUBLIC_SITE_URL}`) : 
+            `${window.location.origin}/auth/callback`,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
@@ -37,7 +41,11 @@ export default function AuthForm() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'azure',
         options: {
-          redirectTo: process.env.NEXT_PUBLIC_SITE_URL || `${window.location.origin}/auth/callback`,
+          redirectTo: process.env.NEXT_PUBLIC_SITE_URL ? 
+            (process.env.NEXT_PUBLIC_SITE_URL.startsWith('http') ? 
+              process.env.NEXT_PUBLIC_SITE_URL : 
+              `https://${process.env.NEXT_PUBLIC_SITE_URL}`) : 
+            `${window.location.origin}/auth/callback`,
           scopes: 'email profile openid https://graph.microsoft.com/Mail.Read'
         }
       })
