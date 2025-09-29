@@ -103,11 +103,7 @@ export default function DashboardPage() {
         await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: process.env.NEXT_PUBLIC_SITE_URL ? 
-              (process.env.NEXT_PUBLIC_SITE_URL.startsWith('http') ? 
-                process.env.NEXT_PUBLIC_SITE_URL : 
-                `https://${process.env.NEXT_PUBLIC_SITE_URL}`) : 
-              `${window.location.origin}/auth/callback`,
+            redirectTo: `${window.location.origin}/auth/callback`,
             scopes: 'https://www.googleapis.com/auth/gmail.readonly',
             queryParams: { prompt: 'consent', access_type: 'offline' }
           }
