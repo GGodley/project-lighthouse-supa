@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { RefreshCw, Search, Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import EmailSyncManager from '@/components/EmailSyncManager'
 
 type Email = {
   id: string;
@@ -19,6 +20,7 @@ export default function EmailsPage() {
   const [emails, setEmails] = useState<Email[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
+  const [overlay, setOverlay] = useState<{ visible: boolean; message?: string }>({ visible: false })
   const [searchTerm, setSearchTerm] = useState('')
   const supabase = createClient()
   const router = useRouter()
@@ -146,6 +148,25 @@ export default function EmailsPage() {
 
   return (
     <div className="space-y-6">
+      <EmailSyncManager
+        onEmailInserted={(email) => setEmails((prev) => [
+          {
+            id: String(email.id),
+            subject: email.subject || '',
+            sender: email.sender || '',
+            snippet: email.snippet || '',
+            received_at: email.received_at || '',
+            created_at: new Date().toISOString(),
+          },
+          ...prev,
+        ])}
+        onEmailUpdated={(email) => setEmails((prev) => prev.map((e) => e.id === String(email.id) ? {
+          ...e,
+          subject: email.subject || e.subject,
+          snippet: (email as any).summary || e.snippet,
+        } : e))}
+        onOverlayChange={(visible, message) => setOverlay({ visible, message })}
+      />
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Emails</h1>
@@ -178,8 +199,16 @@ export default function EmailsPage() {
         </div>
       </div>
 
-      {/* Emails List */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      {/* Emails List with overlay */}
+      <div className="relative bg-white rounded-lg shadow overflow-hidden">
+        {overlay.visible && (
+          <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-10 flex items-center justify-center">
+            <div className="flex items-center gap-3 text-gray-700 text-sm font-medium">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700"></div>
+              <span>{overlay.message || 'Initializing your account...'}</span>
+            </div>
+          </div>
+        )}
         <div className="divide-y divide-gray-200">
           {filteredEmails.map((email) => (
             <div key={email.id} className={`p-6 hover:bg-gray-50`}>
