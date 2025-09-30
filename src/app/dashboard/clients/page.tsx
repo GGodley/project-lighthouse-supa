@@ -20,8 +20,8 @@ export default function ClientsPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const { data, error } = await supabase
-        .from('clients')
+          const { data, error } = await supabase
+            .from('customers')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })

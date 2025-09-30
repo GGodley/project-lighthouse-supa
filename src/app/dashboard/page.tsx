@@ -39,7 +39,7 @@ export default function DashboardPage() {
       try {
         // Fetch clients
         const { data: clients } = await supabase
-          .from('clients')
+          .from('customers')
           .select('*')
           .eq('user_id', user.id)
 

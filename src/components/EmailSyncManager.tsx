@@ -23,9 +23,66 @@ export default function EmailSyncManager({ onEmailInserted, onEmailUpdated, onOv
   const supabase = createClient()
   const [jobStatus, setJobStatus] = useState<'none' | 'running' | 'completed' | 'failed'>('none')
 
+  const startSync = useCallback(async () => {
+    const { data: sessionRes } = await supabase.auth.getSession()
+    const session = sessionRes?.session
+    if (!session || !session.user) {
+      onOverlayChange?.(false)
+      if (typeof window !== 'undefined') {
+        window.alert('You are not authenticated yet. Please sign in and try again.')
+      }
+      return
+    }
+    if (!session.provider_token) {
+      onOverlayChange?.(false)
+      if (typeof window !== 'undefined') {
+        window.alert('Missing Google provider token. Please re-authenticate with Google.')
+      }
+      return
+    }
+
+    // Un-typed client to avoid CI type mismatch issues
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const untyped = require('@supabase/auth-helpers-nextjs').createClientComponentClient()
+
+    try {
+      const { data: newJob, error: jobErr } = await untyped
+        .from('sync_jobs')
+        .insert({ user_id: session.user.id, status: 'pending' })
+        .select()
+        .single()
+
+      if (jobErr || !newJob) {
+        onOverlayChange?.(false)
+        if (typeof window !== 'undefined') {
+          window.alert('Unable to start email sync (permissions). Please try again after signing in.')
+        }
+        return
+      }
+
+      setJobStatus('running')
+      onOverlayChange?.(true, 'Initializing your account...')
+      await supabase.functions.invoke('sync-emails', {
+        body: { jobId: newJob.id, provider_token: session.provider_token }
+      })
+    } catch {
+      onOverlayChange?.(false)
+      if (typeof window !== 'undefined') {
+        window.alert('We could not create a background job due to security rules. Please retry.')
+      }
+    }
+  }, [onOverlayChange, supabase])
+
   const ensureJobAndStart = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    // Wait for a valid session before any DB access
+    const { data: sessionRes } = await supabase.auth.getSession()
+    const session = sessionRes?.session
+    if (!session || !session.user) {
+      return
+    }
+    const user = session.user
 
     // Check latest job
     const { data: latestJob } = await supabase
@@ -37,30 +94,7 @@ export default function EmailSyncManager({ onEmailInserted, onEmailUpdated, onOv
       .maybeSingle()
 
     if (!latestJob) {
-      // Create and start initial job
-      const { data: sessionRes } = await supabase.auth.getSession()
-      const session = sessionRes?.session
-      if (!session?.provider_token) return
-
-      // Un-typed client to avoid CI type mismatch issues
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const untyped = require('@supabase/auth-helpers-nextjs').createClientComponentClient()
-
-      const { data: newJob, error: jobErr } = await untyped
-        .from('sync_jobs')
-        .insert({ user_id: user.id, status: 'pending' })
-        .select()
-        .single()
-
-      if (!jobErr && newJob) {
-        setJobStatus('running')
-        onOverlayChange?.(true, 'Initializing your account...')
-        await supabase.functions.invoke('sync-emails', {
-          body: { jobId: newJob.id, provider_token: session.provider_token }
-        })
-      }
+      await startSync()
       return
     }
 
@@ -75,8 +109,24 @@ export default function EmailSyncManager({ onEmailInserted, onEmailUpdated, onOv
   }, [onOverlayChange, supabase])
 
   useEffect(() => {
-    void ensureJobAndStart()
-  }, [ensureJobAndStart])
+    // Only run when a session is present; subscribe to auth state for race-free init
+    let unsub: { data: { subscription: { unsubscribe: () => void } } } | null = null
+    ;(async () => {
+      const { data: sessionRes } = await supabase.auth.getSession()
+      if (sessionRes.session) {
+        await ensureJobAndStart()
+      }
+      const sub = supabase.auth.onAuthStateChange(async (_event, session) => {
+        if (session) {
+          await ensureJobAndStart()
+        }
+      })
+      unsub = sub
+    })()
+    return () => {
+      unsub?.data.subscription.unsubscribe()
+    }
+  }, [ensureJobAndStart, supabase.auth])
 
   // Poll job status while running
   useEffect(() => {
