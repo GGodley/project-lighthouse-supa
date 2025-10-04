@@ -2,19 +2,19 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
-import { Database } from '@/types/database'
+import { Database } from '@/types/database.types'
 import { Button } from '@/components/ui/Button'
 import { Plus, Calendar, Clock, Users, Phone, Mail, CheckCircle } from 'lucide-react'
 
-type Event = Database['public']['Tables']['events']['Row']
-type Client = Database['public']['Tables']['clients']['Row']
+type Meeting = Database['public']['Tables']['meetings']['Row']
+type Customer = Database['public']['Tables']['customers']['Row']
 
-interface EventWithClient extends Event {
-  client: Client | null
+interface MeetingWithCustomer extends Meeting {
+  customer: Customer | null
 }
 
 export default function EventsPage() {
-  const [events, setEvents] = useState<EventWithClient[]>([])
+  const [events, setEvents] = useState<MeetingWithCustomer[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'upcoming' | 'all'>('upcoming')
   const supabase = useSupabase()
@@ -25,16 +25,16 @@ export default function EventsPage() {
       if (!user) return
 
       let query = supabase
-        .from('events')
+        .from('meetings')
         .select(`
           *,
-          client:clients(*)
+          customer:customers(*)
         `)
         .eq('user_id', user.id)
-        .order('start_date', { ascending: true })
+        .order('meeting_date', { ascending: true })
 
       if (view === 'upcoming') {
-        query = query.gte('start_date', new Date().toISOString())
+        query = query.gte('meeting_date', new Date().toISOString())
       }
 
       const { data, error } = await query
@@ -89,11 +89,11 @@ export default function EventsPage() {
     }
   }
 
-  const groupEventsByDate = (events: EventWithClient[]) => {
-    const grouped: { [key: string]: EventWithClient[] } = {}
+  const groupEventsByDate = (events: MeetingWithCustomer[]) => {
+    const grouped: { [key: string]: MeetingWithCustomer[] } = {}
     
     events.forEach(event => {
-      const date = new Date(event.start_date).toDateString()
+      const date = new Date(event.meeting_date).toDateString()
       if (!grouped[date]) {
         grouped[date] = []
       }
@@ -169,44 +169,35 @@ export default function EventsPage() {
               </div>
               <div className="divide-y divide-gray-200">
                 {dayEvents.map((event) => {
-                  const startTime = formatDate(event.start_date)
-                  const endTime = formatDate(event.end_date)
+                  const meetingTime = formatDate(event.meeting_date)
                   
                   return (
                     <div key={event.id} className="p-6 hover:bg-gray-50">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center space-x-3 mb-2">
-                            <div className={`p-2 rounded-full ${getEventColor(event.type)}`}>
-                              {getEventIcon(event.type)}
+                            <div className="p-2 rounded-full bg-blue-100 text-blue-800">
+                              <Users className="w-4 h-4" />
                             </div>
-                            <h4 className="text-lg font-semibold text-gray-900">{event.title}</h4>
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEventColor(event.type)}`}>
-                              {event.type}
-                            </span>
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(event.status)}`}>
-                              {event.status}
+                            <h4 className="text-lg font-semibold text-gray-900">Meeting</h4>
+                            <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                              Meeting
                             </span>
                           </div>
-                          {event.description && (
-                            <p className="text-gray-600 mb-3">{event.description}</p>
+                          {event.summary && (
+                            <p className="text-gray-600 mb-3">{event.summary}</p>
                           )}
                           <div className="flex items-center space-x-4 text-sm text-gray-500">
                             <div className="flex items-center space-x-1">
                               <Clock className="w-4 h-4" />
-                              <span>{startTime.time} - {endTime.time}</span>
+                              <span>{meetingTime.time}</span>
                             </div>
-                            {event.client && (
-                              <span>Client: <span className="font-medium text-gray-900">{event.client.name}</span></span>
+                            {event.customer && (
+                              <span>Customer: <span className="font-medium text-gray-900">{event.customer.name}</span></span>
                             )}
                           </div>
                         </div>
                         <div className="flex space-x-2">
-                          {event.status === 'scheduled' && (
-                            <Button size="sm" variant="outline">
-                              Mark Complete
-                            </Button>
-                          )}
                           <Button size="sm" variant="outline">
                             Edit
                           </Button>
