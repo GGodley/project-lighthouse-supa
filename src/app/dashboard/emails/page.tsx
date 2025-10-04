@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { RefreshCw, Search, Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import EmailSyncManager from '@/components/EmailSyncManager'
+import { Database } from '@/types/database.types'
 
 type Email = {
   id: string;
@@ -149,26 +150,7 @@ export default function EmailsPage() {
 
   return (
     <div className="space-y-6">
-      <EmailSyncManager
-        onEmailInserted={(email) => setEmails((prev) => [
-          {
-            id: String(email.id),
-            subject: email.subject || '',
-            sender: email.sender || '',
-            snippet: email.snippet || '',
-            received_at: email.received_at || '',
-            created_at: new Date().toISOString(),
-          },
-          ...prev,
-        ])}
-        onEmailUpdated={(email) => setEmails((prev) => prev.map((e) => e.id === String(email.id) ? {
-          ...e,
-          subject: email.subject || e.subject,
-          snippet: (email as any).summary || e.snippet,
-        } : e))}
-        onOverlayChange={(visible, message) => setOverlay({ visible, message })}
-        onAuthReady={(ready) => setAuthReady(ready)}
-      />
+      <EmailSyncManager />
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Emails</h1>
