@@ -1,5 +1,5 @@
 //
-// ⚠️ THIS IS THE DEFINITIVE DIAGNOSTIC middleware.ts FILE ⚠️
+// ⚠️ THIS IS THE DEFINITIVE DIAGNOSTIC middleware.ts FILE (v2 - Corrected) ⚠️
 //
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
@@ -12,10 +12,15 @@ export async function middleware(request: NextRequest) {
   });
 
   // --- DIAGNOSTIC LOG 1: Check for the Supabase auth cookie ---
-  const authCookie = request.cookies.get((key: string) => key.startsWith('sb-'));
+  // ✅ CORRECTED LOGIC: Get all cookies and find the one that starts with 'sb-'
+  const allCookies = request.cookies.getAll();
+  const authCookie = allCookies.find((cookie) => cookie.name.startsWith('sb-'));
+  
   console.log('[Middleware Cookie Check] Supabase auth cookie found in request:', !!authCookie);
   if (!authCookie) {
     console.warn('[Middleware Cookie Check] WARNING: No Supabase auth cookie was found in the incoming request.');
+  } else {
+    console.log('[Middleware Cookie Check] Found cookie name:', authCookie.name);
   }
 
   const supabase = createServerClient(
