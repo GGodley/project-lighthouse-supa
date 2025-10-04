@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useSupabase } from '@/components/SupabaseProvider'
 import { Database } from '@/types/database'
 import { Button } from '@/components/ui/Button'
 import { Mail, User, Key, Trash2, RefreshCw } from 'lucide-react'
@@ -12,7 +12,7 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
-  const supabase = createClient()
+  const supabase = useSupabase()
 
   const fetchProfile = useCallback(async () => {
     try {

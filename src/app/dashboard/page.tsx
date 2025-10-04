@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useSupabase } from '@/components/SupabaseProvider'
 import { Users, Ticket, Calendar, Mail, TrendingUp, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 
@@ -29,7 +29,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [recentEmails, setRecentEmails] = useState<Array<{ id: string; subject: string; sender: string; received_at: string; snippet: string }>>([])
-  const supabase = createClient()
+  const supabase = useSupabase()
 
   useEffect(() => {
     const fetchDashboardData = async () => {

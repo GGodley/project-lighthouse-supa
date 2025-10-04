@@ -1,31 +1,50 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useSupabase } from '@/components/SupabaseProvider'
 import { Button } from '@/components/ui/Button'
 import { Mail } from 'lucide-react'
 
 export default function AuthForm() {
   const [loading, setLoading] = useState(false)
-  const supabase = createClient()
+  const supabase = useSupabase()
 
   const handleGoogleAuth = async () => {
     setLoading(true)
     try {
+      const options = {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        scopes: 'https://www.googleapis.com/auth/gmail.readonly',
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent'
+        }
+      };
+
+      // --- DIAGNOSTIC LOG ---
+      // This will show us the exact blueprint being used for Google OAuth
+      console.log("🔍 GOOGLE OAUTH DIAGNOSTIC - Complete Options Blueprint:");
+      console.log("Provider: google");
+      console.log("Options:", JSON.stringify(options, null, 2));
+      console.log("Window Origin:", window.location.origin);
+      console.log("Full Redirect URL:", options.redirectTo);
+      console.log("Requested Scopes:", options.scopes);
+      console.log("Query Parameters:", options.queryParams);
+      console.log("--- END DIAGNOSTIC ---");
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-            scope: 'email profile https://www.googleapis.com/auth/gmail.readonly'
-          }
-        }
+        options
       })
-      if (error) throw error
+      
+      if (error) {
+        console.error("❌ Google OAuth Error:", error);
+        throw error;
+      }
+      
+      console.log("✅ Google OAuth request sent successfully");
     } catch (error) {
-      console.error('Error signing in with Google:', error)
+      console.error('❌ Error signing in with Google:', error)
     } finally {
       setLoading(false)
     }

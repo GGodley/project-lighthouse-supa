@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useSupabase } from '@/components/SupabaseProvider'
 import { Database } from '@/types/database'
 import { Button } from '@/components/ui/Button'
 import { Plus, Search, MoreVertical, Clock, AlertTriangle, CheckCircle } from 'lucide-react'
@@ -19,7 +19,7 @@ export default function TicketsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [priorityFilter, setPriorityFilter] = useState<string>('all')
-  const supabase = createClient()
+  const supabase = useSupabase()
 
   const fetchTickets = useCallback(async () => {
     try {

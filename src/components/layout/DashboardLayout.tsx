@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useSupabase } from '@/components/SupabaseProvider'
 import { useRouter } from 'next/navigation'
 import Sidebar from './Sidebar'
 import { Database } from '@/types/database'
@@ -15,7 +15,7 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [, setUser] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
-  const supabase = createClient()
+  const supabase = useSupabase()
   const router = useRouter()
 
   useEffect(() => {

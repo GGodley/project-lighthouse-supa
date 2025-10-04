@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useSupabase } from '@/components/SupabaseProvider'
 import { Database } from '@/types/database'
 import { Button } from '@/components/ui/Button'
 import { Plus, Calendar, Clock, Users, Phone, Mail, CheckCircle } from 'lucide-react'
@@ -17,7 +17,7 @@ export default function EventsPage() {
   const [events, setEvents] = useState<EventWithClient[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'upcoming' | 'all'>('upcoming')
-  const supabase = createClient()
+  const supabase = useSupabase()
 
   const fetchEvents = useCallback(async () => {
     try {

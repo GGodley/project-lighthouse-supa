@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { useSupabase } from './SupabaseProvider';
 import type { Database } from '@/types/database.types';
 
 // Define the type for a sync job row for clarity
@@ -10,7 +10,7 @@ export default function SyncEmailsButton() {
   const [job, setJob] = useState<SyncJob | null>(null);
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true); // Start with loading true to check initial state
-  const supabase = createClientComponentClient<Database>();
+  const supabase = useSupabase();
 
   // Function to check the latest job status
   const checkLatestJobStatus = useCallback(async () => {
@@ -26,11 +26,21 @@ export default function SyncEmailsButton() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle(); // Use maybeSingle() to handle null results
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 = 'exact one row not found'
+    if (error) {
       console.error('Error fetching latest job:', error);
       setMessage('Could not fetch sync status.');
+      setIsLoading(false);
+      return;
+    }
+
+    // NEW USER SCENARIO: If no job exists, this is a new user
+    if (!latestJob) {
+      console.log('New user detected - no previous sync jobs found.');
+      setJob(null);
+      setIsLoading(false);
+      return;
     }
     
     setJob(latestJob);
@@ -55,60 +65,80 @@ export default function SyncEmailsButton() {
     return () => clearInterval(interval);
   }, [job, checkLatestJobStatus]);
 
-  // Function to start a new sync process
+  // Function to start a new sync process (with detailed diagnostic logging)
   const startSync = async () => {
+    console.log("--- Sync Process Initiated ---");
     setIsLoading(true);
-    setMessage('Initiating sync in the background...');
+    setMessage('Attempting to start sync...');
 
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      setMessage('Error: Not authenticated.');
+    // --- DIAGNOSTIC LOG 1: Get the current session state ---
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    console.log("Session object at time of request:", session);
+    if (sessionError) {
+      console.error("Error fetching session:", sessionError);
+    }
+    
+    // This log is the key piece of evidence.
+    if (!session || !session.user) {
+      console.error("PROOF: startSync was called but no valid session was found. This confirms the race condition.");
+      setMessage('Authentication session not ready. Please wait a moment and try again.');
       setIsLoading(false);
       return;
     }
 
     const providerToken = (session as { provider_token?: string })?.provider_token;
     if (!providerToken) {
-      setMessage('Error: Missing provider token. Please re-authenticate with Google.');
-      setIsLoading(false);
-      // Use an untyped client for the insert to bypass CI type inference issues
-      const untypedSupabase = createClientComponentClient();
-      await untypedSupabase.from('sync_jobs').insert({ user_id: session.user.id, status: 'failed', details: 'Missing provider_token from session' });
-      return;
-    }
-
-    // Create a new job in the database
-    // Use an untyped client for the insert to bypass CI type inference issues
-    const untypedSupabase = createClientComponentClient();
-    const { data: newJob, error: jobError } = await untypedSupabase
-      .from('sync_jobs')
-      .insert({ user_id: session.user.id, status: 'pending' })
-      .select()
-      .single();
-
-    if (jobError) {
-      setMessage(`Error creating sync job: ${jobError.message}`);
+      console.error("PROOF: Session exists but provider_token is missing. This indicates incomplete OAuth flow.");
+      setMessage('Error: Missing Google provider token. Please re-authenticate with Google to grant email access.');
       setIsLoading(false);
       return;
     }
 
-    setJob(newJob); // Set the new job as the current one
-
-    // Trigger the edge function to start processing the job
     try {
+      console.log("Session is valid. Attempting to create sync job for user:", session.user.id);
+      
+      // Use the same supabase client from context
+      const untypedSupabase = supabase;
+      const { data: newJob, error: jobError } = await untypedSupabase
+        .from('sync_jobs')
+        .insert({ user_id: session.user.id, status: 'pending' })
+        .select()
+        .single();
+
+      if (jobError) {
+        // This will show the RLS error if it still occurs
+        console.error("DATABASE ERROR creating sync job:", jobError);
+        setMessage(`Failed to create sync job: ${jobError.message}`);
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log("Successfully created sync job and invoked function.", newJob);
+      setJob(newJob);
+      
       const { error: invokeError } = await supabase.functions.invoke('sync-emails', {
         body: { 
           jobId: newJob.id, 
           provider_token: providerToken 
         },
       });
-      if (invokeError) throw invokeError;
-    } catch (invokeError) {
-      const errorMessage = invokeError instanceof Error ? invokeError.message : 'Unknown error';
-      setMessage(`Error invoking function: ${errorMessage}`);
-      // Update the job status to failed
-      await untypedSupabase.from('sync_jobs').update({ status: 'failed', details: errorMessage }).eq('id', newJob.id);
-      checkLatestJobStatus(); // Re-fetch to update UI
+      
+      if (invokeError) {
+        console.error("EDGE FUNCTION INVOCATION ERROR:", invokeError);
+        setMessage(`Error starting sync function: ${invokeError.message}`);
+        setIsLoading(false);
+        await untypedSupabase.from('sync_jobs').update({ status: 'failed', details: invokeError.message }).eq('id', newJob.id);
+        return;
+      }
+      
+      setMessage('Sync has been initiated in the background. We will notify you when it is complete.');
+      setIsLoading(false);
+    } catch (e) {
+      const error = e as Error;
+      console.error("An unexpected error occurred in startSync:", error);
+      setMessage(`An unexpected error occurred: ${error.message}`);
+      setIsLoading(false);
     }
   };
 
@@ -120,7 +150,7 @@ export default function SyncEmailsButton() {
   
   const getStatusMessage = () => {
     if (isLoading) return 'Checking sync status...';
-    if (!job) return 'Press the button to sync your emails.';
+    if (!job) return 'Welcome! Press the button to sync your emails for the first time.';
     if (job.status === 'completed') return `Last sync completed successfully.`;
     if (job.status === 'failed') return `Last sync failed: ${job.details}`;
     if (job.status === 'running') return job.details || 'Sync is running...';

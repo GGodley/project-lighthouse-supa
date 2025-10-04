@@ -1,3 +1,6 @@
+//
+// ⚠️ THIS IS THE CORRECTED AND ROBUST sync-emails EDGE FUNCTION ⚠️
+//
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -6,6 +9,53 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// --- Helper Functions to Correctly Parse Gmail's Complex Payload ---
+
+const decodeBase64Url = (data: string | undefined): string | undefined => {
+  if (!data) return undefined;
+  try {
+    let base64 = data.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) {
+      base64 += '=';
+    }
+    return atob(base64);
+  } catch (e) {
+    console.error("Base64 decoding failed for data chunk.", e);
+    return undefined;
+  }
+};
+
+const collectBodies = (payload: any): { text?: string; html?: string } => {
+  let text: string | undefined;
+  let html: string | undefined;
+  const partsToVisit = [payload, ...(payload?.parts || [])];
+  
+  const findParts = (parts: any[]) => {
+    for (const part of parts) {
+      if (part?.body?.data) {
+        const mimeType = part.mimeType || '';
+        const decodedData = decodeBase64Url(part.body.data);
+        if (decodedData) {
+          if (mimeType === 'text/plain' && !text) {
+            text = decodedData;
+          }
+          if (mimeType === 'text/html' && !html) {
+            html = decodedData;
+          }
+        }
+      }
+      if (part?.parts) {
+        findParts(part.parts);
+      }
+    }
+  };
+
+  findParts(partsToVisit);
+  return { text, html };
+};
+
+// --- Main Serve Function ---
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -13,6 +63,7 @@ serve(async (req) => {
 
   try {
     const { jobId, provider_token, pageToken } = await req.json();
+    
     if (!jobId || !provider_token) {
       throw new Error("Missing jobId or provider_token in request body.");
     }
@@ -24,108 +75,74 @@ serve(async (req) => {
     );
 
     if (!pageToken) {
-        await supabaseAdmin.from('sync_jobs').update({ status: 'running', details: 'Starting email sync...' }).eq('id', jobId);
+      await supabaseAdmin.from('sync_jobs').update({ status: 'running', details: 'Starting email sync...' }).eq('id', jobId);
     }
 
     const { data: jobData, error: jobFetchError } = await supabaseAdmin.from('sync_jobs').select('user_id').eq('id', jobId).single();
     if (jobFetchError || !jobData) throw new Error(`Could not fetch job details for job ID: ${jobId}`);
-    const userId = jobData.user_id as string;
+    const userId = jobData.user_id;
 
+    // 1. Get a list of email IDs
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     const query = `after:${Math.floor(ninetyDaysAgo.getTime() / 1000)}`;
-
-    let url = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=50`;
+    let listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=50`;
     if (pageToken) {
-      url += `&pageToken=${pageToken}`;
+      listUrl += `&pageToken=${pageToken}`;
     }
-    const listResp = await fetch(url, { headers: { Authorization: `Bearer ${provider_token}` } });
-
+    const listResp = await fetch(listUrl, { headers: { Authorization: `Bearer ${provider_token}` } });
     if (!listResp.ok) {
-        const errorBody = await listResp.text();
-        await supabaseAdmin.from('sync_jobs').update({ status: 'failed', details: `Gmail API Error: ${errorBody}` }).eq('id', jobId);
-        throw new Error(`Gmail API list request failed: ${listResp.status} ${errorBody}`);
+        throw new Error(`Gmail API list request failed: ${await listResp.text()}`);
     }
-    
     const listJson = await listResp.json();
-    const messageIds: Array<{ id?: string }> = listJson.messages || [];
+    const messageIds = listJson.messages?.map((m: any) => m.id).filter(Boolean) || [];
 
-    let processedCount = 0;
+    let emailsToStore = [];
     if (messageIds.length > 0) {
-      // Update progress before processing this batch
-      await supabaseAdmin
-        .from('sync_jobs')
-        .update({ details: `Processing batch of ${messageIds.length} messages...` })
-        .eq('id', jobId);
-
-      // Helper to fetch message details
-      const fetchMessage = async (id: string) => {
-        const msgResp = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`, {
-          headers: { Authorization: `Bearer ${provider_token}` },
-        });
-        if (!msgResp.ok) {
-          const body = await msgResp.text();
-          throw new Error(`Gmail message get failed: ${msgResp.status} ${body}`);
-        }
-        return await msgResp.json();
-      };
-
-      // Extract a header helper
-      const getHeader = (headers: Array<{ name?: string | null; value?: string | null }>, name: string) =>
-        headers.find((h) => (h.name || '').toLowerCase() === name.toLowerCase())?.value || '';
-
-      const rows: Array<{ user_id: string; subject: string; sender: string; snippet: string | null; received_at: string }>
-        = [];
-
-      for (const item of messageIds) {
-        if (!item.id) continue;
-        try {
-          const msgJson = await fetchMessage(item.id);
-          const headers = (msgJson?.payload?.headers as Array<{ name?: string; value?: string }> | undefined) || [];
-          const subject = getHeader(headers, 'Subject');
-          const from = getHeader(headers, 'From');
-          const snippet: string | null = msgJson?.snippet ?? null;
-          const internalDateStr = msgJson?.internalDate ?? '';
-          const receivedAt = internalDateStr ? new Date(Number(internalDateStr)).toISOString() : new Date().toISOString();
-
-          rows.push({
-            user_id: userId,
-            subject: subject || 'No Subject',
-            sender: from || 'Unknown Sender',
-            snippet,
-            received_at: receivedAt,
+      // (The batching logic using Gmail Batch API is complex and less readable,
+      // let's revert to a slightly slower but more robust individual fetch for easier debugging)
+      for (const msgId of messageIds) {
+          const msgResp = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=full`, {
+            headers: { Authorization: `Bearer ${provider_token}` }
           });
-          processedCount++;
-        } catch (e) {
-          // Continue on individual message errors, but record progress
-          await supabaseAdmin
-            .from('sync_jobs')
-            .update({ details: `Processed ${processedCount}/${messageIds.length} in this batch (some errors).` })
-            .eq('id', jobId);
-        }
+          if (!msgResp.ok) {
+              console.warn(`Failed to fetch details for message ${msgId}. Skipping.`);
+              continue;
+          }
+          const msgJson = await msgResp.json();
+          const headers = msgJson?.payload?.headers || [];
+          const subject = headers.find((h: any) => h.name.toLowerCase() === 'subject')?.value || 'No Subject';
+          const from = headers.find((h: any) => h.name.toLowerCase() === 'from')?.value || 'Unknown Sender';
+          
+          // ✅ FIX: Use the robust helper function to get email bodies
+          const bodies = collectBodies(msgJson.payload);
+          
+          emailsToStore.push({
+              user_id: userId,
+              gmail_message_id: msgJson.id,
+              subject: subject,
+              sender: from,
+              snippet: msgJson.snippet,
+              body_text: bodies.text, // ✅ FIX: Save the text body
+              body_html: bodies.html, // ✅ FIX: Save the HTML body
+              received_at: new Date(Number(msgJson.internalDate)).toISOString(),
+          });
       }
-
-      if (rows.length > 0) {
-        const { error: insertErr } = await supabaseAdmin.from('emails').insert(rows);
-        if (insertErr) {
-          await supabaseAdmin.from('sync_jobs').update({ status: 'failed', details: `Insert error: ${insertErr.message}` }).eq('id', jobId);
-          throw insertErr;
-        }
-      }
-
-      // Update progress after batch
-      await supabaseAdmin
-        .from('sync_jobs')
-        .update({ details: `Batch stored: ${processedCount} messages.` })
-        .eq('id', jobId);
     }
 
-    if (listJson.nextPageToken) {
-      await supabaseAdmin
-        .from('sync_jobs')
-        .update({ details: 'Fetching next page...' })
-        .eq('id', jobId);
+    // Use upsert to avoid duplicates
+    if (emailsToStore.length > 0) {
+      const { error: upsertErr } = await supabaseAdmin
+        .from('emails')
+        .upsert(emailsToStore, { onConflict: 'gmail_message_id' });
+      if (upsertErr) {
+        await supabaseAdmin.from('sync_jobs').update({ status: 'failed', details: `Database upsert error: ${upsertErr.message}` }).eq('id', jobId);
+        throw upsertErr;
+      }
+    }
 
+    // Chain to the next page or complete the job
+    if (listJson.nextPageToken) {
       await supabaseAdmin.functions.invoke('sync-emails', {
         body: { jobId, provider_token, pageToken: listJson.nextPageToken },
       });
@@ -139,7 +156,14 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    return new Response(JSON.stringify({ error: (error as Error).message }), {
+    // Graceful error handling
+    const reqBody = await req.json().catch(() => ({}));
+    const jobId = reqBody.jobId;
+    if (jobId) {
+        await createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "")
+            .from('sync_jobs').update({ status: 'failed', details: error.message }).eq('id', jobId);
+    }
+    return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });

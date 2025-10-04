@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useSupabase } from '@/components/SupabaseProvider'
 import { Button } from '@/components/ui/Button'
 import { RefreshCw, Search, Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -20,9 +20,10 @@ export default function EmailsPage() {
   const [emails, setEmails] = useState<Email[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
+  const [authReady, setAuthReady] = useState(false)
   const [overlay, setOverlay] = useState<{ visible: boolean; message?: string }>({ visible: false })
   const [searchTerm, setSearchTerm] = useState('')
-  const supabase = createClient()
+  const supabase = useSupabase()
   const router = useRouter()
 
   const fetchEmails = useCallback(async () => {
@@ -166,6 +167,7 @@ export default function EmailsPage() {
           snippet: (email as any).summary || e.snippet,
         } : e))}
         onOverlayChange={(visible, message) => setOverlay({ visible, message })}
+        onAuthReady={(ready) => setAuthReady(ready)}
       />
       <div className="flex justify-between items-center">
         <div>
@@ -175,11 +177,11 @@ export default function EmailsPage() {
         <div className="flex items-center gap-2">
           <Button 
             onClick={syncEmails}
-            disabled={syncing}
+            disabled={!authReady || syncing}
             className="flex items-center space-x-2"
           >
             <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-            <span>{syncing ? 'Syncing...' : 'Sync Emails'}</span>
+            <span>{!authReady ? 'Checking auth...' : syncing ? 'Syncing...' : 'Sync Emails'}</span>
           </Button>
           <Button onClick={signOut} variant="outline">Sign Out</Button>
         </div>

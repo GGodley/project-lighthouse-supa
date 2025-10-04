@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
+import { useSupabase } from '@/components/SupabaseProvider'
 
 // Health Score component with a visual bar
 const HealthScore: React.FC<{ score: number }> = ({ score }) => {
@@ -81,7 +81,7 @@ const CustomersSection: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
+  const supabase = useSupabase()
 
   useEffect(() => {
     const fetchCustomers = async () => {

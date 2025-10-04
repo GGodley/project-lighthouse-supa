@@ -7,14 +7,37 @@ export async function GET(request: Request) {
   const next = searchParams.get('next') ?? '/dashboard'
 
   if (code) {
+    console.log("🔍 AUTH CALLBACK DIAGNOSTIC - Processing OAuth callback");
+    console.log("Authorization Code:", code);
+    console.log("Next redirect:", next);
+    
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     
     if (!error) {
+      console.log("✅ Code exchange successful");
+      
       // Get the user after successful authentication
       const { data: { user } } = await supabase.auth.getUser()
       
       if (user) {
+        console.log("🔍 USER SESSION DIAGNOSTIC:");
+        console.log("User ID:", user.id);
+        console.log("User Email:", user.email);
+        console.log("User Metadata:", JSON.stringify(user.user_metadata, null, 2));
+        console.log("App Metadata:", JSON.stringify(user.app_metadata, null, 2));
+        
+        // Check for provider tokens
+        const session = await supabase.auth.getSession();
+        console.log("🔍 SESSION DIAGNOSTIC:");
+        console.log("Session exists:", !!session.data.session);
+        if (session.data.session) {
+          console.log("Provider Token:", session.data.session.provider_token);
+          console.log("Access Token:", session.data.session.access_token);
+          console.log("Refresh Token:", session.data.session.refresh_token);
+          console.log("Provider:", session.data.session.provider);
+        }
+        console.log("--- END SESSION DIAGNOSTIC ---");
         // Create or update user profile
         const { error: profileError } = await supabase
           .from('profiles')
