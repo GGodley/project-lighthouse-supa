@@ -1,65 +1,68 @@
 //
-// ⚠️ THIS IS THE CORRECTED AND DEFINITIVE middleware.ts FILE ⚠️
+// ⚠️ THIS IS THE DEFINITIVE DIAGNOSTIC middleware.ts FILE ⚠️
 //
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  // Create an unmodified response
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  })
+  console.log(`--- [Middleware] Request received for: ${request.nextUrl.pathname} ---`);
 
-  // Create a Supabase client that can read and write cookies
+  let response = NextResponse.next({
+    request: { headers: request.headers },
+  });
+
+  // --- DIAGNOSTIC LOG 1: Check for the Supabase auth cookie ---
+  const authCookie = request.cookies.get((key: string) => key.startsWith('sb-'));
+  console.log('[Middleware Cookie Check] Supabase auth cookie found in request:', !!authCookie);
+  if (!authCookie) {
+    console.warn('[Middleware Cookie Check] WARNING: No Supabase auth cookie was found in the incoming request.');
+  }
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value
-        },
+        get(name: string) { return request.cookies.get(name)?.value },
         set(name: string, value: string, options: CookieOptions) {
-          // If the cookie is set, update the request and response cookies
-          request.cookies.set({ name, value, ...options })
-          response.cookies.set({ name, value, ...options })
+          request.cookies.set({ name, value, ...options });
+          response.cookies.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
-          // If the cookie is removed, update the request and response cookies
-          request.cookies.set({ name, value: '', ...options })
-          response.cookies.set({ name, value: '', ...options })
+          request.cookies.set({ name, value: '', ...options });
+          response.cookies.set({ name, value: '', ...options });
         },
       },
     }
-  )
+  );
 
-  // Get the user session
-  const { data: { user } } = await supabase.auth.getUser()
-  const { pathname } = request.nextUrl
+  // --- DIAGNOSTIC LOG 2: Check the result of getUser() ---
+  console.log('[Middleware Auth Check] Attempting to get user from session...');
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-  // --- START REDIRECT LOGIC ---
+  if (userError) {
+      console.error('[Middleware Auth Check] ERROR getting user:', userError.message);
+  }
+  console.log('[Middleware Auth Check] supabase.auth.getUser() returned a user object:', !!user);
+  if (user) {
+      console.log('[Middleware Auth Check] User ID:', user.id);
+  }
 
-  // If the user is NOT logged in and trying to access a protected dashboard route
+  const { pathname } = request.nextUrl;
+
+  // --- REDIRECT LOGIC ---
   if (!user && pathname.startsWith('/dashboard')) {
-    // Redirect them to the login page
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
+    console.log(`[Middleware Decision] No user found. Redirecting from protected route ${pathname} to /login.`);
+    return NextResponse.redirect(new URL('/login', request.url));
   }
   
-  // If the user IS logged in and trying to access the login or root page
   if (user && (pathname === '/login' || pathname === '/')) {
-    // Redirect them to the dashboard
-    const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
-    return NextResponse.redirect(url)
+    console.log(`[Middleware Decision] User is logged in. Redirecting from ${pathname} to /dashboard.`);
+    return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  // --- END REDIRECT LOGIC ---
-
-  return response
+  console.log(`[Middleware Decision] No redirect needed for path: ${pathname}. Proceeding.`);
+  return response;
 }
 
 export const config = {
