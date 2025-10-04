@@ -12,6 +12,13 @@ const Context = createContext<SupabaseContext | undefined>(undefined);
 
 export default function SupabaseProvider({ children }: { children: React.ReactNode }) {
   const [supabase] = useState(() => {
+    // --- START DIAGNOSTIC LOG ---
+    console.log("🔍 SupabaseProvider is initializing client with the following configuration:");
+    console.log("URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+    console.log("Anon Key:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+    console.log("Environment:", process.env.NODE_ENV);
+    console.log("--- END DIAGNOSTIC LOG ---");
+    
     // Use the custom client from lib/supabase/client instead of auth-helpers
     return createClient();
   });
