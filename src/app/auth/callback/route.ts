@@ -6,15 +6,34 @@ export async function GET(request: Request) {
   const code = searchParams.get('code')
   const next = searchParams.get('next') ?? '/dashboard'
 
+  // --- ENVIRONMENT DIAGNOSTIC ---
+  console.log("🔍 AUTH CALLBACK ENVIRONMENT DIAGNOSTIC:");
+  console.log("Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+  console.log("Supabase Anon Key (first 20 chars):", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 20) + "...");
+  console.log("Request URL:", request.url);
+  console.log("Origin:", origin);
+  console.log("Search Params:", Object.fromEntries(searchParams.entries()));
+
   if (code) {
     console.log("🔍 AUTH CALLBACK DIAGNOSTIC - Processing OAuth callback");
     console.log("Authorization Code:", code);
     console.log("Next redirect:", next);
     
     const supabase = await createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
     
-    if (!error) {
+    if (error) {
+      console.error("❌ AUTH CALLBACK ERROR - Code exchange failed:");
+      console.error("Error message:", error.message);
+      console.error("Error details:", error);
+      console.error("Error status:", error.status);
+      console.error("Error code:", error.code);
+      
+      // Return error response instead of redirecting
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    
+    if (data) {
       console.log("✅ Code exchange successful");
       
       // Get the user after successful authentication
@@ -69,6 +88,17 @@ export async function GET(request: Request) {
         }
       }
     }
+  } else {
+    console.error("❌ AUTH CALLBACK ERROR - No authorization code provided");
+    console.error("Request URL:", request.url);
+    console.error("Search params:", Object.fromEntries(searchParams.entries()));
+    
+    // Return error response for debugging
+    return NextResponse.json({ 
+      error: "No authorization code provided",
+      url: request.url,
+      params: Object.fromEntries(searchParams.entries())
+    }, { status: 400 });
   }
 
   // URL to redirect to after sign in process completes
