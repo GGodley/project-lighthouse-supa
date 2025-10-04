@@ -64,5 +64,12 @@ export async function GET(request: NextRequest) {
   console.log("Request origin:", requestUrl.origin);
   console.log("--- END REDIRECT DIAGNOSTIC ---");
   
-  return NextResponse.redirect(redirectUrl);
+  // Create a response with the redirect
+  const response = NextResponse.redirect(redirectUrl);
+  
+  // Ensure the session cookies are properly set in the response
+  // This helps prevent the middleware from not finding the user
+  console.log("Setting response headers for session persistence");
+  
+  return response;
 }

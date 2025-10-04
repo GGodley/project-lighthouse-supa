@@ -50,10 +50,15 @@ export async function updateSession(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/auth')
   ) {
     console.log("🚫 MIDDLEWARE: No user found, redirecting to login");
+    console.log("Current path:", request.nextUrl.pathname);
+    console.log("Full URL:", request.url);
+    
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
+  } else if (user) {
+    console.log("✅ MIDDLEWARE: User found, allowing access to:", request.nextUrl.pathname);
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're
