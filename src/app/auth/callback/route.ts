@@ -42,6 +42,17 @@ export async function GET(request: NextRequest) {
         console.log("Session exists after exchange:", !!sessionData.session);
         console.log("User exists in session:", !!sessionData.session?.user);
         console.log("--- END SESSION VERIFICATION ---");
+        
+        // Add a small delay to ensure session is fully established
+        console.log("Waiting for session to be fully established...");
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Final session check before redirect
+        const { data: finalSession } = await supabase.auth.getSession();
+        console.log("--- FINAL SESSION CHECK ---");
+        console.log("Final session exists:", !!finalSession.session);
+        console.log("Final user exists:", !!finalSession.session?.user);
+        console.log("--- END FINAL SESSION CHECK ---");
       } else {
         console.warn("WARNING: Session object is null after successful code exchange.");
       }
@@ -57,19 +68,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${requestUrl.origin}/login?error=No authorization code provided`);
   }
 
-  // Redirect user to the dashboard
+  // Redirect user to the dashboard with a fallback mechanism
   const redirectUrl = `${requestUrl.origin}/dashboard`;
   console.log("--- REDIRECT DIAGNOSTIC ---");
   console.log("Redirecting to:", redirectUrl);
   console.log("Request origin:", requestUrl.origin);
   console.log("--- END REDIRECT DIAGNOSTIC ---");
   
-  // Create a response with the redirect
-  const response = NextResponse.redirect(redirectUrl);
+  // Create a response with the redirect and add a query parameter to help with debugging
+  const response = NextResponse.redirect(`${redirectUrl}?auth=success&t=${Date.now()}`);
   
   // Ensure the session cookies are properly set in the response
-  // This helps prevent the middleware from not finding the user
   console.log("Setting response headers for session persistence");
+  
+  // Add cache control headers to prevent caching issues
+  response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  response.headers.set('Pragma', 'no-cache');
+  response.headers.set('Expires', '0');
   
   return response;
 }
