@@ -20,8 +20,13 @@ export default function EmailSyncManager() {
     const { data: { session: currentSession } } = await supabase.auth.getSession();
     console.log("Current session exists:", !!currentSession);
     if (currentSession) {
+      const user = currentSession.user; // Get the user object from the session
+      
       console.log("Current provider_token:", currentSession.provider_token);
-      console.log("Current provider:", currentSession.provider);
+      
+      // ✅ CORRECTED LOG: Access the provider from the user's metadata
+      console.log("Current provider:", user?.app_metadata?.provider);
+      
       console.log("Current access_token:", currentSession.access_token ? "EXISTS" : "MISSING");
     }
 
@@ -37,7 +42,10 @@ export default function EmailSyncManager() {
     console.log("🔍 SESSION DIAGNOSTIC - After retrieval:");
     console.log("Session exists:", !!session);
     console.log("Provider token:", session.provider_token);
-    console.log("Provider:", session.provider);
+    
+    // ✅ CORRECTED LOG: Access the provider from the user's metadata
+    console.log("Provider:", session.user?.app_metadata?.provider);
+    
     console.log("Access token:", session.access_token ? "EXISTS" : "MISSING");
     console.log("User ID:", session.user?.id);
     console.log("User email:", session.user?.email);
