@@ -141,7 +141,8 @@ serve(async (req) => {
                   name: senderName, // Extract the sender's name from the 'From' header
                   user_id: userId
                 },
-                { onConflict: 'contact_email', ignoreDuplicates: false }
+                // ✅ CORRECTED: onConflict now targets the composite key.
+                { onConflict: 'user_id, contact_email', ignoreDuplicates: false }
               )
               .select('id')
               .single();
