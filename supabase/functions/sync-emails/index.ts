@@ -125,6 +125,31 @@ serve(async (req) => {
           // ✅ FIX: Use the robust helper function to get email bodies
           const bodies = collectBodies(msgJson.payload);
           
+          // Extract sender email and name from the 'From' header
+          const senderEmail = from.match(/<([^>]+)>/) ? from.match(/<([^>]+)>/)![1] : from.split(' ').pop() || from;
+          const senderName = from.includes('<') ? from.split('<')[0].trim().replace(/"/g, '') : from;
+          
+          // ✅ CUSTOMER CREATION: Use robust upsert to find or create customer
+          let customerId = null;
+          if (senderEmail) {
+            // ✅ This single upsert command finds or creates the customer safely.
+            const { data: customer, error: upsertError } = await supabaseAdmin
+              .from('customers')
+              .upsert(
+                { 
+                  contact_email: senderEmail, 
+                  name: senderName, // Extract the sender's name from the 'From' header
+                  user_id: userId
+                },
+                { onConflict: 'contact_email', ignoreDuplicates: false }
+              )
+              .select('id')
+              .single();
+
+            if (upsertError) throw upsertError;
+            if (customer) customerId = customer.id;
+          }
+          
           emailsToStore.push({
               user_id: userId,
               gmail_message_id: msgJson.id,
@@ -134,6 +159,7 @@ serve(async (req) => {
               body_text: bodies.text, // ✅ FIX: Save the text body
               body_html: bodies.html, // ✅ FIX: Save the HTML body
               received_at: new Date(Number(msgJson.internalDate)).toISOString(),
+              customer_id: customerId, // ✅ LINK: Associate email with customer
           });
       }
     }
