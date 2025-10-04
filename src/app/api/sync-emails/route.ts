@@ -1,50 +1,45 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { GmailService, syncEmailsToDatabase } from '@/lib/gmail'
+//
+// ⚠️ PROMPT FOR CURSOR: Create this file at src/app/api/sync-emails/route.ts ⚠️
+//
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
 
 export async function POST() {
+  const cookieStore = cookies();
+  const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+
+  // 1. Get the user's session and provider token
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+  if (!session.provider_token) {
+    return NextResponse.json({ error: 'Missing Google provider token. Please re-authenticate.' }, { status: 400 });
+  }
+
   try {
-    const supabase = await createClient()
-    
-    // Get the current user
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    // 2. Create a new job in the database
+    const { data: job, error: jobError } = await supabase
+      .from('sync_jobs')
+      .insert({ user_id: session.user.id, status: 'pending' })
+      .select()
+      .single();
+    if (jobError) throw jobError;
 
-    // Get user profile with Gmail tokens
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single()
+    // 3. Asynchronously invoke the Edge Function (don't wait for it to finish)
+    supabase.functions.invoke('sync-emails', {
+      body: { 
+        jobId: job.id, 
+        provider_token: session.provider_token 
+      },
+    }).catch(console.error); // Log errors but don't block the response
 
-    if (!profile || !profile.gmail_access_token) {
-      return NextResponse.json({ error: 'Gmail not connected' }, { status: 400 })
-    }
-
-    // Initialize Gmail service
-    const gmailService = new GmailService(
-      profile.gmail_access_token,
-      profile.gmail_refresh_token || ''
-    )
-
-    // Fetch emails from Gmail
-    const emails = await gmailService.getEmails(100)
-
-    // Sync emails to database
-    await syncEmailsToDatabase(supabase, user.id, emails)
-
-    return NextResponse.json({ 
-      success: true, 
-      message: `Synced ${emails.length} emails` 
-    })
+    // 4. Immediately tell the frontend that the job has started
+    return NextResponse.json({ message: 'Email sync initiated successfully.', jobId: job.id }, { status: 202 });
 
   } catch (error) {
-    console.error('Error syncing emails:', error)
-    return NextResponse.json(
-      { error: 'Failed to sync emails' }, 
-      { status: 500 }
-    )
+    const dbError = error as { message: string };
+    return NextResponse.json({ error: `Failed to start sync: ${dbError.message}` }, { status: 500 });
   }
 }
