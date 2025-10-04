@@ -11,7 +11,7 @@ export default function EmailSyncManager() {
   // --- START OF REFACTORED LOGIC ---
 
   const startSync = useCallback(async () => {
-    console.log("5. startSync function has been called.");
+    console.log("✅ 5. startSync function has been called.");
     setSyncStatus('running');
     setMessage('Preparing to sync...');
 
@@ -91,20 +91,24 @@ export default function EmailSyncManager() {
 
   useEffect(() => {
     const ensureJobAndStart = async () => {
-      console.log("1. Component mounted. Checking authentication status...");
+      console.log("--- [DIAGNOSTIC] Starting Email Sync Check ---");
+      console.log("1. Component mounted or auth state changed.");
+
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
-        console.log("2. No user found. Aborting sync check.");
+        console.log("2. ❌ No user found. Aborting sync check.");
         return;
       }
+      console.log(`2. ✅ User is authenticated. User ID: ${user.id}`);
       
       if (hasSyncedThisSession) {
-        console.log("2a. Sync has already run this session. Skipping.");
+        console.log("3. ⏭️ Sync has already been initiated this session. Skipping.");
         return;
       }
+      console.log("3. ✅ No sync has been initiated this session. Proceeding...");
       
-      console.log("2b. User is authenticated. Checking for existing sync jobs...");
+      console.log("4. 🔄 Checking for existing sync jobs in the database...");
       const { data, error: jobError } = await supabase
         .from('sync_jobs')
         .select('status, details')
@@ -113,29 +117,31 @@ export default function EmailSyncManager() {
         .limit(1);
       
       if (jobError) {
-          console.error("3. DATABASE ERROR: Could not fetch latest job.", jobError);
+          console.error("4. ❌ DATABASE ERROR: Could not fetch latest job.", jobError);
           return;
       }
 
-      const latestJob = data?.[0]; // Safely get the first item from the array
-      console.log("3. Result of sync job check:", latestJob);
+      const latestJob = data?.[0];
+      console.log("4. ✅ Result of sync job check:", latestJob || "No jobs found.");
 
       if (!latestJob) {
-        console.log("4a. New user or no previous sync detected. Starting initial sync.");
+        console.log("5a. ➡️ Decision: New user or no previous sync detected. Starting initial sync.");
         setHasSyncedThisSession(true);
         await startSync();
       } else if (latestJob.status !== 'running') {
-        console.log("4b. Previous sync is not running. Starting a new sync for this session.");
+        console.log("5b. ➡️ Decision: Previous sync is not running. Starting a new sync for this session.");
         setHasSyncedThisSession(true);
         await startSync();
       } else {
-        console.log("4c. A sync job is already running. Monitoring status.");
+        console.log("5c. ➡️ Decision: A sync job is already running. Monitoring status.");
         setSyncStatus('running');
       }
     };
 
-    const authListener = supabase.auth.onAuthStateChange((event, session) => {
+    // Listen for when a user signs in
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN') {
+        console.log("Auth event: SIGNED_IN. Re-running sync check.");
         ensureJobAndStart();
       }
     });
@@ -144,7 +150,7 @@ export default function EmailSyncManager() {
     ensureJobAndStart();
 
     return () => {
-      authListener.data.subscription.unsubscribe();
+      authListener?.subscription.unsubscribe();
     };
   }, [supabase, hasSyncedThisSession, startSync]);
 
