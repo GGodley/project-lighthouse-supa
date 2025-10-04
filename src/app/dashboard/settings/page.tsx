@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
-import { Database } from '@/types/database'
+import { Database } from '@/types/database.types'
 import { Button } from '@/components/ui/Button'
 import { Mail, User, Key, Trash2, RefreshCw } from 'lucide-react'
 
@@ -74,7 +74,7 @@ export default function SettingsPage() {
           gmail_refresh_token: null,
           updated_at: new Date().toISOString()
         })
-        .eq('id', profile?.id)
+        .eq('id', profile?.id!)
 
       if (error) throw error
       await fetchProfile()
@@ -98,7 +98,7 @@ export default function SettingsPage() {
           microsoft_refresh_token: null,
           updated_at: new Date().toISOString()
         })
-        .eq('id', profile?.id)
+        .eq('id', profile?.id!)
 
       if (error) throw error
       await fetchProfile()
