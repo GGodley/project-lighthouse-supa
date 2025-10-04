@@ -32,10 +32,16 @@ export async function GET(request: Request) {
         console.log("🔍 SESSION DIAGNOSTIC:");
         console.log("Session exists:", !!session.data.session);
         if (session.data.session) {
-          console.log("Provider Token:", session.data.session.provider_token);
-          console.log("Access Token:", session.data.session.access_token);
-          console.log("Refresh Token:", session.data.session.refresh_token);
-          console.log("Provider:", session.data.session.provider);
+          const { session: currentSession, user } = session.data;
+          
+          console.log("Provider Token:", currentSession.provider_token);
+          console.log("Access Token:", currentSession.access_token);
+          console.log("Refresh Token:", currentSession.refresh_token);
+          
+          // ✅ CORRECTED LOGS: Access properties from the 'user' object
+          console.log("User ID:", user?.id);
+          console.log("User Email:", user?.email);
+          console.log("Provider:", user?.app_metadata?.provider);
         }
         console.log("--- END SESSION DIAGNOSTIC ---");
         // Create or update user profile
