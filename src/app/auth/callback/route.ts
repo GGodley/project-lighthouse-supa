@@ -32,13 +32,16 @@ export async function GET(request: Request) {
         console.log("🔍 SESSION DIAGNOSTIC:");
         console.log("Session exists:", !!session.data.session);
         if (session.data.session) {
-          const { session: currentSession, user } = session.data;
+          // ✅ CORRECTED LOGIC: Get the session object first.
+          const currentSession = session.data.session;
           
+          // ✅ Then, get the user object from *inside* the session.
+          const user = currentSession.user;
+
+          console.log("--- SESSION DIAGNOSTIC ---");
           console.log("Provider Token:", currentSession.provider_token);
           console.log("Access Token:", currentSession.access_token);
           console.log("Refresh Token:", currentSession.refresh_token);
-          
-          // ✅ CORRECTED LOGS: Access properties from the 'user' object
           console.log("User ID:", user?.id);
           console.log("User Email:", user?.email);
           console.log("Provider:", user?.app_metadata?.provider);
