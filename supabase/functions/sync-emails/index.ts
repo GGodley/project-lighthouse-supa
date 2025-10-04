@@ -62,6 +62,14 @@ serve(async (req) => {
   }
 
   try {
+    // --- START DIAGNOSTIC LOGS ---
+    console.log("--- [sync-emails] DIAGNOSTIC START ---");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    console.log("Attempting to read SUPABASE_SERVICE_ROLE_KEY...");
+    console.log("Value found:", serviceKey ? `...${serviceKey.slice(-6)}` : "!!! KEY NOT FOUND !!!");
+    console.log("--- [sync-emails] DIAGNOSTIC END ---");
+    // --- END DIAGNOSTIC LOGS ---
+
     const { jobId, provider_token, pageToken } = await req.json();
     
     if (!jobId || !provider_token) {
