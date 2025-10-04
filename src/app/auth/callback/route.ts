@@ -1,8 +1,7 @@
 //
 // ⚠️ THIS IS THE DIAGNOSTIC VERSION of /auth/callback/route.ts ⚠️
 //
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
@@ -17,8 +16,7 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     try {
-      const cookieStore = cookies();
-      const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+      const supabase = await createClient();
       const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
       if (error) {
@@ -48,8 +46,16 @@ export async function GET(request: NextRequest) {
     }
   } else {
     console.warn("WARNING: Auth callback was called without an authorization code.");
+    console.log("Redirecting to login page due to missing authorization code.");
+    return NextResponse.redirect(`${requestUrl.origin}/login?error=No authorization code provided`);
   }
 
   // Redirect user to the dashboard
-  return NextResponse.redirect(`${requestUrl.origin}/dashboard`);
+  const redirectUrl = `${requestUrl.origin}/dashboard`;
+  console.log("--- REDIRECT DIAGNOSTIC ---");
+  console.log("Redirecting to:", redirectUrl);
+  console.log("Request origin:", requestUrl.origin);
+  console.log("--- END REDIRECT DIAGNOSTIC ---");
+  
+  return NextResponse.redirect(redirectUrl);
 }
