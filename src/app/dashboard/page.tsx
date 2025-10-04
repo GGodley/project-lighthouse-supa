@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
-import { Users, Ticket, Calendar, Mail, TrendingUp, AlertCircle } from 'lucide-react'
+import { Users, Calendar, Mail, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 
 export const dynamic = 'force-dynamic'
@@ -11,24 +11,20 @@ export const dynamic = 'force-dynamic'
 interface DashboardStats {
   totalClients: number
   activeClients: number
-  openTickets: number
-  upcomingEvents: number
+  upcomingMeetings: number
   recentEmails: number
-  urgentTickets: number
 }
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
     totalClients: 0,
     activeClients: 0,
-    openTickets: 0,
-    upcomingEvents: 0,
-    recentEmails: 0,
-    urgentTickets: 0
+    upcomingMeetings: 0,
+    recentEmails: 0
   })
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
-  const [recentEmails, setRecentEmails] = useState<Array<{ id: string; subject: string; sender: string; received_at: string; snippet: string }>>([])
+  const [recentEmails, setRecentEmails] = useState<Array<{ id: number; subject: string | null; sender: string | null; received_at: string | null; snippet: string | null }>>([])
   const supabase = useSupabase()
 
   useEffect(() => {
@@ -43,18 +39,12 @@ export default function DashboardPage() {
           .select('*')
           .eq('user_id', user.id)
 
-        // Fetch tickets
-        const { data: tickets } = await supabase
-          .from('tickets')
+        // Fetch meetings
+        const { data: meetings } = await supabase
+          .from('meetings')
           .select('*')
           .eq('user_id', user.id)
-
-        // Fetch events
-        const { data: events } = await supabase
-          .from('events')
-          .select('*')
-          .eq('user_id', user.id)
-          .gte('start_date', new Date().toISOString())
+          .gte('meeting_date', new Date().toISOString())
 
         // Fetch recent emails
         const { data: emails } = await supabase
@@ -68,11 +58,9 @@ export default function DashboardPage() {
 
         setStats({
           totalClients: clients?.length || 0,
-          activeClients: clients?.filter(c => c.status === 'active').length || 0,
-          openTickets: tickets?.filter(t => t.status === 'open' || t.status === 'in_progress').length || 0,
-          upcomingEvents: events?.length || 0,
-          recentEmails: (emails || []).length,
-          urgentTickets: tickets?.filter(t => t.priority === 'urgent').length || 0
+          activeClients: clients?.filter(c => c.status === 'Healthy').length || 0,
+          upcomingMeetings: meetings?.length || 0,
+          recentEmails: (emails || []).length
         })
       } catch (error) {
         console.error('Error fetching dashboard data:', error)
@@ -141,22 +129,15 @@ export default function DashboardPage() {
       change: '+12%'
     },
     {
-      title: 'Active Clients',
+      title: 'Healthy Clients',
       value: stats.activeClients,
       icon: TrendingUp,
       color: 'bg-green-500',
       change: '+8%'
     },
     {
-      title: 'Open Tickets',
-      value: stats.openTickets,
-      icon: Ticket,
-      color: 'bg-yellow-500',
-      change: '-3%'
-    },
-    {
-      title: 'Upcoming Events',
-      value: stats.upcomingEvents,
+      title: 'Upcoming Meetings',
+      value: stats.upcomingMeetings,
       icon: Calendar,
       color: 'bg-purple-500',
       change: '+5%'
@@ -167,13 +148,6 @@ export default function DashboardPage() {
       icon: Mail,
       color: 'bg-red-500',
       change: '+15%'
-    },
-    {
-      title: 'Urgent Tickets',
-      value: stats.urgentTickets,
-      icon: AlertCircle,
-      color: 'bg-orange-500',
-      change: stats.urgentTickets > 0 ? 'Needs Attention' : 'All Good'
     }
   ]
 
@@ -226,12 +200,12 @@ export default function DashboardPage() {
               <div className="text-sm text-gray-600">Create a new client profile</div>
             </button>
             <button className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-              <div className="font-medium">Create Ticket</div>
-              <div className="text-sm text-gray-600">Open a new support ticket</div>
+              <div className="font-medium">Schedule Meeting</div>
+              <div className="text-sm text-gray-600">Add a new meeting</div>
             </button>
             <button className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-              <div className="font-medium">Schedule Event</div>
-              <div className="text-sm text-gray-600">Add a meeting or call</div>
+              <div className="font-medium">Sync Emails</div>
+              <div className="text-sm text-gray-600">Import latest emails</div>
             </button>
           </div>
         </div>
