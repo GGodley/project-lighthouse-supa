@@ -1,12 +1,14 @@
-'use client'
-
-import { useEffect, useState } from 'react'
-import { useSupabase } from '@/components/SupabaseProvider'
+//
+// ⚠️ PROMPT FOR CURSOR: Add this to the top of src/app/dashboard/page.tsx ⚠️
+//
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation'; // Import redirect
 import { Users, Calendar, Mail, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import SyncEmailsButton from '@/components/SyncEmailsButton'
 
 export const dynamic = 'force-dynamic'
-
 
 interface DashboardStats {
   totalClients: number
@@ -15,109 +17,76 @@ interface DashboardStats {
   recentEmails: number
 }
 
-export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats>({
+export default async function DashboardPage() {
+  const cookieStore = cookies();
+  const supabase = createServerComponentClient({ cookies: () => cookieStore });
+
+  // --- START DIAGNOSTIC LOGS ---
+  console.log("--- [Dashboard Page] Server-Side Auth Check ---");
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error) {
+      console.error("[Dashboard Page] Error getting user:", error.message);
+    }
+    console.log("[Dashboard Page] Server-side user object found:", !!user);
+    if (user) {
+      console.log("[Dashboard Page] Server-side User ID:", user.id);
+    } else {
+      console.warn("[Dashboard Page] WARNING: No user found on the server-side. This is the likely cause of the crash. Redirecting to login.");
+      // If no user, we can't render the page, so redirect.
+      redirect('/login');
+    }
+  } catch (e) {
+      const error = e as Error;
+      console.error("[Dashboard Page] FATAL ERROR during auth check:", error.message);
+  }
+  console.log("--- [Dashboard Page] End Auth Check ---");
+  // --- END DIAGNOSTIC LOGS ---
+
+  // Fetch dashboard data server-side
+  let stats: DashboardStats = {
     totalClients: 0,
     activeClients: 0,
     upcomingMeetings: 0,
     recentEmails: 0
-  })
-  const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
-  const [recentEmails, setRecentEmails] = useState<Array<{ id: number; subject: string | null; sender: string | null; received_at: string | null; snippet: string | null }>>([])
-  const supabase = useSupabase()
-
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      try {
-        // Fetch clients
-        const { data: clients } = await supabase
-          .from('customers')
-          .select('*')
-          .eq('user_id', user.id)
-
-        // Fetch meetings
-        const { data: meetings } = await supabase
-          .from('meetings')
-          .select('*')
-          .eq('user_id', user.id)
-          .gte('meeting_date', new Date().toISOString())
-
-        // Fetch recent emails
-        const { data: emails } = await supabase
-          .from('emails')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('received_at', { ascending: false })
-          .limit(10)
-
-        setRecentEmails(emails || [])
-
-        setStats({
-          totalClients: clients?.length || 0,
-          activeClients: clients?.filter(c => c.status === 'Healthy').length || 0,
-          upcomingMeetings: meetings?.length || 0,
-          recentEmails: (emails || []).length
-        })
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchDashboardData()
-  }, [supabase])
-
-  const invokeSync = async (session: { access_token?: string | null; provider_token?: string | null }) => {
-    const accessToken = session.access_token
-    const providerToken = session.provider_token
-    if (!providerToken) return
-    const { error } = await supabase.functions.invoke('sync-emails', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      body: { provider_token: providerToken }
-    })
-    if (error) throw error
   }
+  let recentEmails: Array<{ id: number; subject: string | null; sender: string | null; received_at: string | null; snippet: string | null }> = []
 
-  const syncEmails = async () => {
-    setSyncing(true)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: `${window.location.origin}/auth/callback`,
-            scopes: 'https://www.googleapis.com/auth/gmail.readonly',
-            queryParams: { prompt: 'consent', access_type: 'offline' }
-          }
-        })
-        return
-      }
-      await invokeSync(session)
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      // Fetch clients
+      const { data: clients } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('user_id', user.id)
+
+      // Fetch meetings
+      const { data: meetings } = await supabase
+        .from('meetings')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('meeting_date', new Date().toISOString())
+
+      // Fetch recent emails
       const { data: emails } = await supabase
         .from('emails')
         .select('*')
+        .eq('user_id', user.id)
         .order('received_at', { ascending: false })
         .limit(10)
-      setRecentEmails(emails || [])
-    } catch (e) {
-      console.error('Sync error:', e)
-    } finally {
-      setSyncing(false)
-    }
-  }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-      </div>
-    )
+      recentEmails = emails || []
+
+      stats = {
+        totalClients: clients?.length || 0,
+        activeClients: clients?.filter(c => c.status === 'Healthy').length || 0,
+        upcomingMeetings: meetings?.length || 0,
+        recentEmails: (emails || []).length
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching dashboard data:', error)
   }
 
   const statCards = [
@@ -157,10 +126,7 @@ export default function DashboardPage() {
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-gray-600">Welcome back! Here&apos;s what&apos;s happening with your clients.</p>
         <div className="mt-4">
-          <Button onClick={syncEmails} disabled={syncing} className="flex items-center gap-2">
-            <Mail className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Syncing…' : 'Sync My Emails'}
-          </Button>
+          <SyncEmailsButton />
         </div>
       </div>
 
