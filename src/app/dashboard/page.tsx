@@ -178,11 +178,9 @@ export default function DashboardPage() {
             </div>
             <div className="mt-4">
               <span className={`text-sm ${
-                stat.title === 'Urgent Tickets' && stat.value > 0 
-                  ? 'text-red-600' 
-                  : stat.change.startsWith('+') 
-                    ? 'text-green-600' 
-                    : 'text-gray-600'
+                stat.change.startsWith('+') 
+                  ? 'text-green-600' 
+                  : 'text-gray-600'
               }`}>
                 {stat.change}
               </span>
