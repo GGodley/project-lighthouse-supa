@@ -2,14 +2,15 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
-import { Database } from '@/types/database'
+import { Database } from '@/types/database.types'
 import { Button } from '@/components/ui/Button'
 import { Plus, Search, MoreVertical } from 'lucide-react'
 
-type Client = Database['public']['Tables']['clients']['Row']
+// Create a type alias for cleaner code
+type CustomerRow = Database['public']['Tables']['customers']['Row']
 
 export default function ClientsPage() {
-  const [clients, setClients] = useState<Client[]>([])
+  const [clients, setClients] = useState<CustomerRow[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -41,8 +42,8 @@ export default function ClientsPage() {
 
   const filteredClients = clients.filter(client => {
     const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         client.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         client.company?.toLowerCase().includes(searchTerm.toLowerCase())
+                         client.contact_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         client.company_name?.toLowerCase().includes(searchTerm.toLowerCase())
     
     const matchesStatus = statusFilter === 'all' || client.status === statusFilter
     
@@ -51,9 +52,9 @@ export default function ClientsPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active': return 'bg-green-100 text-green-800'
-      case 'inactive': return 'bg-gray-100 text-gray-800'
-      case 'prospect': return 'bg-blue-100 text-blue-800'
+      case 'Healthy': return 'bg-green-100 text-green-800'
+      case 'Needs Attention': return 'bg-yellow-100 text-yellow-800'
+      case 'At Risk': return 'bg-red-100 text-red-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
@@ -97,9 +98,9 @@ export default function ClientsPage() {
           className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
           <option value="all">All Status</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-          <option value="prospect">Prospect</option>
+          <option value="Healthy">Healthy</option>
+          <option value="Needs Attention">Needs Attention</option>
+          <option value="At Risk">At Risk</option>
         </select>
       </div>
 
@@ -143,19 +144,19 @@ export default function ClientsPage() {
                           {client.name}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {client.email}
+                          {client.contact_email || 'No email'}
                         </div>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">
-                      {client.company || 'N/A'}
+                      {client.company_name || 'N/A'}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(client.status)}`}>
-                      {client.status}
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(client.status || 'Unknown')}`}>
+                      {client.status || 'Unknown'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
