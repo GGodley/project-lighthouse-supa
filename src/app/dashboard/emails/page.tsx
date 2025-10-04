@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/Button'
 import { RefreshCw, Search, Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import EmailSyncManager from '@/components/EmailSyncManager'
-import { Database } from '@/types/database.types'
 
 type Email = {
   id: string;
@@ -21,8 +20,6 @@ export default function EmailsPage() {
   const [emails, setEmails] = useState<Email[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
-  const [authReady, setAuthReady] = useState(false)
-  const [overlay, setOverlay] = useState<{ visible: boolean; message?: string }>({ visible: false })
   const [searchTerm, setSearchTerm] = useState('')
   const supabase = useSupabase()
   const router = useRouter()
@@ -159,11 +156,11 @@ export default function EmailsPage() {
         <div className="flex items-center gap-2">
           <Button 
             onClick={syncEmails}
-            disabled={!authReady || syncing}
+            disabled={syncing}
             className="flex items-center space-x-2"
           >
             <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-            <span>{!authReady ? 'Checking auth...' : syncing ? 'Syncing...' : 'Sync Emails'}</span>
+            <span>{syncing ? 'Syncing...' : 'Sync Emails'}</span>
           </Button>
           <Button onClick={signOut} variant="outline">Sign Out</Button>
         </div>
@@ -183,16 +180,8 @@ export default function EmailsPage() {
         </div>
       </div>
 
-      {/* Emails List with overlay */}
+      {/* Emails List */}
       <div className="relative bg-white rounded-lg shadow overflow-hidden">
-        {overlay.visible && (
-          <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-10 flex items-center justify-center">
-            <div className="flex items-center gap-3 text-gray-700 text-sm font-medium">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700"></div>
-              <span>{overlay.message || 'Initializing your account...'}</span>
-            </div>
-          </div>
-        )}
         <div className="divide-y divide-gray-200">
           {filteredEmails.map((email) => (
             <div key={email.id} className={`p-6 hover:bg-gray-50`}>

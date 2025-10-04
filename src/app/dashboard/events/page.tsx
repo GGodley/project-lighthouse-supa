@@ -52,34 +52,6 @@ export default function EventsPage() {
     fetchEvents()
   }, [fetchEvents, view])
 
-  const getEventIcon = (type: string) => {
-    switch (type) {
-      case 'meeting': return <Users className="w-4 h-4" />
-      case 'call': return <Phone className="w-4 h-4" />
-      case 'email': return <Mail className="w-4 h-4" />
-      case 'task': return <CheckCircle className="w-4 h-4" />
-      default: return <Calendar className="w-4 h-4" />
-    }
-  }
-
-  const getEventColor = (type: string) => {
-    switch (type) {
-      case 'meeting': return 'bg-blue-100 text-blue-800'
-      case 'call': return 'bg-green-100 text-green-800'
-      case 'email': return 'bg-purple-100 text-purple-800'
-      case 'task': return 'bg-orange-100 text-orange-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'scheduled': return 'bg-blue-100 text-blue-800'
-      case 'completed': return 'bg-green-100 text-green-800'
-      case 'cancelled': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
