@@ -35,6 +35,13 @@ export async function GET(request: NextRequest) {
         console.log("User Email:", data.user.email);
         console.log("Provider:", data.user.app_metadata.provider);
         console.log("--- END SESSION DIAGNOSTIC ---");
+        
+        // Verify session is properly set by getting it again
+        const { data: sessionData } = await supabase.auth.getSession();
+        console.log("--- SESSION VERIFICATION ---");
+        console.log("Session exists after exchange:", !!sessionData.session);
+        console.log("User exists in session:", !!sessionData.session?.user);
+        console.log("--- END SESSION VERIFICATION ---");
       } else {
         console.warn("WARNING: Session object is null after successful code exchange.");
       }

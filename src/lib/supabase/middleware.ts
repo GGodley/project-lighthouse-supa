@@ -35,11 +35,21 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // --- MIDDLEWARE DIAGNOSTIC ---
+  console.log("🔍 MIDDLEWARE DIAGNOSTIC:");
+  console.log("Request path:", request.nextUrl.pathname);
+  console.log("User exists:", !!user);
+  console.log("User ID:", user?.id);
+  console.log("Is login path:", request.nextUrl.pathname.startsWith('/login'));
+  console.log("Is auth path:", request.nextUrl.pathname.startsWith('/auth'));
+  console.log("--- END MIDDLEWARE DIAGNOSTIC ---");
+
   if (
     !user &&
     !request.nextUrl.pathname.startsWith('/login') &&
     !request.nextUrl.pathname.startsWith('/auth')
   ) {
+    console.log("🚫 MIDDLEWARE: No user found, redirecting to login");
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone()
     url.pathname = '/login'
