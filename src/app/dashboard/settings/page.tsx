@@ -66,6 +66,11 @@ export default function SettingsPage() {
       return
     }
 
+    if (!profile?.id) {
+      alert('Profile not found. Please refresh the page and try again.')
+      return
+    }
+
     try {
       const { error } = await supabase
         .from('profiles')
@@ -74,7 +79,7 @@ export default function SettingsPage() {
           gmail_refresh_token: null,
           updated_at: new Date().toISOString()
         })
-        .eq('id', profile?.id!)
+        .eq('id', profile.id)
 
       if (error) throw error
       await fetchProfile()
@@ -90,6 +95,11 @@ export default function SettingsPage() {
       return
     }
 
+    if (!profile?.id) {
+      alert('Profile not found. Please refresh the page and try again.')
+      return
+    }
+
     try {
       const { error } = await supabase
         .from('profiles')
@@ -98,7 +108,7 @@ export default function SettingsPage() {
           microsoft_refresh_token: null,
           updated_at: new Date().toISOString()
         })
-        .eq('id', profile?.id!)
+        .eq('id', profile.id)
 
       if (error) throw error
       await fetchProfile()
