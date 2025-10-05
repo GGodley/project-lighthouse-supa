@@ -139,7 +139,7 @@ export default function EmailSyncManager() {
     };
 
     // Listen for when a user signs in
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_IN') {
         console.log("Auth event: SIGNED_IN. Re-running sync check.");
         ensureJobAndStart();

@@ -5,7 +5,6 @@ import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation'; // Import redirect
 import { Users, Calendar, Mail, TrendingUp } from 'lucide-react'
-import { Button } from '@/components/ui/Button'
 import SyncEmailsButton from '@/components/SyncEmailsButton'
 
 export const dynamic = 'force-dynamic'
