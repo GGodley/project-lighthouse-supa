@@ -126,34 +126,59 @@ serve(async (req) => {
     const calendarData = await calendarResponse.json()
     const events: GoogleCalendarEvent[] = calendarData.items || []
 
+    // Log the user's domain for debugging
+    const userEmailLower = userEmail?.toLowerCase()
+    const userDomain = userEmailLower?.split('@')[1]
+    console.log('🔍 User email:', userEmail)
+    console.log('🔍 User domain:', userDomain)
+
+    // Log raw data from Google
+    console.log('📊 Total events received from Google:', events.length)
+    if (events.length > 0) {
+      console.log('📋 First event structure:', JSON.stringify(events[0], null, 2))
+    }
+
     // Filter events to only include those with external attendees
     const filteredEvents = events.filter(event => {
+      console.log(`\n🔍 Processing event: "${event.summary || 'Untitled'}"`)
+      
       if (!event.attendees || event.attendees.length === 0) {
+        console.log('❌ REJECTED: No attendees')
         return false
       }
+
+      console.log(`👥 Attendees (${event.attendees.length}):`, event.attendees.map(a => a.email))
 
       // Check if there's at least one external attendee
       const hasExternalAttendee = event.attendees.some(attendee => {
         const attendeeEmail = attendee.email?.toLowerCase()
-        const userEmailLower = userEmail?.toLowerCase()
+        
+        console.log(`  🔍 Checking attendee: ${attendeeEmail}`)
         
         // Skip the user themselves
         if (attendeeEmail === userEmailLower) {
+          console.log('  ⏭️ SKIP: User themselves')
           return false
         }
         
         // Check if attendee is external (different domain)
         if (userEmailLower && attendeeEmail) {
-          const userDomain = userEmailLower.split('@')[1]
           const attendeeDomain = attendeeEmail.split('@')[1]
-          return userDomain !== attendeeDomain
+          const isExternal = userDomain !== attendeeDomain
+          console.log(`  🔍 Domain check: ${attendeeDomain} vs ${userDomain} = ${isExternal ? 'EXTERNAL' : 'INTERNAL'}`)
+          return isExternal
         }
         
+        console.log('  ❌ SKIP: Invalid email format')
         return false
       })
 
-      return hasExternalAttendee
+      const result = hasExternalAttendee
+      console.log(`${result ? '✅ KEPT' : '❌ REJECTED'}: ${result ? 'Has external attendees' : 'No external attendees'}`)
+      return result
     })
+
+    console.log(`\n📊 Filtering complete: ${filteredEvents.length} events passed the filter out of ${events.length} total`)
 
     // Transform events to meeting data
     const meetings: MeetingData[] = filteredEvents.map(event => {
