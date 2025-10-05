@@ -135,7 +135,7 @@ export default function CalendarPage() {
                 ${event.title}
                 ${extendedProps.location ? `\nLocation: ${extendedProps.location}` : ''}
                 ${extendedProps.description ? `\nDescription: ${extendedProps.description}` : ''}
-                ${extendedProps.externalAttendees?.length > 0 ? `\nExternal Attendees: ${extendedProps.externalAttendees.join(', ')}` : ''}
+                ${extendedProps.externalAttendees && extendedProps.externalAttendees.length > 0 ? `\nExternal Attendees: ${extendedProps.externalAttendees.join(', ')}` : ''}
               `)
             }}
             eventMouseEnter={(info) => {
