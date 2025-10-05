@@ -1,10 +1,12 @@
 'use client';
 
-import { useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import type { EventInput, Calendar as CalendarApi, EventClickArg, EventSourceFuncArg } from '@fullcalendar/core';
+import { useSupabase } from '@/components/SupabaseProvider'
+import type { Database } from '@/types/database.types'
 
 // Helper to format events from Google API to FullCalendar format
 type GoogleEvent = {
@@ -35,30 +37,78 @@ const formatEvents = (apiEvents: unknown[]): EventInput[] => {
   }));
 };
 
+type MeetingRow = Database['public']['Tables']['meetings']['Row']
+
 export default function CalendarPage() {
   const calendarRef = useRef<FullCalendar | null>(null);
+  const supabase = useSupabase()
+  const [events, setEvents] = useState<EventInput[]>([])
+  const [syncing, setSyncing] = useState<boolean>(false)
 
-  const handleFetchEvents = async (fetchInfo: EventSourceFuncArg, successCallback: (events: EventInput[]) => void, failureCallback: (error: Error) => void) => {
+  const meetingToEvent = (m: MeetingRow): EventInput => ({
+    id: String(m.id),
+    title: m.summary ?? 'Meeting',
+    start: m.meeting_date,
+    end: m.meeting_date,
+    extendedProps: { attendants: m.attendants, topics: m.topics, sentiment: m.sentiment },
+  })
+
+  const fetchMeetings = useMemo(() => async () => {
+    const res = await fetch('/api/meetings')
+    if (!res.ok) return
+    const data = (await res.json()) as MeetingRow[]
+    setEvents(data.map(meetingToEvent))
+  }, [])
+
+  const invokeSync = useMemo(() => async () => {
     try {
-      const start = encodeURIComponent(fetchInfo.startStr);
-      const end = encodeURIComponent(fetchInfo.endStr);
-      
-      const response = await fetch(`/api/calendar/events?start=${start}&end=${end}`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch calendar events: ${response.statusText}`);
-      }
-
-      const data: unknown = await response.json();
-      const items = (data as { items?: unknown[] }).items ?? [];
-      const formattedEvents = formatEvents(items);
-      
-      successCallback(formattedEvents);
-    } catch (error) {
-      console.error("Error fetching events:", error);
-      failureCallback(error as Error);
+      setSyncing(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      const accessToken = session?.access_token
+      await supabase.functions.invoke('sync-calendar', {
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      })
+    } finally {
+      setSyncing(false)
     }
-  };
+  }, [supabase])
+
+  useEffect(() => {
+    // kick off background sync but don't block UI
+    invokeSync()
+    // fetch existing meetings for immediate display
+    fetchMeetings()
+  }, [invokeSync, fetchMeetings])
+
+  useEffect(() => {
+    // subscribe to realtime INSERT/UPDATE on meetings
+    const channel = supabase
+      .channel('calendar-meetings')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'meetings' },
+        (payload: { new: MeetingRow; old: MeetingRow }) => {
+          const record = payload.new ?? payload.old
+          if (!record) return
+          setEvents((prev) => {
+            const updated = prev.filter((e) => e.id !== String(record.id))
+            return [...updated, meetingToEvent(record)]
+          })
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase])
+
+  const handleFetchEvents = async (
+    _fetchInfo: EventSourceFuncArg,
+    successCallback: (events: EventInput[]) => void
+  ) => {
+    successCallback(events)
+  }
 
   const handleViewChange = (view: 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay') => {
     calendarRef.current?.getApi().changeView(view);
@@ -86,6 +136,18 @@ export default function CalendarPage() {
       </header>
 
       <div className="bg-white p-4 rounded-lg shadow-md">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="text-lg font-semibold text-gray-900">
+            {syncing ? 'Syncing…' : 'Calendar'}
+          </div>
+          <button
+            onClick={invokeSync}
+            className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+            disabled={syncing}
+          >
+            {syncing ? 'Syncing…' : 'Refresh Calendar'}
+          </button>
+        </div>
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin]}
