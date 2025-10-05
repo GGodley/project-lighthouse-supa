@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
-import type { EventInput, Calendar as CalendarApi } from '@fullcalendar/core';
-import type { EventClickArg } from '@fullcalendar/core';
+import type { EventInput, Calendar as CalendarApi, EventClickArg, EventSourceFuncArg } from '@fullcalendar/core';
 
 // Helper to format events from Google API to FullCalendar format
 const formatEvents = (apiEvents: any[]): EventInput[] => {
@@ -29,7 +28,7 @@ const formatEvents = (apiEvents: any[]): EventInput[] => {
 export default function CalendarPage() {
   const calendarRef = useRef<{ getApi: () => CalendarApi } | null>(null);
 
-  const handleFetchEvents = async (fetchInfo: { startStr: string; endStr: string; }, successCallback: (events: EventInput[]) => void, failureCallback: (error: Error) => void) => {
+  const handleFetchEvents = async (fetchInfo: EventSourceFuncArg, successCallback: (events: EventInput[]) => void, failureCallback: (error: Error) => void) => {
     try {
       const start = encodeURIComponent(fetchInfo.startStr);
       const end = encodeURIComponent(fetchInfo.endStr);
