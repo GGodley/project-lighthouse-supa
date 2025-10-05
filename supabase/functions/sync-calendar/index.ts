@@ -6,25 +6,21 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-interface GoogleCalendarEvent {
-  id: string
-  summary: string
-  start: {
-    dateTime?: string
-    date?: string
-  }
-  end: {
-    dateTime?: string
-    date?: string
-  }
-  attendees?: Array<{
-    email: string
-    displayName?: string
-    responseStatus?: string
-  }>
-  location?: string
-  description?: string
-}
+// Type definitions for Google Calendar API objects
+type Attendee = {
+  email: string;
+  responseStatus: 'needsAction' | 'declined' | 'tentative' | 'accepted';
+};
+
+type GoogleCalendarEvent = {
+  id: string;
+  summary?: string;
+  description?: string;
+  start?: { dateTime?: string; date?: string };
+  end?: { dateTime?: string; date?: string };
+  hangoutLink?: string;
+  attendees?: Attendee[];
+};
 
 interface MeetingData {
   google_event_id: string
@@ -127,8 +123,8 @@ serve(async (req) => {
     const events: GoogleCalendarEvent[] = calendarData.items || []
 
     // Log the user's domain for debugging
-    const userEmailLower = userEmail?.toLowerCase()
-    const userDomain = userEmailLower?.split('@')[1]
+    const userEmail = user.email!
+    const userDomain = userEmail.split('@')[1]
     console.log('🔍 User email:', userEmail)
     console.log('🔍 User domain:', userDomain)
 
@@ -138,43 +134,36 @@ serve(async (req) => {
       console.log('📋 First event structure:', JSON.stringify(events[0], null, 2))
     }
 
-    // Filter events to only include those with external attendees
-    const filteredEvents = events.filter(event => {
+    // Filter events to only include those with external attendees using type-safe logic
+    const filteredEvents = events.filter((event: GoogleCalendarEvent) => {
       console.log(`\n🔍 Processing event: "${event.summary || 'Untitled'}"`)
       
-      if (!event.attendees || event.attendees.length === 0) {
+      if (!event.attendees) {
         console.log('❌ REJECTED: No attendees')
         return false
       }
 
-      console.log(`👥 Attendees (${event.attendees.length}):`, event.attendees.map(a => a.email))
+      console.log(`👥 Attendees (${event.attendees.length}):`, event.attendees.map(a => `${a.email} (${a.responseStatus})`))
 
-      // Check if there's at least one external attendee
-      const hasExternalAttendee = event.attendees.some(attendee => {
-        const attendeeEmail = attendee.email?.toLowerCase()
-        
-        console.log(`  🔍 Checking attendee: ${attendeeEmail}`)
-        
-        // Skip the user themselves
-        if (attendeeEmail === userEmailLower) {
-          console.log('  ⏭️ SKIP: User themselves')
-          return false
-        }
-        
-        // Check if attendee is external (different domain)
-        if (userEmailLower && attendeeEmail) {
-          const attendeeDomain = attendeeEmail.split('@')[1]
-          const isExternal = userDomain !== attendeeDomain
-          console.log(`  🔍 Domain check: ${attendeeDomain} vs ${userDomain} = ${isExternal ? 'EXTERNAL' : 'INTERNAL'}`)
-          return isExternal
-        }
-        
-        console.log('  ❌ SKIP: Invalid email format')
-        return false
+      // First, filter to get only actual guests who have accepted (not declined)
+      const externalGuests = event.attendees.filter((attendee: Attendee) => {
+        return attendee.email && 
+               attendee.email !== userEmail && 
+               attendee.responseStatus !== 'declined'
       })
 
-      const result = hasExternalAttendee
-      console.log(`${result ? '✅ KEPT' : '❌ REJECTED'}: ${result ? 'Has external attendees' : 'No external attendees'}`)
+      console.log(`🎯 External guests (after filtering): ${externalGuests.length}`, externalGuests.map(g => g.email))
+
+      // Now, check if any of these remaining guests are from an external domain
+      const hasExternalGuest = externalGuests.some((attendee: Attendee) => {
+        const attendeeDomain = attendee.email.split('@')[1]
+        const isExternal = attendeeDomain && attendeeDomain !== userDomain
+        console.log(`  🔍 Domain check: ${attendee.email} (${attendeeDomain}) vs ${userDomain} = ${isExternal ? 'EXTERNAL' : 'INTERNAL'}`)
+        return isExternal
+      })
+
+      const result = hasExternalGuest
+      console.log(`${result ? '✅ KEPT' : '❌ REJECTED'}: ${result ? 'Has external guests' : 'No external guests'}`)
       return result
     })
 
