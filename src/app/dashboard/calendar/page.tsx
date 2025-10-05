@@ -36,7 +36,7 @@ const formatEvents = (apiEvents: unknown[]): EventInput[] => {
 };
 
 export default function CalendarPage() {
-  const calendarRef = useRef<{ getApi: () => CalendarApi } | null>(null);
+  const calendarRef = useRef<FullCalendar | null>(null);
 
   const handleFetchEvents = async (fetchInfo: EventSourceFuncArg, successCallback: (events: EventInput[]) => void, failureCallback: (error: Error) => void) => {
     try {
@@ -61,9 +61,7 @@ export default function CalendarPage() {
   };
 
   const handleViewChange = (view: 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay') => {
-    if (calendarRef.current) {
-      calendarRef.current.getApi().changeView(view);
-    }
+    calendarRef.current?.getApi().changeView(view);
   };
   
   const handleEventClick = (clickInfo: EventClickArg) => {
@@ -89,7 +87,7 @@ export default function CalendarPage() {
 
       <div className="bg-white p-4 rounded-lg shadow-md">
         <FullCalendar
-          ref={calendarRef as any}
+          ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin]}
           initialView="dayGridMonth"
           headerToolbar={false}

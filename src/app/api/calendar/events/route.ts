@@ -4,7 +4,10 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+// no NextRequest import needed; we don't use the request param
+
+type GoogleAttendee = { email?: string };
+type GoogleEvent = { attendees?: GoogleAttendee[] };
 
 export async function GET() {
   const cookieStore = cookies();
@@ -54,13 +57,13 @@ export async function GET() {
     const allEvents = data.items || [];
 
     // 5. ✅ NEW LOGIC: Filter the events on our server
-    const externalEvents = allEvents.filter((event: { attendees?: any[] }) => {
+    const externalEvents = (allEvents as GoogleEvent[]).filter((event) => {
       if (!event.attendees || event.attendees.length === 0) {
         return false; // Skip events with no attendees
       }
       
       // The `some` method checks if AT LEAST ONE attendee meets the condition
-      return event.attendees.some((attendee: { email?: string }) => {
+      return event.attendees.some((attendee) => {
         if (!attendee.email) return false; // Skip attendees without an email (e.g., rooms)
         
         // An external attendee's email domain is different from the user's
