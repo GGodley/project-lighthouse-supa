@@ -1,7 +1,103 @@
+'//
+'// ⚠️ THIS IS THE DEFINITIVE AND CORRECTED CALENDAR PAGE COMPONENT ⚠️
+'//
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import FullCalendar from '@fullcalendar/react';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import timeGridPlugin from '@fullcalendar/timegrid';
+import type { EventInput, Calendar } from '@fullcalendar/core';
+
+// Helper function to format event data for FullCalendar
+const formatEvents = (events: any[]): EventInput[] => {
+  if (!Array.isArray(events)) return [];
+  return events.map(event => ({
+    id: event.id,
+    title: event.summary,
+    start: event.start?.dateTime || event.start?.date,
+    end: event.end?.dateTime || event.end?.date,
+    extendedProps: {
+      description: event.description,
+      attendees: event.attendees,
+      hangoutLink: event.hangoutLink,
+    },
+  }));
+};
+
+export default function CalendarPage() {
+  const calendarRef = useRef<Calendar | null>(null);
+
+  // This function is what FullCalendar will call to get events
+  const fetchEvents = async (fetchInfo: any, successCallback: (events: EventInput[]) => void, failureCallback: (error: Error) => void) => {
+    try {
+      const start = fetchInfo.startStr;
+      const end = fetchInfo.endStr;
+      
+      const response = await fetch(`/api/calendar/events?start=${start}&end=${end}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch calendar events');
+      }
+
+      // We expect the API to return an object with an 'items' array
+      const data = await response.json();
+      const formattedEvents = formatEvents(data.items || []);
+      
+      successCallback(formattedEvents);
+    } catch (error) {
+      console.error("Error fetching events:", error);
+      failureCallback(error as Error);
+    }
+  };
+
+  const handleViewChange = (view: string) => {
+    if (calendarRef.current) {
+      const calendarApi = calendarRef.current.getApi();
+      calendarApi.changeView(view);
+    }
+  };
+
+  return (
+    <div className="p-6 bg-gray-50 min-h-screen">
+      <header className="flex items-center justify-between mb-6">
+        <h1 className="text-3xl font-bold text-gray-800">Calendar</h1>
+        <div className="flex items-center space-x-2">
+          <button onClick={() => handleViewChange('dayGridMonth')} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-md shadow-sm hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            Month
+          </button>
+          <button onClick={() => handleViewChange('timeGridWeek')} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-md shadow-sm hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            Week
+          </button>
+          <button onClick={() => handleViewChange('timeGridDay')} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-md shadow-sm hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            Day
+          </button>
+        </div>
+      </header>
+
+      <div className="bg-white p-4 rounded-lg shadow">
+        <FullCalendar
+          ref={(ref) => {
+            if (ref) {
+              calendarRef.current = ref.getApi();
+            }
+          }}
+          plugins={[dayGridPlugin, timeGridPlugin]}
+          initialView="dayGridMonth"
+          headerToolbar={false} // We are using our own header
+          events={fetchEvents}
+          height="auto"
+          eventColor="#4f46e5"
+        />
+      </div>
+    </div>
+  );
+}
 'use client'
 
 import { useRef, useState } from 'react'
 import FullCalendar, { type EventSourceFunc, type DatesSetArg } from '@fullcalendar/react'
+import type { EventInput } from '@fullcalendar/core'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import { Button } from '@/components/ui/Button'
@@ -21,19 +117,27 @@ export default function CalendarPage() {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.error || 'Failed to fetch events')
       }
-      const data = await res.json()
+      const data: { events: unknown[] } = await res.json()
 
-      const events = (data.events || []).map((e: any) => ({
-        id: e.id,
-        title: e.summary || 'Untitled Event',
-        start: e.start?.dateTime || e.start?.date, // all-day fallback
-        end: e.end?.dateTime || e.end?.date,
-        extendedProps: e,
-      }))
+      const events: EventInput[] = (data.events ?? []).map((raw: unknown): EventInput => {
+        const e = raw as {
+          id?: string
+          summary?: string
+          start?: { dateTime?: string; date?: string }
+          end?: { dateTime?: string; date?: string }
+        }
+        return {
+          id: e?.id,
+          title: e?.summary || 'Untitled Event',
+          start: e?.start?.dateTime || e?.start?.date,
+          end: e?.end?.dateTime || e?.end?.date,
+          extendedProps: raw,
+        }
+      })
 
       successCallback(events)
     } catch (error) {
-      failureCallback?.(error as Error)
+      if (failureCallback) failureCallback(error as Error)
     }
   }
 
