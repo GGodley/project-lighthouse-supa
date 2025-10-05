@@ -28,20 +28,25 @@ export default function CalendarPage() {
         throw new Error('No active session')
       }
 
-      const syncResponse = await fetch('/api/sync-calendar', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (!syncResponse.ok) {
-        const errorData = await syncResponse.json()
-        throw new Error(errorData.error || 'Failed to sync calendar')
+      // Get the provider_token from the session
+      const providerToken = session.provider_token
+      
+      if (!providerToken) {
+        console.error('Could not find provider token in session')
+        throw new Error('Could not find provider token. Please re-authenticate.')
       }
 
-      const syncResult = await syncResponse.json()
+      const { data: syncResult, error: syncError } = await supabase.functions.invoke('sync-calendar', {
+        body: {
+          provider_token: providerToken
+        }
+      })
+
+      if (syncError) {
+        console.error('Sync calendar error:', syncError)
+        throw new Error(syncError.message || 'Failed to sync calendar')
+      }
+
       console.log('Sync completed:', syncResult)
 
       // Step 2: Fetch meetings from our database

@@ -78,13 +78,14 @@ serve(async (req) => {
       )
     }
 
-    // Get the provider token from user metadata
-    const providerToken = user.user_metadata?.provider_token
+    // Get the provider token from request body
+    const requestBody = await req.json()
+    const providerToken = requestBody.provider_token
     const userEmail = user.email
 
     if (!providerToken) {
       return new Response(
-        JSON.stringify({ error: 'No Google access token found. Please re-authenticate.' }),
+        JSON.stringify({ error: 'No Google access token found in request body. Please re-authenticate.' }),
         { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
