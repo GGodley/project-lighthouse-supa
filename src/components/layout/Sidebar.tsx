@@ -10,7 +10,8 @@ import {
   BarChart3,
   Home,
   UserSquare2,
-  PieChart
+  PieChart,
+  Calendar
 } from 'lucide-react'
 
 const navigation = [
@@ -19,6 +20,7 @@ const navigation = [
   { name: 'Customers', href: '/dashboard/customers', icon: UserSquare2 },
   { name: 'Analytics', href: '/dashboard/analytics', icon: PieChart },
   { name: 'Emails', href: '/dashboard/emails', icon: Mail },
+  { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
 
