@@ -62,7 +62,8 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await resp.json()
-    return NextResponse.json({ events: data?.items ?? [] }, { status: 200 })
+    // Return the Google Calendar events array directly (no nesting)
+    return NextResponse.json(data?.items ?? [], { status: 200 })
   } catch (e) {
     const err = e as Error
     return NextResponse.json({ error: err.message }, { status: 500 })
