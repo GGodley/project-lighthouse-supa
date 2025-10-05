@@ -6,33 +6,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Type definitions for Google Calendar API objects
-type Attendee = {
-  email: string;
-  responseStatus: 'needsAction' | 'declined' | 'tentative' | 'accepted';
-};
-
+// Type definition for Google Calendar API objects
 type GoogleCalendarEvent = {
   id: string;
   summary?: string;
   description?: string;
   start?: { dateTime?: string; date?: string };
   end?: { dateTime?: string; date?: string };
-  hangoutLink?: string;
-  attendees?: Attendee[];
+  location?: string;
+  attendees?: Array<{
+    email: string;
+    responseStatus?: string;
+  }>;
 };
-
-interface MeetingData {
-  google_event_id: string
-  user_id: string
-  title: string
-  meeting_date: string
-  end_date: string
-  location?: string
-  description?: string
-  attendees: string[]
-  external_attendees: string[]
-}
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -77,7 +63,6 @@ serve(async (req) => {
     // Get the provider token from request body
     const requestBody = await req.json()
     const providerToken = requestBody.provider_token
-    const userEmail = user.email
 
     if (!providerToken) {
       return new Response(
@@ -120,113 +105,61 @@ serve(async (req) => {
     }
 
     const calendarData = await calendarResponse.json()
-    const events: GoogleCalendarEvent[] = calendarData.items || []
+    const events = calendarData.items || []
 
-    // Log the user's domain for debugging
-    const userEmail = user.email!
-    const userDomain = userEmail.split('@')[1]
-    console.log('🔍 User email:', userEmail)
-    console.log('🔍 User domain:', userDomain)
-
-    // Log raw data from Google
     console.log('📊 Total events received from Google:', events.length)
+
+    // Insert all raw events into temp_meetings table
     if (events.length > 0) {
-      console.log('📋 First event structure:', JSON.stringify(events[0], null, 2))
-    }
-
-    // Filter events to only include those with external attendees using type-safe logic
-    const filteredEvents = events.filter((event: GoogleCalendarEvent) => {
-      console.log(`\n🔍 Processing event: "${event.summary || 'Untitled'}"`)
-      
-      if (!event.attendees) {
-        console.log('❌ REJECTED: No attendees')
-        return false
-      }
-
-      console.log(`👥 Attendees (${event.attendees.length}):`, event.attendees.map(a => `${a.email} (${a.responseStatus})`))
-
-      // First, filter to get only actual guests who have accepted (not declined)
-      const externalGuests = event.attendees.filter((attendee: Attendee) => {
-        return attendee.email && 
-               attendee.email !== userEmail && 
-               attendee.responseStatus !== 'declined'
-      })
-
-      console.log(`🎯 External guests (after filtering): ${externalGuests.length}`, externalGuests.map(g => g.email))
-
-      // Now, check if any of these remaining guests are from an external domain
-      const hasExternalGuest = externalGuests.some((attendee: Attendee) => {
-        const attendeeDomain = attendee.email.split('@')[1]
-        const isExternal = attendeeDomain && attendeeDomain !== userDomain
-        console.log(`  🔍 Domain check: ${attendee.email} (${attendeeDomain}) vs ${userDomain} = ${isExternal ? 'EXTERNAL' : 'INTERNAL'}`)
-        return isExternal
-      })
-
-      const result = hasExternalGuest
-      console.log(`${result ? '✅ KEPT' : '❌ REJECTED'}: ${result ? 'Has external guests' : 'No external guests'}`)
-      return result
-    })
-
-    console.log(`\n📊 Filtering complete: ${filteredEvents.length} events passed the filter out of ${events.length} total`)
-
-    // Transform events to meeting data
-    const meetings: MeetingData[] = filteredEvents.map(event => {
-      const startDate = event.start.dateTime || event.start.date
-      const endDate = event.end.dateTime || event.end.date
-      
-      const attendees = event.attendees?.map(a => a.email).filter(Boolean) || []
-      const externalAttendees = event.attendees?.filter(attendee => {
-        const attendeeEmail = attendee.email?.toLowerCase()
-        const userEmailLower = userEmail?.toLowerCase()
-        
-        if (attendeeEmail === userEmailLower) return false
-        
-        if (userEmailLower && attendeeEmail) {
-          const userDomain = userEmailLower.split('@')[1]
-          const attendeeDomain = attendeeEmail.split('@')[1]
-          return userDomain !== attendeeDomain
-        }
-        
-        return false
-      }).map(a => a.email).filter(Boolean) || []
-
-      return {
-        google_event_id: event.id,
+      const tempMeetings = events.map((event: GoogleCalendarEvent) => ({
         user_id: user.id,
-        title: event.summary || 'Untitled Meeting',
-        meeting_date: startDate,
-        end_date: endDate,
-        location: event.location,
-        description: event.description,
-        attendees,
-        external_attendees: externalAttendees,
-      }
-    })
+        google_event_id: event.id,
+        google_event_data: event,
+        created_at: new Date().toISOString()
+      }))
 
-    // Upsert meetings into the database
-    if (meetings.length > 0) {
-      const { error: upsertError } = await supabase
-        .from('meetings')
-        .upsert(meetings, {
-          onConflict: 'google_event_id,user_id'
-        })
+      const { error: insertError } = await supabase
+        .from('temp_meetings')
+        .insert(tempMeetings)
 
-      if (upsertError) {
-        console.error('Database upsert error:', upsertError)
+      if (insertError) {
+        console.error('Database insert error:', insertError)
         return new Response(
-          JSON.stringify({ error: 'Failed to save meetings to database' }),
+          JSON.stringify({ error: 'Failed to save raw events to database' }),
           { 
             status: 500, 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
           }
         )
       }
+
+      console.log(`✅ Inserted ${events.length} raw events into temp_meetings table`)
+
+      // Invoke the process-meetings function to start the next stage
+      const { error: processError } = await supabase.functions.invoke('process-meetings', {
+        body: {
+          user_id: user.id
+        }
+      })
+
+      if (processError) {
+        console.error('Process meetings invocation error:', processError)
+        return new Response(
+          JSON.stringify({ error: 'Failed to start processing pipeline' }),
+          { 
+            status: 500, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        )
+      }
+
+      console.log('✅ Successfully invoked process-meetings function')
     }
 
     return new Response(
       JSON.stringify({ 
-        message: 'Sync completed', 
-        syncedEvents: meetings.length 
+        message: 'Raw sync completed', 
+        syncedEvents: events.length 
       }),
       { 
         status: 200, 

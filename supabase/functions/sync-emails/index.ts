@@ -25,12 +25,29 @@ const decodeBase64Url = (data: string | undefined): string | undefined => {
   }
 };
 
-const collectBodies = (payload: any): { text?: string; html?: string } => {
+// Type definitions for Gmail API payload
+type GmailPart = {
+  mimeType?: string;
+  body?: {
+    data?: string;
+  };
+  parts?: GmailPart[];
+};
+
+type GmailPayload = {
+  parts?: GmailPart[];
+  body?: {
+    data?: string;
+  };
+  mimeType?: string;
+};
+
+const collectBodies = (payload: GmailPayload): { text?: string; html?: string } => {
   let text: string | undefined;
   let html: string | undefined;
   const partsToVisit = [payload, ...(payload?.parts || [])];
   
-  const findParts = (parts: any[]) => {
+  const findParts = (parts: GmailPart[]) => {
     for (const part of parts) {
       if (part?.body?.data) {
         const mimeType = part.mimeType || '';
@@ -103,7 +120,7 @@ serve(async (req) => {
         throw new Error(`Gmail API list request failed: ${await listResp.text()}`);
     }
     const listJson = await listResp.json();
-    const messageIds = listJson.messages?.map((m: any) => m.id).filter(Boolean) || [];
+    const messageIds = listJson.messages?.map((m: { id: string }) => m.id).filter(Boolean) || [];
 
     let emailsToStore = [];
     if (messageIds.length > 0) {
@@ -119,8 +136,8 @@ serve(async (req) => {
           }
           const msgJson = await msgResp.json();
           const headers = msgJson?.payload?.headers || [];
-          const subject = headers.find((h: any) => h.name.toLowerCase() === 'subject')?.value || 'No Subject';
-          const from = headers.find((h: any) => h.name.toLowerCase() === 'from')?.value || 'Unknown Sender';
+          const subject = headers.find((h: { name: string; value: string }) => h.name.toLowerCase() === 'subject')?.value || 'No Subject';
+          const from = headers.find((h: { name: string; value: string }) => h.name.toLowerCase() === 'from')?.value || 'Unknown Sender';
           
           // ✅ FIX: Use the robust helper function to get email bodies
           const bodies = collectBodies(msgJson.payload);
