@@ -5,6 +5,7 @@ import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import type { EventInput, Calendar as CalendarApi, EventClickArg, EventSourceFuncArg } from '@fullcalendar/core';
+import type { RealtimePostgresInsertPayload, RealtimePostgresUpdatePayload } from '@supabase/supabase-js'
 import { useSupabase } from '@/components/SupabaseProvider'
 import type { Database } from '@/types/database.types'
 
@@ -81,21 +82,23 @@ export default function CalendarPage() {
   }, [invokeSync, fetchMeetings])
 
   useEffect(() => {
-    // subscribe to realtime INSERT/UPDATE on meetings
+    // subscribe to realtime INSERT/UPDATE on meetings using from() API
     const channel = supabase
-      .channel('calendar-meetings')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'meetings' },
-        (payload: { new: MeetingRow; old: MeetingRow }) => {
-          const record = payload.new ?? payload.old
-          if (!record) return
-          setEvents((prev) => {
-            const updated = prev.filter((e) => e.id !== String(record.id))
-            return [...updated, meetingToEvent(record)]
-          })
-        }
-      )
+      .from('meetings')
+      .on('INSERT', (payload: RealtimePostgresInsertPayload<MeetingRow>) => {
+        const record = payload.new
+        setEvents((prev) => {
+          const updated = prev.filter((e) => e.id !== String(record.id))
+          return [...updated, meetingToEvent(record)]
+        })
+      })
+      .on('UPDATE', (payload: RealtimePostgresUpdatePayload<MeetingRow>) => {
+        const record = payload.new
+        setEvents((prev) => {
+          const updated = prev.filter((e) => e.id !== String(record.id))
+          return [...updated, meetingToEvent(record)]
+        })
+      })
       .subscribe()
 
     return () => {
