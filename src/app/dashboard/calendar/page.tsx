@@ -82,23 +82,31 @@ export default function CalendarPage() {
   }, [invokeSync, fetchMeetings])
 
   useEffect(() => {
-    // subscribe to realtime INSERT/UPDATE on meetings using from() API
+    // subscribe via channel + postgres_changes events
     const channel = supabase
-      .from('meetings')
-      .on('INSERT', (payload: RealtimePostgresInsertPayload<MeetingRow>) => {
-        const record = payload.new
-        setEvents((prev) => {
-          const updated = prev.filter((e) => e.id !== String(record.id))
-          return [...updated, meetingToEvent(record)]
-        })
-      })
-      .on('UPDATE', (payload: RealtimePostgresUpdatePayload<MeetingRow>) => {
-        const record = payload.new
-        setEvents((prev) => {
-          const updated = prev.filter((e) => e.id !== String(record.id))
-          return [...updated, meetingToEvent(record)]
-        })
-      })
+      .channel('meetings-channel')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'meetings' },
+        (payload: RealtimePostgresInsertPayload<MeetingRow>) => {
+          const record = payload.new
+          setEvents((prev) => {
+            const updated = prev.filter((e) => e.id !== String(record.id))
+            return [...updated, meetingToEvent(record)]
+          })
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'meetings' },
+        (payload: RealtimePostgresUpdatePayload<MeetingRow>) => {
+          const record = payload.new
+          setEvents((prev) => {
+            const updated = prev.filter((e) => e.id !== String(record.id))
+            return [...updated, meetingToEvent(record)]
+          })
+        }
+      )
       .subscribe()
 
     return () => {
