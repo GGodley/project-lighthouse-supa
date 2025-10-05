@@ -1,177 +1,149 @@
-'use client';
+'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import FullCalendar from '@fullcalendar/react';
-import dayGridPlugin from '@fullcalendar/daygrid';
-import timeGridPlugin from '@fullcalendar/timegrid';
-import type { EventInput, Calendar as CalendarApi, EventClickArg, EventSourceFuncArg } from '@fullcalendar/core';
-import type { RealtimePostgresInsertPayload, RealtimePostgresUpdatePayload } from '@supabase/supabase-js'
+import { useState, useEffect } from 'react'
+import FullCalendar from '@fullcalendar/react'
+import dayGridPlugin from '@fullcalendar/daygrid'
+import timeGridPlugin from '@fullcalendar/timegrid'
+import { EventInput } from '@fullcalendar/core'
 import { useSupabase } from '@/components/SupabaseProvider'
-import type { Database } from '@/types/database.types'
+import { Database } from '@/types/database.types'
 
-// Helper to format events from Google API to FullCalendar format
-type GoogleEvent = {
-  id?: string
-  summary?: string
-  start?: { dateTime?: string; date?: string }
-  end?: { dateTime?: string; date?: string }
-  description?: string
-  attendees?: unknown
-  hangoutLink?: string
-}
-
-const formatEvents = (apiEvents: unknown[]): EventInput[] => {
-  if (!Array.isArray(apiEvents)) return [];
-  return (apiEvents as GoogleEvent[]).map(event => ({
-    id: event.id,
-    title: event.summary || 'No Title',
-    start: event.start?.dateTime || event.start?.date,
-    end: event.end?.dateTime || event.end?.date,
-    extendedProps: {
-      description: event.description,
-      attendees: event.attendees,
-      hangoutLink: event.hangoutLink,
-    },
-    backgroundColor: '#4f46e5',
-    borderColor: '#4f46e5',
-    textColor: 'white',
-  }));
-};
-
-type MeetingRow = Database['public']['Tables']['meetings']['Row']
+type Meeting = Database['public']['Tables']['meetings']['Row']
 
 export default function CalendarPage() {
-  const calendarRef = useRef<FullCalendar | null>(null);
-  const supabase = useSupabase()
+  const [isLoading, setIsLoading] = useState(true)
   const [events, setEvents] = useState<EventInput[]>([])
-  const [syncing, setSyncing] = useState<boolean>(false)
+  const [error, setError] = useState<string | null>(null)
+  const supabase = useSupabase()
 
-  const meetingToEvent = (m: MeetingRow): EventInput => ({
-    id: String(m.id),
-    title: m.summary ?? 'Meeting',
-    start: m.meeting_date,
-    end: m.meeting_date,
-    extendedProps: { attendants: m.attendants, topics: m.topics, sentiment: m.sentiment },
-  })
-
-  const fetchMeetings = useMemo(() => async () => {
-    const res = await fetch('/api/meetings')
-    if (!res.ok) return
-    const data = (await res.json()) as MeetingRow[]
-    setEvents(data.map(meetingToEvent))
-  }, [])
-
-  const invokeSync = useMemo(() => async () => {
+  const syncAndFetchCalendar = async () => {
     try {
-      setSyncing(true)
+      setIsLoading(true)
+      setError(null)
+
+      // Step 1: Call sync-calendar Edge Function
       const { data: { session } } = await supabase.auth.getSession()
-      const accessToken = session?.access_token
-      await supabase.functions.invoke('sync-calendar', {
-        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      
+      if (!session) {
+        throw new Error('No active session')
+      }
+
+      const syncResponse = await fetch('/api/sync-calendar', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
       })
+
+      if (!syncResponse.ok) {
+        const errorData = await syncResponse.json()
+        throw new Error(errorData.error || 'Failed to sync calendar')
+      }
+
+      const syncResult = await syncResponse.json()
+      console.log('Sync completed:', syncResult)
+
+      // Step 2: Fetch meetings from our database
+      const meetingsResponse = await fetch('/api/meetings')
+      
+      if (!meetingsResponse.ok) {
+        throw new Error('Failed to fetch meetings')
+      }
+
+      const meetings: Meeting[] = await meetingsResponse.json()
+      
+      // Transform meetings to FullCalendar events
+      const calendarEvents: EventInput[] = meetings.map(meeting => ({
+        id: meeting.id.toString(),
+        title: meeting.title || 'Untitled Meeting',
+        start: meeting.meeting_date,
+        end: meeting.end_date,
+        extendedProps: {
+          location: meeting.location,
+          description: meeting.description,
+          attendees: meeting.attendees as string[],
+          externalAttendees: meeting.external_attendees as string[],
+        },
+      }))
+
+      setEvents(calendarEvents)
+      
+    } catch (err) {
+      console.error('Calendar sync error:', err)
+      setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
-      setSyncing(false)
+      setIsLoading(false)
     }
-  }, [supabase])
-
-  useEffect(() => {
-    // kick off background sync but don't block UI
-    invokeSync()
-    // fetch existing meetings for immediate display
-    fetchMeetings()
-  }, [invokeSync, fetchMeetings])
-
-  useEffect(() => {
-    // subscribe via channel + postgres_changes events
-    const channel = supabase
-      .channel('meetings-channel')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'meetings' },
-        (payload: RealtimePostgresInsertPayload<MeetingRow>) => {
-          const record = payload.new
-          setEvents((prev) => {
-            const updated = prev.filter((e) => e.id !== String(record.id))
-            return [...updated, meetingToEvent(record)]
-          })
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'meetings' },
-        (payload: RealtimePostgresUpdatePayload<MeetingRow>) => {
-          const record = payload.new
-          setEvents((prev) => {
-            const updated = prev.filter((e) => e.id !== String(record.id))
-            return [...updated, meetingToEvent(record)]
-          })
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [supabase])
-
-  const handleFetchEvents = async (
-    _fetchInfo: EventSourceFuncArg,
-    successCallback: (events: EventInput[]) => void
-  ) => {
-    successCallback(events)
   }
 
-  const handleViewChange = (view: 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay') => {
-    calendarRef.current?.getApi().changeView(view);
-  };
-  
-  const handleEventClick = (clickInfo: EventClickArg) => {
-    alert(`Event: ${clickInfo.event.title}\nTime: ${clickInfo.event.start?.toLocaleString()}`);
-  };
+  useEffect(() => {
+    syncAndFetchCalendar()
+  }, [])
 
   return (
-    <div className="p-4 md:p-8 bg-gray-50 min-h-screen">
-      <header className="flex flex-col md:flex-row items-center justify-between mb-6 gap-4">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-800">Calendar</h1>
-        <div className="flex items-center space-x-2 bg-white p-1 rounded-lg shadow-sm">
-          <button onClick={() => handleViewChange('dayGridMonth')} className="px-3 py-1.5 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 focus:outline-none focus:bg-gray-200">
-            Month
-          </button>
-          <button onClick={() => handleViewChange('timeGridWeek')} className="px-3 py-1.5 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 focus:outline-none focus:bg-gray-200">
-            Week
-          </button>
-          <button onClick={() => handleViewChange('timeGridDay')} className="px-3 py-1.5 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 focus:outline-none focus:bg-gray-200">
-            Day
-          </button>
+    <div className="p-6">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Calendar</h1>
+          <p className="text-gray-600 mt-2">
+            View your meetings with external attendees
+          </p>
         </div>
-      </header>
+        <button
+          onClick={syncAndFetchCalendar}
+          disabled={isLoading}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isLoading ? 'Syncing...' : 'Refresh Calendar'}
+        </button>
+      </div>
 
-      <div className="bg-white p-4 rounded-lg shadow-md">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="text-lg font-semibold text-gray-900">
-            {syncing ? 'Syncing…' : 'Calendar'}
-          </div>
-          <button
-            onClick={invokeSync}
-            className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
-            disabled={syncing}
-          >
-            {syncing ? 'Syncing…' : 'Refresh Calendar'}
-          </button>
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-red-800">{error}</p>
         </div>
-        <FullCalendar
-          ref={calendarRef}
-          plugins={[dayGridPlugin, timeGridPlugin]}
-          initialView="dayGridMonth"
-          headerToolbar={false}
-          events={handleFetchEvents}
-          eventClick={handleEventClick}
-          height="auto"
-          contentHeight="auto"
-        />
+      )}
+
+      <div className="bg-white rounded-lg shadow">
+        {isLoading ? (
+          <div className="p-8 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p className="mt-2 text-gray-600">Loading calendar...</p>
+          </div>
+        ) : (
+          <FullCalendar
+            plugins={[dayGridPlugin, timeGridPlugin]}
+            initialView="dayGridMonth"
+            headerToolbar={{
+              left: 'prev,next today',
+              center: 'title',
+              right: 'dayGridMonth,timeGridWeek,timeGridDay'
+            }}
+            events={events}
+            height="auto"
+            eventClick={(info) => {
+              const event = info.event
+              const extendedProps = event.extendedProps as {
+                location?: string
+                description?: string
+                attendees?: string[]
+                externalAttendees?: string[]
+              }
+              
+              alert(`
+                ${event.title}
+                ${extendedProps.location ? `\nLocation: ${extendedProps.location}` : ''}
+                ${extendedProps.description ? `\nDescription: ${extendedProps.description}` : ''}
+                ${extendedProps.externalAttendees?.length > 0 ? `\nExternal Attendees: ${extendedProps.externalAttendees.join(', ')}` : ''}
+              `)
+            }}
+            eventMouseEnter={(info) => {
+              info.el.style.cursor = 'pointer'
+            }}
+          />
+        )}
       </div>
     </div>
-  );
+  )
 }
-
-

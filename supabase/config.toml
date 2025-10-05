@@ -351,3 +351,18 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/process-summarization-queue/deno.json"
 entrypoint = "./functions/process-summarization-queue/index.ts"
+[functions.sync-calendar]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/sync-calendar/index.ts"
+
+[functions.email-summarizer]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/email-summarizer/index.ts"
+
+[functions.sentiment-analyzer]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/sentiment-analyzer/index.ts"
+

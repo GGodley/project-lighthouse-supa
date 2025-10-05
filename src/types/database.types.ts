@@ -19,6 +19,7 @@ export type Database = {
           company_name: string | null
           contact_email: string | null
           created_at: string
+          email: string | null
           health_score: number | null
           id: string
           last_interaction_at: string | null
@@ -33,6 +34,7 @@ export type Database = {
           company_name?: string | null
           contact_email?: string | null
           created_at?: string
+          email?: string | null
           health_score?: number | null
           id?: string
           last_interaction_at?: string | null
@@ -47,6 +49,7 @@ export type Database = {
           company_name?: string | null
           contact_email?: string | null
           created_at?: string
+          email?: string | null
           health_score?: number | null
           id?: string
           last_interaction_at?: string | null
@@ -65,6 +68,7 @@ export type Database = {
           body_text: string | null
           created_at: string
           customer_id: string | null
+          gmail_message_id: string | null
           id: number
           next_steps: string[] | null
           outstanding_issues: string[] | null
@@ -82,6 +86,7 @@ export type Database = {
           body_text?: string | null
           created_at?: string
           customer_id?: string | null
+          gmail_message_id?: string | null
           id?: never
           next_steps?: string[] | null
           outstanding_issues?: string[] | null
@@ -99,6 +104,7 @@ export type Database = {
           body_text?: string | null
           created_at?: string
           customer_id?: string | null
+          gmail_message_id?: string | null
           id?: never
           next_steps?: string[] | null
           outstanding_issues?: string[] | null
@@ -225,40 +231,61 @@ export type Database = {
       meetings: {
         Row: {
           attendants: Json | null
+          attendees: Json | null
           created_at: string
           customer_id: string | null
+          description: string | null
+          end_date: string | null
+          external_attendees: Json | null
+          google_event_id: string | null
           id: number
+          location: string | null
           meeting_date: string
           next_steps: Json | null
           outstanding_issues: Json | null
           sentiment: string | null
           summary: string | null
+          title: string | null
           topics: Json | null
           user_id: string
         }
         Insert: {
           attendants?: Json | null
+          attendees?: Json | null
           created_at?: string
           customer_id?: string | null
+          description?: string | null
+          end_date?: string | null
+          external_attendees?: Json | null
+          google_event_id?: string | null
           id?: never
+          location?: string | null
           meeting_date: string
           next_steps?: Json | null
           outstanding_issues?: Json | null
           sentiment?: string | null
           summary?: string | null
+          title?: string | null
           topics?: Json | null
           user_id: string
         }
         Update: {
           attendants?: Json | null
+          attendees?: Json | null
           created_at?: string
           customer_id?: string | null
+          description?: string | null
+          end_date?: string | null
+          external_attendees?: Json | null
+          google_event_id?: string | null
           id?: never
+          location?: string | null
           meeting_date?: string
           next_steps?: Json | null
           outstanding_issues?: Json | null
           sentiment?: string | null
           summary?: string | null
+          title?: string | null
           topics?: Json | null
           user_id?: string
         }
@@ -316,6 +343,44 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      summarization_jobs: {
+        Row: {
+          attempts: number
+          created_at: string
+          details: string | null
+          email_id: number
+          id: number
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          details?: string | null
+          email_id: number
+          id?: number
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          details?: string | null
+          email_id?: number
+          id?: number
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "summarization_jobs_email_id_fkey"
+            columns: ["email_id"]
+            isOneToOne: true
+            referencedRelation: "emails"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sync_jobs: {
         Row: {
