@@ -7,9 +7,19 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import type { EventInput, Calendar as CalendarApi, EventClickArg, EventSourceFuncArg } from '@fullcalendar/core';
 
 // Helper to format events from Google API to FullCalendar format
-const formatEvents = (apiEvents: any[]): EventInput[] => {
+type GoogleEvent = {
+  id?: string
+  summary?: string
+  start?: { dateTime?: string; date?: string }
+  end?: { dateTime?: string; date?: string }
+  description?: string
+  attendees?: unknown
+  hangoutLink?: string
+}
+
+const formatEvents = (apiEvents: unknown[]): EventInput[] => {
   if (!Array.isArray(apiEvents)) return [];
-  return apiEvents.map(event => ({
+  return (apiEvents as GoogleEvent[]).map(event => ({
     id: event.id,
     title: event.summary || 'No Title',
     start: event.start?.dateTime || event.start?.date,
@@ -39,8 +49,9 @@ export default function CalendarPage() {
         throw new Error(`Failed to fetch calendar events: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      const formattedEvents = formatEvents(data.items || []);
+      const data: unknown = await response.json();
+      const items = (data as { items?: unknown[] }).items ?? [];
+      const formattedEvents = formatEvents(items);
       
       successCallback(formattedEvents);
     } catch (error) {
