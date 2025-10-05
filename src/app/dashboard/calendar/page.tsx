@@ -58,7 +58,7 @@ export default function CalendarPage() {
         id: meeting.id.toString(),
         title: meeting.title || 'Untitled Meeting',
         start: meeting.meeting_date,
-        end: meeting.end_date,
+        end: meeting.end_date || undefined,
         extendedProps: {
           location: meeting.location,
           description: meeting.description,
