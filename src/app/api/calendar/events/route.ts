@@ -6,7 +6,7 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   const cookieStore = cookies();
   const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
 
@@ -54,13 +54,13 @@ export async function GET(request: NextRequest) {
     const allEvents = data.items || [];
 
     // 5. ✅ NEW LOGIC: Filter the events on our server
-    const externalEvents = allEvents.filter((event: any) => {
+    const externalEvents = allEvents.filter((event: { attendees?: any[] }) => {
       if (!event.attendees || event.attendees.length === 0) {
         return false; // Skip events with no attendees
       }
       
       // The `some` method checks if AT LEAST ONE attendee meets the condition
-      return event.attendees.some((attendee: any) => {
+      return event.attendees.some((attendee: { email?: string }) => {
         if (!attendee.email) return false; // Skip attendees without an email (e.g., rooms)
         
         // An external attendee's email domain is different from the user's
