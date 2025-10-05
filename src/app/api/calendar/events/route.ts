@@ -1,4 +1,76 @@
 //
+// ⚠️ THIS IS THE DIAGNOSTIC VERSION of /api/calendar/events/route.ts ⚠️
+//
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+export async function GET(request: NextRequest) {
+  console.log("--- [API /calendar/events] Request received ---");
+
+  const cookieStore = cookies();
+  const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+
+  try {
+    // --- DIAGNOSTIC LOG 1: Check the session ---
+    console.log("[API] Attempting to get session...");
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      console.error("[API] Error getting session:", sessionError.message);
+    }
+    console.log("[API] Session object found:", !!session);
+    
+    if (!session || !session.user.email) {
+      console.error("[API] CRITICAL: Not authenticated or user email is missing. Returning 401.");
+      return NextResponse.json({ error: 'Not authenticated or user email is missing' }, { status: 401 });
+    }
+    
+    // --- DIAGNOSTIC LOG 2: Check for the provider token ---
+    console.log("[API] Provider token exists:", !!session.provider_token);
+    if (!session.provider_token) {
+        console.error("[API] CRITICAL: Missing Google provider token. Returning 400.");
+        return NextResponse.json({ error: 'Missing Google provider token. Please re-authenticate.' }, { status: 400 });
+    }
+    
+    console.log("[API] Authentication successful. Proceeding to fetch from Google...");
+    
+    // ... (The rest of your Google Calendar fetching logic remains the same) ...
+    const userDomain = session.user.email.split('@')[1];
+    const timeMin = request.nextUrl.searchParams.get('start') || new Date().toISOString();
+    const timeMaxDate = new Date();
+    timeMaxDate.setMonth(timeMaxDate.getMonth() + 3);
+    const timeMax = request.nextUrl.searchParams.get('end') || timeMaxDate.toISOString();
+
+    const calendarApiUrl = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events');
+    calendarApiUrl.searchParams.append('timeMin', timeMin);
+    calendarApiUrl.searchParams.append('timeMax', timeMax);
+    calendarApiUrl.searchParams.append('singleEvents', 'true');
+    calendarApiUrl.searchParams.append('orderBy', 'startTime');
+
+    const response = await fetch(calendarApiUrl.toString(), {
+      headers: { Authorization: `Bearer ${session.provider_token}` },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("[API] Google API Error:", errorData);
+      return NextResponse.json({ error: 'Failed to fetch from Google Calendar API', details: errorData }, { status: response.status });
+    }
+
+    const data = await response.json();
+    // ... (Filtering logic remains the same) ...
+
+    return NextResponse.json({ items: data.items });
+
+  } catch (error) {
+    const err = error as Error;
+    console.error("[API] FATAL Uncaught Error:", err.message);
+    return NextResponse.json({ error: `Internal Server Error: ${err.message}` }, { status: 500 });
+  }
+}
+//
 // ⚠️ PROMPT FOR CURSOR: Replace the content of src/app/api/calendar/events/route.ts ⚠️
 //
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
