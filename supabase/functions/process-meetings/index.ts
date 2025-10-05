@@ -193,25 +193,26 @@ serve(async (req) => {
       console.log(`✅ Upserted ${filteredEvents.length} meetings into final table`)
     }
 
-    // Delete processed records from temp_meetings
-    const { error: deleteError } = await supabase
-      .from('temp_meetings')
-      .delete()
-      .eq('user_id', userId)
-      .eq('processed', false)
+    // TEMPORARILY COMMENTED OUT FOR DEBUGGING - Delete processed records from temp_meetings
+    // const { error: deleteError } = await supabase
+    //   .from('temp_meetings')
+    //   .delete()
+    //   .eq('user_id', userId)
+    //   .eq('processed', false)
 
-    if (deleteError) {
-      console.error('Database delete error:', deleteError)
-      return new Response(
-        JSON.stringify({ error: 'Failed to cleanup temp_meetings' }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
-    }
+    // if (deleteError) {
+    //   console.error('Database delete error:', deleteError)
+    //   return new Response(
+    //     JSON.stringify({ error: 'Failed to cleanup temp_meetings' }),
+    //     { 
+    //       status: 500, 
+    //       headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    //     }
+    //   )
+    // }
 
-    console.log(`✅ Cleaned up ${tempMeetings.length} records from temp_meetings`)
+    // console.log(`✅ Cleaned up ${tempMeetings.length} records from temp_meetings`)
+    console.log(`🔍 DEBUG: Left ${tempMeetings.length} records in temp_meetings for inspection`)
 
     return new Response(
       JSON.stringify({ 
