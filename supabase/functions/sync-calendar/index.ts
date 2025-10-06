@@ -30,46 +30,47 @@ serve(async (req) => {
     // 🔍 LOG: Entry Point - Function invoked
     console.log('🚀 SYNC-CALENDAR: Function invoked successfully')
 
+    // 🔐 Verify critical secrets (do not log values)
+    const hasUrl = Boolean(Deno.env.get('SUPABASE_URL'))
+    const hasAnon = Boolean(Deno.env.get('SUPABASE_ANON_KEY'))
+    const hasService = Boolean(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))
+    console.log('🔐 Secrets availability -> SUPABASE_URL:', hasUrl, 'ANON_KEY:', hasAnon, 'SERVICE_ROLE_KEY:', hasService)
+
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    console.log('🧭 Supabase client initialized')
 
-    // Get the user from the request
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      console.log('❌ CRITICAL ERROR: Missing authorization header')
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { 
-          status: 401, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
+    // Helper: verify user from Authorization header
+    const getUserFromAuth = async (): Promise<{ ok: boolean; userId?: string; email?: string; error?: unknown }> => {
+      const authHeader = req.headers.get('Authorization')
+      if (!authHeader) {
+        console.log('❌ CRITICAL ERROR: Missing authorization header')
+        return { ok: false, error: 'Missing authorization header' }
+      }
+      const token = authHeader.replace('Bearer ', '')
+      const { data: { user }, error } = await supabase.auth.getUser(token)
+      if (error || !user) {
+        console.log('❌ CRITICAL ERROR: Invalid or expired token', error)
+        return { ok: false, error }
+      }
+      return { ok: true, userId: user.id, email: user.email ?? undefined }
     }
 
-    // Extract the JWT token
-    const token = authHeader.replace('Bearer ', '')
-    
-    // Verify the JWT and get user info
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    
-    if (authError || !user) {
-      console.log('❌ CRITICAL ERROR: Invalid or expired token', authError)
+    const userRes = await getUserFromAuth()
+    if (!userRes.ok || !userRes.userId) {
       return new Response(
-        JSON.stringify({ error: 'Invalid or expired token' }),
-        { 
-          status: 401, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
-
-    // 🔍 LOG: User verification successful
-    console.log('✅ USER VERIFIED: User ID:', user.id, 'Email:', user.email)
+    console.log('✅ USER VERIFIED: User ID:', userRes.userId, 'Email:', userRes.email)
 
     // Get the provider token from request body
+    console.log('📥 Reading request body...')
     const requestBody = await req.json()
+    console.log('📥 Request body received (keys):', Object.keys(requestBody || {}))
     const providerToken = requestBody.provider_token
 
     // 🔍 LOG: Provider token verification
@@ -115,97 +116,115 @@ serve(async (req) => {
     const calendarListData: { items?: CalendarListEntry[] } = await calendarListResp.json()
     const calendars: CalendarListEntry[] = calendarListData.items || []
     console.log('📚 CALENDARS FOUND:', calendars.length)
+    if (calendars.length > 0) {
+      console.log('🗂️ Calendar IDs:', calendars.map(c => c.id))
+      console.log('🗂️ Calendar Summaries:', calendars.map(c => c.summary || 'Untitled'))
+    }
 
-    // Stage 2: iterate calendars and fetch events per calendar
-    const allEvents: GoogleCalendarEvent[] = []
+    // Stage 2: iterate calendars and fetch events per calendar WITH PAGINATION and per-batch inserts
+    let totalFetched = 0
+    let totalInserted = 0
     for (const cal of calendars) {
       const calId = encodeURIComponent(cal.id)
-      const eventsUrl = `https://www.googleapis.com/calendar/v3/calendars/${calId}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=2500`
-      console.log('🌐 GOOGLE API CALL: Fetching events for calendar:', cal.id, 'URL:', eventsUrl)
-      const eventsResp = await fetch(eventsUrl, {
-        headers: {
-          'Authorization': `Bearer ${providerToken}`,
-          'Content-Type': 'application/json',
-        },
-      })
-      console.log('📡 EVENTS RESPONSE:', eventsResp.status, eventsResp.statusText, 'for calendar:', cal.id)
-      if (!eventsResp.ok) {
-        const errText = await eventsResp.text()
-        console.error('❌ EVENTS ERROR (raw body) for calendar', cal.id, ':', errText)
-        // Continue to next calendar instead of failing whole sync
-        continue
-      }
-      const data: { items?: GoogleCalendarEvent[]; nextPageToken?: string } = await eventsResp.json()
-      const batch = data.items || []
-      console.log(`📦 BATCH SIZE [${cal.id}]:`, batch.length)
-      console.log('🔁 Pagination token (nextPageToken):', data.nextPageToken || 'No, this is the last page.')
-      allEvents.push(...batch)
-    }
-
-    // 🔍 LOG: Raw data from Google across all calendars
-    console.log(`📊 GOOGLE DATA (ALL CALENDARS): Total raw events fetched: ${allEvents.length}`)
-    if (allEvents.length > 0) {
-      console.log('📋 SAMPLE EVENT:', JSON.stringify(allEvents[0], null, 2))
-    }
-    for (const ev of allEvents) {
-      console.log('📝 EVENT TITLE:', ev.summary || 'Untitled')
-    }
-
-    // Insert all raw events into temp_meetings table
-    if (allEvents.length > 0) {
-      // Conform strictly to schema: only user_id and google_event_data
-      const tempMeetings: Array<{ user_id: string; google_event_data: GoogleCalendarEvent }> = allEvents.map(
-        (event: GoogleCalendarEvent) => ({
-          user_id: user.id,
-          google_event_data: event,
+      let pageToken: string | undefined = undefined
+      let batchIndex = 0
+      do {
+        const eventsUrl = `https://www.googleapis.com/calendar/v3/calendars/${calId}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=2500${pageToken ? `&pageToken=${pageToken}` : ''}`
+        console.log('🌐 GOOGLE API CALL: Fetching events for calendar:', cal.id, 'URL:', eventsUrl)
+        const eventsResp = await fetch(eventsUrl, {
+          headers: {
+            'Authorization': `Bearer ${providerToken}`,
+            'Content-Type': 'application/json',
+          },
         })
-      )
-
-      // 🔍 LOG: Database insertion attempt
-      console.log('💾 DATABASE INSERT: About to insert', tempMeetings.length, 'events into temp_meetings table')
-      console.log('📦 INSERT PAYLOAD (temp_meetings):', JSON.stringify(tempMeetings, null, 2))
-
-      const { error: insertError } = await supabase
-        .from('temp_meetings')
-        .insert(tempMeetings)
-
-      console.log('🧪 INSERT RESULT (temp_meetings) error:', insertError)
-      if (insertError) {
-        console.error('❌ DATABASE ERROR: Insert failed:', insertError)
-        return new Response(
-          JSON.stringify({ error: 'Failed to save raw events to database' }),
-          { 
-            status: 500, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-          }
-        )
-      }
-
-      console.log('✅ DATABASE SUCCESS: Inserted', allEvents.length, 'raw events into temp_meetings table')
-
-      // Invoke the process-meetings function to start the next stage
-      console.log('🔄 PIPELINE: About to invoke process-meetings function')
-      const { error: processError } = await supabase.functions.invoke('process-meetings', {
-        body: {
-          user_id: user.id
+        console.log('📡 EVENTS RESPONSE:', eventsResp.status, eventsResp.statusText, 'for calendar:', cal.id)
+        if (!eventsResp.ok) {
+          const errText = await eventsResp.text()
+          console.error('❌ EVENTS ERROR (raw body) for calendar', cal.id, ':', errText)
+          break
         }
-      })
+        const data: { items?: GoogleCalendarEvent[]; nextPageToken?: string } = await eventsResp.json()
+        const batch = data.items || []
+        batchIndex += 1
+        totalFetched += batch.length
+        console.log(`📦 BATCH SIZE [${cal.id}] #${batchIndex}:`, batch.length)
+        console.log('🔁 Pagination token (nextPageToken):', data.nextPageToken || 'No, this is the last page.')
 
-      if (processError) {
-        console.error('❌ PIPELINE ERROR: Process meetings invocation failed:', processError)
-        return new Response(
-          JSON.stringify({ error: 'Failed to start processing pipeline' }),
-          { 
-            status: 500, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        // Log titles for visibility
+        for (const ev of batch) {
+          console.log('📝 EVENT TITLE:', ev.summary || 'Untitled')
+        }
+
+        // Build rows for this batch
+        const rows: Array<{ user_id: string; google_event_data: GoogleCalendarEvent }> = batch.map((event) => ({
+          user_id: userRes.userId!,
+          google_event_data: event,
+        }))
+
+        // Insert this batch (further split into sub-batches of 100 to be safe)
+        const chunkSize = 100
+        const chunks = Math.ceil(rows.length / chunkSize)
+        for (let i = 0; i < chunks; i++) {
+          const start = i * chunkSize
+          const end = Math.min(start + chunkSize, rows.length)
+          const sub = rows.slice(start, end)
+          if (sub.length === 0) continue
+          console.log(`💾 INSERT temp_meetings: calendar=${cal.id} batch#${batchIndex} sub#${i + 1}/${chunks} size=${sub.length}`)
+          const { error: insertError } = await fetch(`${Deno.env.get('SUPABASE_URL')}/rest/v1/temp_meetings`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!}`,
+              'Prefer': 'resolution=merge-duplicates',
+            },
+            body: JSON.stringify(sub),
+          }).then(async (r) => ({ error: r.ok ? null : await r.text() }))
+          console.log(`🧪 INSERT RESULT:`, insertError ?? 'ok')
+          if (insertError) {
+            return new Response(
+              JSON.stringify({ error: 'Failed to save a batch into temp_meetings', details: insertError }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
           }
-        )
-      }
+          // Kickstart the processing pipeline with a single newly added row
+          console.log('🚀 KICKSTART: Querying a newly added unprocessed temp_meeting row for user:', userRes.userId)
+          const { data: kickstartRows, error: kickstartErr } = await supabase
+            .from('temp_meetings')
+            .select('id')
+            .eq('user_id', userRes.userId!)
+            .eq('processed', false)
+            .limit(1)
 
-      console.log('✅ PIPELINE SUCCESS: Successfully invoked process-meetings function')
-    } else {
+          console.log('🔎 KICKSTART query result error:', kickstartErr, 'rows:', kickstartRows)
+          const tempMeetingId = kickstartRows && kickstartRows[0]?.id
+          if (tempMeetingId) {
+            console.log('🔁 Invoking process-events with temp_meeting_id:', tempMeetingId)
+            const { error: kickErr } = await supabase.functions.invoke('process-events', {
+              body: { temp_meeting_id: tempMeetingId }
+            })
+            console.log('🧪 process-events invoke error:', kickErr ?? 'ok')
+          } else {
+            console.log('ℹ️ No unprocessed temp_meeting found to kickstart at this moment.')
+          }
+          totalInserted += sub.length
+        }
+
+        pageToken = data.nextPageToken
+      } while (pageToken)
+    }
+
+    console.log(`📊 GOOGLE DATA (ALL CALENDARS): Total fetched=${totalFetched}, total inserted=${totalInserted}`)
+
+    // After all calendars processed, return success
+    if (totalFetched === 0) {
       console.log('⚠️ NO EVENTS: No events found from Google Calendar API')
     }
+    console.log('✅ SYNC COMPLETED: returning 200 OK', { totalFetched, totalInserted })
+    return new Response(
+      JSON.stringify({ message: 'Sync completed', fetched: totalFetched, inserted: totalInserted }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
 
     return new Response(
       JSON.stringify({ 
@@ -219,7 +238,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Sync calendar error:', error)
+    console.error('💥 SYNC-CALENDAR UNCAUGHT ERROR:', error)
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       { 

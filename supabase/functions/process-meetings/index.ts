@@ -42,13 +42,19 @@ serve(async (req) => {
   }
 
   try {
+    console.log('🚀 PROCESS-MEETINGS: Function invoked')
+    const hasUrl = Boolean(Deno.env.get('SUPABASE_URL'))
+    const hasService = Boolean(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))
+    console.log('🔐 Secrets availability -> SUPABASE_URL:', hasUrl, 'SERVICE_ROLE_KEY:', hasService)
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Get the user from the request body
+    console.log('📥 Reading request body...')
     const requestBody = await req.json()
+    console.log('📥 Request body received:', JSON.stringify(requestBody))
     const userId = requestBody.user_id
 
     if (!userId) {
@@ -62,6 +68,7 @@ serve(async (req) => {
     }
 
     // Get user's email to extract domain
+    console.log('🔎 Fetching user by ID:', userId)
     const { data: user, error: userError } = await supabase.auth.admin.getUserById(userId)
     
     if (userError || !user) {
@@ -80,6 +87,7 @@ serve(async (req) => {
     console.log('🔍 User domain:', userDomain)
 
     // Query temp_meetings for unprocessed records
+    console.log('🗃️ Querying temp_meetings for unprocessed rows...')
     const { data: tempMeetings, error: queryError } = await supabase
       .from('temp_meetings')
       .select('*')
@@ -115,7 +123,9 @@ serve(async (req) => {
     // Filter events that have external attendees
     const filteredEvents: MeetingData[] = []
 
-    for (const tempMeeting of tempMeetings) {
+    for (let i = 0; i < tempMeetings.length; i++) {
+      const tempMeeting = tempMeetings[i]
+      console.log(`➡️ Processing row ${i + 1} of ${tempMeetings.length} (id: ${tempMeeting.id ?? 'n/a'})`)
       const event: GoogleCalendarEvent = tempMeeting.google_event_data
       const title = event.summary || 'Untitled'
 

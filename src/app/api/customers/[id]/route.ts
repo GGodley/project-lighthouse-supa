@@ -4,9 +4,9 @@ import { NextResponse } from 'next/server';
 
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
-  const { id: customerId } = await params;
+  const { id: customerId } = params;
   const cookieStore = await cookies();
   
   const supabase = createServerClient(
@@ -34,16 +34,18 @@ export async function GET(
     }
 
     // Call the single PostgreSQL function to get all data at once.
+    console.log('[customers/[id]] Calling RPC get_customer_profile_details with:', { customerId, userId: user.id });
     const { data: customerProfile, error } = await supabase
       .rpc('get_customer_profile_details', {
-        p_customer_id: customerId,
-        p_requesting_user_id: user.id
+        customer_id: customerId,
+        requesting_user_id: user.id,
       })
-      .single(); // .single() is used as rpc returns an array
+      .single();
 
     if (error || !customerProfile) {
       console.error("Error fetching customer profile:", error);
-      return NextResponse.json({ error: 'Customer not found or error in RPC call' }, { status: 404 });
+      const status = error ? 400 : 404;
+      return NextResponse.json({ error: error?.message ?? 'Customer not found' }, { status });
     }
 
     return NextResponse.json(customerProfile, { status: 200 });
