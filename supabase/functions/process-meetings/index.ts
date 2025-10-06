@@ -132,18 +132,17 @@ serve(async (req) => {
 
       console.log(`👥 Attendees (${event.attendees.length}):`, event.attendees.map(a => `${a.email} (${a.responseStatus})`))
 
-      // Intermediate step: remove user and declined guests (diagnostic only)
-      const externalGuestsByStatus: Attendee[] = event.attendees.filter((a: Attendee) => {
+      // Step 2: Build actual guests list (exclude user and declined)
+      const actualGuests: Attendee[] = event.attendees.filter((a: Attendee) => {
         if (!a.email) return false
-        const isUser = a.email === userEmail
+        const isUser = a.email.toLowerCase() === userEmail.toLowerCase()
         const isDeclined = a.responseStatus === 'declined'
         return !isUser && !isDeclined
       })
-      console.log('🧪 INTERMEDIATE externalGuests (not user, not declined):', externalGuestsByStatus.map(g => `${g.email} (${g.responseStatus})`))
+      console.log('🧪 INTERMEDIATE actualGuests (not user, not declined):', actualGuests.map(g => `${g.email} (${g.responseStatus})`))
 
-      // New rule: responseStatus does not matter; keep event if any attendee has external domain
-      const hasExternalGuest = event.attendees.some((attendee: Attendee) => {
-        if (!attendee.email) return false
+      // Step 3: Determine if any actual guest is external (different domain)
+      const hasExternalGuest = actualGuests.some((attendee: Attendee) => {
         const attendeeDomain = attendee.email.split('@')[1]
         const isExternal = Boolean(attendeeDomain) && attendeeDomain !== userDomain
         console.log(`  🔍 Domain check: ${attendee.email} (${attendeeDomain}) vs ${userDomain} = ${isExternal ? 'EXTERNAL' : 'INTERNAL'}`)
@@ -158,7 +157,7 @@ serve(async (req) => {
         const endDate = event.end?.dateTime || event.end?.date
         
         const attendees = event.attendees?.map(a => a.email).filter(Boolean) || []
-        const externalAttendees = event.attendees
+        const externalAttendees = actualGuests
           .filter(a => !!a.email && a.email.split('@')[1] !== userDomain)
           .map(a => a.email)
 
@@ -174,7 +173,7 @@ serve(async (req) => {
           external_attendees: externalAttendees,
         })
       } else {
-        console.log(`❌ DISCARDED: No external guests for "${title}"`)
+        console.log(`[INFO] Discarding event '${title}' because no external guests were found.`)
       }
     }
 
