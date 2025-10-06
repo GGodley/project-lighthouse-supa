@@ -1,17 +1,12 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import type { Params } from 'next/dist/server/request/params';
-
-interface RouteContext {
-  params: Params;
-}
 
 export async function GET(
   request: Request,
-  context: RouteContext
+  context: { params: Promise<{ id: string }> }
 ) {
-  const customerId = context.params.id as string;
+  const { id: customerId } = await context.params;
   const cookieStore = await cookies();
   
   const supabase = createServerClient(
