@@ -27,6 +27,9 @@ serve(async (req) => {
   }
 
   try {
+    // 🔍 LOG: Entry Point - Function invoked
+    console.log('🚀 SYNC-CALENDAR: Function invoked successfully')
+
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -35,6 +38,7 @@ serve(async (req) => {
     // Get the user from the request
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
+      console.log('❌ CRITICAL ERROR: Missing authorization header')
       return new Response(
         JSON.stringify({ error: 'Missing authorization header' }),
         { 
@@ -51,6 +55,7 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     
     if (authError || !user) {
+      console.log('❌ CRITICAL ERROR: Invalid or expired token', authError)
       return new Response(
         JSON.stringify({ error: 'Invalid or expired token' }),
         { 
@@ -60,11 +65,16 @@ serve(async (req) => {
       )
     }
 
+    // 🔍 LOG: User verification successful
+    console.log('✅ USER VERIFIED: User ID:', user.id, 'Email:', user.email)
+
     // Get the provider token from request body
     const requestBody = await req.json()
     const providerToken = requestBody.provider_token
 
+    // 🔍 LOG: Provider token verification
     if (!providerToken) {
+      console.log('❌ CRITICAL ERROR: No Google access token found in request body')
       return new Response(
         JSON.stringify({ error: 'No Google access token found in request body. Please re-authenticate.' }),
         { 
@@ -73,6 +83,7 @@ serve(async (req) => {
         }
       )
     }
+    console.log('✅ PROVIDER TOKEN: Successfully received Google access token')
 
     // Calculate date range (next 3 months)
     const now = new Date()
@@ -85,6 +96,9 @@ serve(async (req) => {
     // Fetch calendar events from Google Calendar API
     const calendarUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=2500`
     
+    // 🔍 LOG: External API call
+    console.log('🌐 GOOGLE API CALL: Fetching from URL:', calendarUrl)
+    
     const calendarResponse = await fetch(calendarUrl, {
       headers: {
         'Authorization': `Bearer ${providerToken}`,
@@ -92,9 +106,12 @@ serve(async (req) => {
       },
     })
 
+    // 🔍 LOG: API response status
+    console.log('📡 GOOGLE API RESPONSE: Status code:', calendarResponse.status)
+
     if (!calendarResponse.ok) {
       const errorText = await calendarResponse.text()
-      console.error('Google Calendar API error:', errorText)
+      console.error('❌ GOOGLE API ERROR:', errorText)
       return new Response(
         JSON.stringify({ error: 'Failed to fetch calendar events from Google' }),
         { 
@@ -107,7 +124,11 @@ serve(async (req) => {
     const calendarData = await calendarResponse.json()
     const events = calendarData.items || []
 
-    console.log('📊 Total events received from Google:', events.length)
+    // 🔍 LOG: Raw data from Google (MOST CRITICAL)
+    console.log('📊 GOOGLE DATA: Successfully fetched', events.length, 'raw events from Google')
+    if (events.length > 0) {
+      console.log('📋 GOOGLE DATA: First event sample:', JSON.stringify(events[0], null, 2))
+    }
 
     // Insert all raw events into temp_meetings table
     if (events.length > 0) {
@@ -118,12 +139,15 @@ serve(async (req) => {
         created_at: new Date().toISOString()
       }))
 
+      // 🔍 LOG: Database insertion attempt
+      console.log('💾 DATABASE INSERT: About to insert', tempMeetings.length, 'events into temp_meetings table')
+
       const { error: insertError } = await supabase
         .from('temp_meetings')
         .insert(tempMeetings)
 
       if (insertError) {
-        console.error('Database insert error:', insertError)
+        console.error('❌ DATABASE ERROR: Insert failed:', insertError)
         return new Response(
           JSON.stringify({ error: 'Failed to save raw events to database' }),
           { 
@@ -133,9 +157,10 @@ serve(async (req) => {
         )
       }
 
-      console.log(`✅ Inserted ${events.length} raw events into temp_meetings table`)
+      console.log('✅ DATABASE SUCCESS: Inserted', events.length, 'raw events into temp_meetings table')
 
       // Invoke the process-meetings function to start the next stage
+      console.log('🔄 PIPELINE: About to invoke process-meetings function')
       const { error: processError } = await supabase.functions.invoke('process-meetings', {
         body: {
           user_id: user.id
@@ -143,7 +168,7 @@ serve(async (req) => {
       })
 
       if (processError) {
-        console.error('Process meetings invocation error:', processError)
+        console.error('❌ PIPELINE ERROR: Process meetings invocation failed:', processError)
         return new Response(
           JSON.stringify({ error: 'Failed to start processing pipeline' }),
           { 
@@ -153,7 +178,9 @@ serve(async (req) => {
         )
       }
 
-      console.log('✅ Successfully invoked process-meetings function')
+      console.log('✅ PIPELINE SUCCESS: Successfully invoked process-meetings function')
+    } else {
+      console.log('⚠️ NO EVENTS: No events found from Google Calendar API')
     }
 
     return new Response(
