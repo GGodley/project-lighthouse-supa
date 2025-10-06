@@ -37,8 +37,8 @@ export async function GET(
     console.log('[customers/[id]] Calling RPC get_customer_profile_details with:', { customerId, userId: user.id });
     const { data: customerProfile, error } = await supabase
       .rpc('get_customer_profile_details', {
-        customer_id: customerId,
-        requesting_user_id: user.id,
+        p_customer_id: customerId,
+        p_requesting_user_id: user.id,
       })
       .single();
 
