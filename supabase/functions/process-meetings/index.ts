@@ -32,6 +32,7 @@ interface MeetingData {
   description?: string
   attendees: string[]
   external_attendees: string[]
+  hangout_link?: string | null
 }
 
 serve(async (req) => {
@@ -171,6 +172,7 @@ serve(async (req) => {
           description: event.description,
           attendees,
           external_attendees: externalAttendees,
+          hangout_link: event.hangoutLink || null,
         })
       } else {
         console.log(`[INFO] Discarding event '${title}' because no external guests were found.`)
@@ -179,11 +181,20 @@ serve(async (req) => {
 
     console.log(`\n📊 Filtering complete: ${filteredEvents.length} events passed the filter out of ${tempMeetings.length} total`)
 
-    // Upsert filtered events into the final meetings table
+    // Upsert filtered events into the final meetings table with correct column mapping
     if (filteredEvents.length > 0) {
+      const meetingsToUpsert = filteredEvents.map((e) => ({
+        user_id: e.user_id,
+        google_event_id: e.google_event_id,
+        summary: e.title,
+        start_time: e.meeting_date,
+        end_time: e.end_date,
+        hangout_link: e.hangout_link ?? null,
+      }))
+
       const { error: upsertError } = await supabase
         .from('meetings')
-        .upsert(filteredEvents, {
+        .upsert(meetingsToUpsert, {
           onConflict: 'google_event_id,user_id'
         })
 
