@@ -163,11 +163,13 @@ serve(async (req) => {
 
       // 🔍 LOG: Database insertion attempt
       console.log('💾 DATABASE INSERT: About to insert', tempMeetings.length, 'events into temp_meetings table')
+      console.log('📦 INSERT PAYLOAD (temp_meetings):', JSON.stringify(tempMeetings, null, 2))
 
       const { error: insertError } = await supabase
         .from('temp_meetings')
         .insert(tempMeetings)
 
+      console.log('🧪 INSERT RESULT (temp_meetings) error:', insertError)
       if (insertError) {
         console.error('❌ DATABASE ERROR: Insert failed:', insertError)
         return new Response(

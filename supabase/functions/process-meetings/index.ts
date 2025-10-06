@@ -186,17 +186,19 @@ serve(async (req) => {
       const meetingsToUpsert = filteredEvents.map((e) => ({
         user_id: e.user_id,
         google_event_id: e.google_event_id,
-        summary: e.title,
-        start_time: e.meeting_date,
-        end_time: e.end_date,
+        title: e.title, // from Google event summary
+        start_time: e.meeting_date, // from event.start.dateTime or event.start.date
+        end_time: e.end_date, // from event.end.dateTime or event.end.date
         hangout_link: e.hangout_link ?? null,
       }))
 
+      console.log('📦 UPSERT PAYLOAD (meetings):', JSON.stringify(meetingsToUpsert, null, 2))
       const { error: upsertError } = await supabase
         .from('meetings')
         .upsert(meetingsToUpsert, {
           onConflict: 'google_event_id,user_id'
         })
+      console.log('🧪 UPSERT RESULT (meetings) error:', upsertError)
 
       if (upsertError) {
         console.error('Database upsert error:', upsertError)
