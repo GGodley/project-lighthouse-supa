@@ -14,7 +14,7 @@ export default function AuthForm() {
     try {
       const options = {
         redirectTo: `${window.location.origin}/auth/callback`,
-        scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events.readonly',
+        scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly',
         queryParams: {
           access_type: 'offline',
           prompt: 'consent'
