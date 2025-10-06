@@ -4,9 +4,9 @@ import { NextResponse } from 'next/server';
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
-  const { id: customerId } = params;
+  const customerId = context.params.id;
   const cookieStore = await cookies();
   
   const supabase = createServerClient(
