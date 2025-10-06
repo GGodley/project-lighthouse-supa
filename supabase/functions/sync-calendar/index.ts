@@ -107,11 +107,11 @@ serve(async (req) => {
     })
 
     // 🔍 LOG: API response status
-    console.log('📡 GOOGLE API RESPONSE: Status code:', calendarResponse.status)
+    console.log('📡 GOOGLE API RESPONSE: Status code:', calendarResponse.status, 'Status text:', calendarResponse.statusText)
 
     if (!calendarResponse.ok) {
       const errorText = await calendarResponse.text()
-      console.error('❌ GOOGLE API ERROR:', errorText)
+      console.error('❌ GOOGLE API ERROR (raw body):', errorText)
       return new Response(
         JSON.stringify({ error: 'Failed to fetch calendar events from Google' }),
         { 
@@ -124,20 +124,25 @@ serve(async (req) => {
     const calendarData = await calendarResponse.json()
     const events = calendarData.items || []
 
+    // Pagination diagnostic: check if Google indicates more pages
+    console.log(`📦 BATCH SIZE: Successfully fetched ${events.length} raw events in this batch.`)
+    console.log('🔁 Pagination token (nextPageToken):', calendarData.nextPageToken || 'No, this is the last page.')
+
     // 🔍 LOG: Raw data from Google (MOST CRITICAL)
-    console.log('📊 GOOGLE DATA: Successfully fetched', events.length, 'raw events from Google')
+    console.log(`📊 GOOGLE DATA: Successfully fetched ${events.length} raw events from Google.`)
     if (events.length > 0) {
       console.log('📋 GOOGLE DATA: First event sample:', JSON.stringify(events[0], null, 2))
     }
 
     // Insert all raw events into temp_meetings table
     if (events.length > 0) {
-      const tempMeetings = events.map((event: GoogleCalendarEvent) => ({
-        user_id: user.id,
-        google_event_id: event.id,
-        google_event_data: event,
-        created_at: new Date().toISOString()
-      }))
+      // Conform strictly to schema: only user_id and google_event_data
+      const tempMeetings: Array<{ user_id: string; google_event_data: GoogleCalendarEvent }> = events.map(
+        (event: GoogleCalendarEvent) => ({
+          user_id: user.id,
+          google_event_data: event,
+        })
+      )
 
       // 🔍 LOG: Database insertion attempt
       console.log('💾 DATABASE INSERT: About to insert', tempMeetings.length, 'events into temp_meetings table')
