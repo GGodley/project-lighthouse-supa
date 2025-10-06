@@ -93,51 +93,68 @@ serve(async (req) => {
     const timeMin = now.toISOString()
     const timeMax = threeMonthsFromNow.toISOString()
 
-    // Fetch calendar events from Google Calendar API
-    const calendarUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=2500`
-    
-    // 🔍 LOG: External API call
-    console.log('🌐 GOOGLE API CALL: Fetching from URL:', calendarUrl)
-    
-    const calendarResponse = await fetch(calendarUrl, {
+    // Stage 1: fetch list of all calendars the user has access to
+    const calendarListUrl = `https://www.googleapis.com/calendar/v3/users/me/calendarList`
+    console.log('🌐 GOOGLE API CALL: Fetching calendar list:', calendarListUrl)
+    const calendarListResp = await fetch(calendarListUrl, {
       headers: {
         'Authorization': `Bearer ${providerToken}`,
         'Content-Type': 'application/json',
       },
     })
-
-    // 🔍 LOG: API response status
-    console.log('📡 GOOGLE API RESPONSE: Status code:', calendarResponse.status, 'Status text:', calendarResponse.statusText)
-
-    if (!calendarResponse.ok) {
-      const errorText = await calendarResponse.text()
-      console.error('❌ GOOGLE API ERROR (raw body):', errorText)
+    console.log('📡 CALENDAR LIST RESPONSE:', calendarListResp.status, calendarListResp.statusText)
+    if (!calendarListResp.ok) {
+      const errorText = await calendarListResp.text()
+      console.error('❌ GOOGLE CALENDAR LIST ERROR (raw body):', errorText)
       return new Response(
-        JSON.stringify({ error: 'Failed to fetch calendar events from Google' }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
+        JSON.stringify({ error: 'Failed to fetch calendar list from Google' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+    type CalendarListEntry = { id: string; summary?: string }
+    const calendarListData: { items?: CalendarListEntry[] } = await calendarListResp.json()
+    const calendars: CalendarListEntry[] = calendarListData.items || []
+    console.log('📚 CALENDARS FOUND:', calendars.length)
 
-    const calendarData = await calendarResponse.json()
-    const events = calendarData.items || []
+    // Stage 2: iterate calendars and fetch events per calendar
+    const allEvents: GoogleCalendarEvent[] = []
+    for (const cal of calendars) {
+      const calId = encodeURIComponent(cal.id)
+      const eventsUrl = `https://www.googleapis.com/calendar/v3/calendars/${calId}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=2500`
+      console.log('🌐 GOOGLE API CALL: Fetching events for calendar:', cal.id, 'URL:', eventsUrl)
+      const eventsResp = await fetch(eventsUrl, {
+        headers: {
+          'Authorization': `Bearer ${providerToken}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      console.log('📡 EVENTS RESPONSE:', eventsResp.status, eventsResp.statusText, 'for calendar:', cal.id)
+      if (!eventsResp.ok) {
+        const errText = await eventsResp.text()
+        console.error('❌ EVENTS ERROR (raw body) for calendar', cal.id, ':', errText)
+        // Continue to next calendar instead of failing whole sync
+        continue
+      }
+      const data: { items?: GoogleCalendarEvent[]; nextPageToken?: string } = await eventsResp.json()
+      const batch = data.items || []
+      console.log(`📦 BATCH SIZE [${cal.id}]:`, batch.length)
+      console.log('🔁 Pagination token (nextPageToken):', data.nextPageToken || 'No, this is the last page.')
+      allEvents.push(...batch)
+    }
 
-    // Pagination diagnostic: check if Google indicates more pages
-    console.log(`📦 BATCH SIZE: Successfully fetched ${events.length} raw events in this batch.`)
-    console.log('🔁 Pagination token (nextPageToken):', calendarData.nextPageToken || 'No, this is the last page.')
-
-    // 🔍 LOG: Raw data from Google (MOST CRITICAL)
-    console.log(`📊 GOOGLE DATA: Successfully fetched ${events.length} raw events from Google.`)
-    if (events.length > 0) {
-      console.log('📋 GOOGLE DATA: First event sample:', JSON.stringify(events[0], null, 2))
+    // 🔍 LOG: Raw data from Google across all calendars
+    console.log(`📊 GOOGLE DATA (ALL CALENDARS): Total raw events fetched: ${allEvents.length}`)
+    if (allEvents.length > 0) {
+      console.log('📋 SAMPLE EVENT:', JSON.stringify(allEvents[0], null, 2))
+    }
+    for (const ev of allEvents) {
+      console.log('📝 EVENT TITLE:', ev.summary || 'Untitled')
     }
 
     // Insert all raw events into temp_meetings table
-    if (events.length > 0) {
+    if (allEvents.length > 0) {
       // Conform strictly to schema: only user_id and google_event_data
-      const tempMeetings: Array<{ user_id: string; google_event_data: GoogleCalendarEvent }> = events.map(
+      const tempMeetings: Array<{ user_id: string; google_event_data: GoogleCalendarEvent }> = allEvents.map(
         (event: GoogleCalendarEvent) => ({
           user_id: user.id,
           google_event_data: event,
@@ -162,7 +179,7 @@ serve(async (req) => {
         )
       }
 
-      console.log('✅ DATABASE SUCCESS: Inserted', events.length, 'raw events into temp_meetings table')
+      console.log('✅ DATABASE SUCCESS: Inserted', allEvents.length, 'raw events into temp_meetings table')
 
       // Invoke the process-meetings function to start the next stage
       console.log('🔄 PIPELINE: About to invoke process-meetings function')
@@ -191,7 +208,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         message: 'Raw sync completed', 
-        syncedEvents: events.length 
+        syncedEvents: allEvents.length 
       }),
       { 
         status: 200, 
