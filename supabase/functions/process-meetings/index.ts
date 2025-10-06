@@ -116,9 +116,15 @@ serve(async (req) => {
 
     for (const tempMeeting of tempMeetings) {
       const event: GoogleCalendarEvent = tempMeeting.google_event_data
-      
-      console.log(`\n🔍 Processing event: "${event.summary || 'Untitled'}"`)
-      
+      const title = event.summary || 'Untitled'
+
+      // Announce the job
+      console.log(`\n🎬 PROCESSING EVENT: "${title}"`)
+
+      // Show the inputs
+      console.log('📥 INPUT userDomain:', userDomain)
+      console.log('📥 INPUT raw attendees:', JSON.stringify(event.attendees || [], null, 2))
+
       if (!event.attendees || event.attendees.length === 0) {
         console.log('❌ REJECTED: No attendees')
         continue
@@ -126,32 +132,35 @@ serve(async (req) => {
 
       console.log(`👥 Attendees (${event.attendees.length}):`, event.attendees.map(a => `${a.email} (${a.responseStatus})`))
 
-      // First, filter to get only actual guests who have accepted (not declined)
-      const externalGuests = event.attendees.filter((attendee: Attendee) => {
-        return attendee.email && 
-               attendee.email !== userEmail && 
-               attendee.responseStatus !== 'declined'
+      // Intermediate step: remove user and declined guests (diagnostic only)
+      const externalGuestsByStatus: Attendee[] = event.attendees.filter((a: Attendee) => {
+        if (!a.email) return false
+        const isUser = a.email === userEmail
+        const isDeclined = a.responseStatus === 'declined'
+        return !isUser && !isDeclined
       })
+      console.log('🧪 INTERMEDIATE externalGuests (not user, not declined):', externalGuestsByStatus.map(g => `${g.email} (${g.responseStatus})`))
 
-      console.log(`🎯 External guests (after filtering): ${externalGuests.length}`, externalGuests.map(g => g.email))
-
-      // Now, check if any of these remaining guests are from an external domain
-      const hasExternalGuest = externalGuests.some((attendee: Attendee) => {
+      // New rule: responseStatus does not matter; keep event if any attendee has external domain
+      const hasExternalGuest = event.attendees.some((attendee: Attendee) => {
+        if (!attendee.email) return false
         const attendeeDomain = attendee.email.split('@')[1]
-        const isExternal = attendeeDomain && attendeeDomain !== userDomain
+        const isExternal = Boolean(attendeeDomain) && attendeeDomain !== userDomain
         console.log(`  🔍 Domain check: ${attendee.email} (${attendeeDomain}) vs ${userDomain} = ${isExternal ? 'EXTERNAL' : 'INTERNAL'}`)
         return isExternal
       })
 
       if (hasExternalGuest) {
-        console.log('✅ KEPT: Has external guests')
+        console.log(`✅ KEPT: External guest detected for "${title}"`)
         
         // Transform to meeting data
         const startDate = event.start?.dateTime || event.start?.date
         const endDate = event.end?.dateTime || event.end?.date
         
         const attendees = event.attendees?.map(a => a.email).filter(Boolean) || []
-        const externalAttendees = externalGuests.map(g => g.email).filter(Boolean)
+        const externalAttendees = event.attendees
+          .filter(a => !!a.email && a.email.split('@')[1] !== userDomain)
+          .map(a => a.email)
 
         filteredEvents.push({
           google_event_id: event.id,
@@ -165,7 +174,7 @@ serve(async (req) => {
           external_attendees: externalAttendees,
         })
       } else {
-        console.log('❌ REJECTED: No external guests')
+        console.log(`❌ DISCARDED: No external guests for "${title}"`)
       }
     }
 
@@ -193,26 +202,25 @@ serve(async (req) => {
       console.log(`✅ Upserted ${filteredEvents.length} meetings into final table`)
     }
 
-    // TEMPORARILY COMMENTED OUT FOR DEBUGGING - Delete processed records from temp_meetings
-    // const { error: deleteError } = await supabase
-    //   .from('temp_meetings')
-    //   .delete()
-    //   .eq('user_id', userId)
-    //   .eq('processed', false)
+    // Mark the processed temp_meetings rows as processed = true
+    const { error: markError } = await supabase
+      .from('temp_meetings')
+      .update({ processed: true })
+      .eq('user_id', userId)
+      .eq('processed', false)
 
-    // if (deleteError) {
-    //   console.error('Database delete error:', deleteError)
-    //   return new Response(
-    //     JSON.stringify({ error: 'Failed to cleanup temp_meetings' }),
-    //     { 
-    //       status: 500, 
-    //       headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-    //     }
-    //   )
-    // }
+    if (markError) {
+      console.error('Database mark-as-processed error:', markError)
+      return new Response(
+        JSON.stringify({ error: 'Failed to mark temp_meetings as processed' }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      )
+    }
 
-    // console.log(`✅ Cleaned up ${tempMeetings.length} records from temp_meetings`)
-    console.log(`🔍 DEBUG: Left ${tempMeetings.length} records in temp_meetings for inspection`)
+    console.log(`✅ Marked ${tempMeetings.length} temp_meetings records as processed`)
 
     return new Response(
       JSON.stringify({ 
