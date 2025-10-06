@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -16,7 +16,7 @@ export default function CalendarPage() {
   const [error, setError] = useState<string | null>(null)
   const supabase = useSupabase()
 
-  const syncAndFetchCalendar = async () => {
+  const syncAndFetchCalendar = useCallback(async () => {
     try {
       setIsLoading(true)
       setError(null)
@@ -80,11 +80,11 @@ export default function CalendarPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [supabase])
 
   useEffect(() => {
     syncAndFetchCalendar()
-  }, [])
+  }, [syncAndFetchCalendar])
 
   return (
     <div className="p-6">
