@@ -6,11 +6,18 @@ import { Database } from '@/types/database.types'
 import { Button } from '@/components/ui/Button'
 import { Plus, Calendar, Clock, Users } from 'lucide-react'
 
-type Meeting = Database['public']['Tables']['meetings']['Row']
+type MeetingRow = Database['public']['Tables']['meetings']['Row']
 type Customer = Database['public']['Tables']['customers']['Row']
 
-interface MeetingWithCustomer extends Meeting {
+interface MeetingWithCustomer extends MeetingRow {
   customer: Customer | null
+  start_time?: string
+  end_time?: string | null
+}
+
+const getStartTime = (m: MeetingWithCustomer): string => {
+  // Prefer start_time if present; fall back to legacy meeting_date in types
+  return (m.start_time ?? (m as Pick<MeetingWithCustomer, 'meeting_date'>).meeting_date) as string
 }
 
 export default function EventsPage() {
@@ -65,7 +72,7 @@ export default function EventsPage() {
     const grouped: { [key: string]: MeetingWithCustomer[] } = {}
     
     events.forEach(event => {
-      const date = new Date((event as any).start_time).toDateString()
+      const date = new Date(getStartTime(event)).toDateString()
       if (!grouped[date]) {
         grouped[date] = []
       }
@@ -141,7 +148,7 @@ export default function EventsPage() {
               </div>
               <div className="divide-y divide-gray-200">
                 {dayEvents.map((event) => {
-                  const meetingTime = formatDate((event as any).start_time)
+                  const meetingTime = formatDate(getStartTime(event))
                   
                   return (
                     <div key={event.id} className="p-6 hover:bg-gray-50">
