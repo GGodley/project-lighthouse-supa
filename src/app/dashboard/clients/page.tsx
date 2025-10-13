@@ -14,7 +14,7 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const supabase = useSupabase()
+  // const supabase = useSupabase()
 
   const fetchClients = useCallback(async () => {
     try {
