@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, CheckCircle, AlertTriangle, XCircle, Mail, Phone, Check } from 'lucide-react';
+import InteractionTimeline from '@/components/InteractionTimeline';
 
 // Define types for our data for better type safety
 type Interaction = {
@@ -81,38 +82,7 @@ export default function CustomerProfilePage() {
   };
 
   function renderTimeline() {
-    return (
-      <div className="bg-white p-6 rounded-lg border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-800 mb-2">Interaction Timeline</h2>
-        <p className="text-sm text-gray-500 mb-6">Complete history of calls and emails with detailed summaries.</p>
-        <div className="relative pl-6 border-l-2 border-gray-200 space-y-6">
-          {customer?.allInteractions?.map((interaction) => (
-            <div key={interaction.interaction_id} className="relative">
-              <div className="absolute -left-[33px] top-1.5 h-4 w-4 rounded-full bg-white border-2 border-gray-300"></div>
-              <button onClick={() => setSelectedInteraction(interaction)} className="w-full text-left p-4 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                <div className="flex items-start">
-                  <div className="mr-4 pt-1">
-                    {interaction.interaction_type === 'Email' ? <Mail size={20} className="text-gray-500" /> : <Phone size={20} className="text-gray-500" />}
-                  </div>
-                  <div className="flex-grow">
-                    <div className="flex items-center space-x-3">
-                      <p className="font-semibold text-gray-800">{interaction.interaction_type} - {new Date(interaction.interaction_date).toLocaleDateString()}</p>
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${sentimentStyles[interaction.sentiment]}`}>{interaction.sentiment}</span>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-1">{interaction.summary}</p>
-                    <p className="text-xs text-gray-400 mt-2">Click to view full details</p>
-                  </div>
-                </div>
-              </button>
-            </div>
-          )) || (
-            <div className="text-center py-8">
-              <p className="text-gray-500 text-sm">No interactions found for this customer.</p>
-            </div>
-          )}
-        </div>
-      </div>
-    );
+    return <InteractionTimeline data={customer} />
   }
 
   function renderInteractionModal() {
@@ -237,15 +207,28 @@ export default function CustomerProfilePage() {
                     <div className="md:col-span-2">
                         <h3 className="text-md font-semibold text-gray-700 mb-3">Recent Interactions</h3>
                         <ul className="space-y-4">
-                            {(customer.allInteractions?.slice(0, 3) ?? []).map((interaction, index) => (
-                                <li key={index}>
-                                    <p className="font-medium text-gray-800 text-sm">{interaction.summary}</p>
-                                    <p className="text-xs text-gray-500">{new Date(interaction.interaction_date).toLocaleDateString()}</p>
-                                </li>
-                            ))}
-                            {!(customer.allInteractions && customer.allInteractions.length) && (
-                              <li className="text-gray-500 text-sm">No interactions found</li>
-                            )}
+                            {(() => {
+                              const emails = Array.isArray((customer as any).emails) ? (customer as any).emails : []
+                              const meetings = Array.isArray((customer as any).meetings) ? (customer as any).meetings : []
+                              const items = [
+                                ...emails.map((e: any) => ({ date: e.received_at, summary: e.snippet })),
+                                ...meetings.map((m: any) => ({ date: m.start_time, summary: m.summary }))
+                              ]
+                                .filter(i => !!i.date)
+                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                .slice(0, 3)
+
+                              return items.length > 0 ? (
+                                items.map((item, index) => (
+                                  <li key={index}>
+                                    <p className="font-medium text-gray-800 text-sm">{item.summary || 'No summary available.'}</p>
+                                    <p className="text-xs text-gray-500">{new Date(item.date).toLocaleDateString()}</p>
+                                  </li>
+                                ))
+                              ) : (
+                                <li className="text-gray-500 text-sm">No interactions found</li>
+                              )
+                            })()}
                         </ul>
                     </div>
                     <div>
