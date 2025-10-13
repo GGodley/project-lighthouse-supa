@@ -43,6 +43,11 @@ type CustomerWithInteractions = CustomerProfile & {
   meetings?: MeetingRow[]
 }
 
+function getMeetingStart(meeting: MeetingRow): string {
+  const m = meeting as unknown as { start_time?: string; meeting_date?: string }
+  return m.start_time ?? m.meeting_date ?? ''
+}
+
 export default function CustomerProfilePage() {
   const params = useParams();
   const router = useRouter();
@@ -222,7 +227,7 @@ export default function CustomerProfilePage() {
                             type Item = { date: string; summary: string | null }
                             const items: Item[] = [
                               ...emails.map((e): Item => ({ date: e.received_at ?? '', summary: e.snippet })),
-                              ...meetings.map((m): Item => ({ date: (m as any).start_time ?? (m as any).meeting_date ?? '', summary: m.summary }))
+                              ...meetings.map((m): Item => ({ date: getMeetingStart(m), summary: m.summary }))
                             ]
                               .filter((i) => Boolean(i.date))
                               .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
