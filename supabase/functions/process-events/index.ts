@@ -147,7 +147,7 @@ serve(async (req) => {
 
         const upsertPayload = {
           user_id: userId,
-          google_event_id: event.id,
+          google_event_id: event.id, // This is now the primary key
           title: event.summary || 'Untitled Meeting',
           start_time: startIso,
           end_time: endIso,

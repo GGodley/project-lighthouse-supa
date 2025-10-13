@@ -18,23 +18,19 @@ export default function ClientsPage() {
 
   const fetchClients = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-          const { data, error } = await supabase
-            .from('customers')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      setClients(data || [])
+      // Use the API route that properly calls the RPC function
+      const response = await fetch('/api/customers', { cache: 'no-store' })
+      if (!response.ok) {
+        throw new Error('Failed to fetch clients')
+      }
+      const data = await response.json()
+      setClients(data.customers || [])
     } catch (error) {
       console.error('Error fetching clients:', error)
     } finally {
       setLoading(false)
     }
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     fetchClients()

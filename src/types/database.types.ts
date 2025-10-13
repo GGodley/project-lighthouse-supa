@@ -237,8 +237,8 @@ export type Database = {
           description: string | null
           end_date: string | null
           external_attendees: Json | null
-          google_event_id: string | null
-          id: number
+          google_event_id: string // Now the primary key, not nullable
+          id?: number // Optional legacy field
           location: string | null
           meeting_date: string
           next_steps: Json | null
@@ -257,8 +257,8 @@ export type Database = {
           description?: string | null
           end_date?: string | null
           external_attendees?: Json | null
-          google_event_id?: string | null
-          id?: never
+          google_event_id: string // Required primary key
+          id?: never // Cannot insert id as it's auto-generated
           location?: string | null
           meeting_date: string
           next_steps?: Json | null
@@ -277,8 +277,8 @@ export type Database = {
           description?: string | null
           end_date?: string | null
           external_attendees?: Json | null
-          google_event_id?: string | null
-          id?: never
+          google_event_id?: string | null // Can be updated
+          id?: never // Cannot update id
           location?: string | null
           meeting_date?: string
           next_steps?: Json | null

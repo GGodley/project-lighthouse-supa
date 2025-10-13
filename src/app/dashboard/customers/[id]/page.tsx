@@ -18,13 +18,19 @@ type Interaction = {
 
 type CustomerProfile = {
   id: string;
-  company_name: string;
   name: string;
-  health_score: number;
+  contact_email: string;
+  company_name: string | null;
+  health_score: number | null;
   status: 'Healthy' | 'Needs Attention' | 'At Risk';
-  mrr: number;
-  renewal_date: string;
-  allInteractions: Interaction[]; // This field has been updated
+  mrr: number | null;
+  renewal_date: string | null;
+  last_interaction_at: string | null;
+  overall_sentiment: string | null;
+  email: string | null;
+  created_at: string;
+  user_id: string;
+  allInteractions: Interaction[];
   featureRequests: { urgency: string; features: { title: string } }[];
 };
 
@@ -189,9 +195,9 @@ export default function CustomerProfilePage() {
           <h1 className="text-3xl font-bold text-gray-900">{customer.company_name || customer.name}</h1>
           <div className="flex items-center space-x-4 text-sm text-gray-600 mt-2">
             <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusStyles[customer.status]}`}>{customer.status}</span>
+            <span>Contact Email: <span className="font-semibold">{customer.contact_email}</span></span>
             <span>Health Score: <span className="font-semibold">{customer.health_score || 'Not set'}%</span></span>
             <span>MRR: <span className="font-semibold">${customer.mrr ? customer.mrr.toLocaleString() : 'Not set'}</span></span>
-            <span>Renewal: <span className="font-semibold">{customer.renewal_date ? new Date(customer.renewal_date).toLocaleDateString() : 'Not set'}</span></span>
           </div>
         </div>
 
@@ -231,12 +237,15 @@ export default function CustomerProfilePage() {
                     <div className="md:col-span-2">
                         <h3 className="text-md font-semibold text-gray-700 mb-3">Recent Interactions</h3>
                         <ul className="space-y-4">
-                            {customer.allInteractions?.slice(0, 3).map((interaction, index) => (
+                            {(customer.allInteractions?.slice(0, 3) ?? []).map((interaction, index) => (
                                 <li key={index}>
                                     <p className="font-medium text-gray-800 text-sm">{interaction.summary}</p>
                                     <p className="text-xs text-gray-500">{new Date(interaction.interaction_date).toLocaleDateString()}</p>
                                 </li>
-                            )) || <li className="text-gray-500 text-sm">No interactions found</li>}
+                            ))}
+                            {!(customer.allInteractions && customer.allInteractions.length) && (
+                              <li className="text-gray-500 text-sm">No interactions found</li>
+                            )}
                         </ul>
                     </div>
                     <div>
@@ -253,7 +262,7 @@ export default function CustomerProfilePage() {
             <div className="bg-white p-6 rounded-lg border border-gray-200">
                 <h2 className="text-lg font-semibold text-gray-800 mb-4">Product Feedback</h2>
                 <div className="space-y-4">
-                    {customer.featureRequests.map((req, index) => (
+                    {(customer.featureRequests ?? []).map((req, index) => (
                         <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-md">
                             <div>
                                 <p className="font-medium text-gray-800">{req.features.title}</p>

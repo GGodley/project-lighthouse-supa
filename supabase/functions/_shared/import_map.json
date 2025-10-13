@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "assemblyai": "npm:assemblyai@4.4.0"
+  }
+}

@@ -155,13 +155,20 @@ serve(async (req) => {
           console.log('📝 EVENT TITLE:', ev.summary || 'Untitled')
         }
 
-        // Build rows for this batch
-        const rows: Array<{ user_id: string; google_event_data: GoogleCalendarEvent }> = batch.map((event) => ({
+        // Build rows for this batch with google_event_id for upsert functionality
+        const rows: Array<{ 
+          google_event_id: string; 
+          user_id: string; 
+          google_event_data: GoogleCalendarEvent;
+          processed: boolean;
+        }> = batch.map((event) => ({
+          google_event_id: event.id,      // CRITICAL: The unique ID as a top-level field
           user_id: userRes.userId!,
-          google_event_data: event,
+          google_event_data: event,       // The full original event data
+          processed: false                // Reset the processed flag on update
         }))
 
-        // Insert this batch (further split into sub-batches of 100 to be safe)
+        // Upsert this batch (further split into sub-batches of 100 to be safe)
         const chunkSize = 100
         const chunks = Math.ceil(rows.length / chunkSize)
         for (let i = 0; i < chunks; i++) {
@@ -169,21 +176,20 @@ serve(async (req) => {
           const end = Math.min(start + chunkSize, rows.length)
           const sub = rows.slice(start, end)
           if (sub.length === 0) continue
-          console.log(`💾 INSERT temp_meetings: calendar=${cal.id} batch#${batchIndex} sub#${i + 1}/${chunks} size=${sub.length}`)
-          const { error: insertError } = await fetch(`${Deno.env.get('SUPABASE_URL')}/rest/v1/temp_meetings`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!}`,
-              'Prefer': 'resolution=merge-duplicates',
-            },
-            body: JSON.stringify(sub),
-          }).then(async (r) => ({ error: r.ok ? null : await r.text() }))
-          console.log(`🧪 INSERT RESULT:`, insertError ?? 'ok')
-          if (insertError) {
+          console.log(`💾 UPSERT temp_meetings: calendar=${cal.id} batch#${batchIndex} sub#${i + 1}/${chunks} size=${sub.length}`)
+          
+          // Use Supabase client upsert instead of direct REST API call
+          const { error: upsertError } = await supabase
+            .from('temp_meetings')
+            .upsert(sub, {
+              onConflict: 'google_event_id' // CRITICAL: Tells Supabase how to find duplicates
+            })
+          
+          console.log(`🧪 UPSERT RESULT:`, upsertError ?? 'ok')
+          if (upsertError) {
+            console.error('❌ UPSERT ERROR:', upsertError)
             return new Response(
-              JSON.stringify({ error: 'Failed to save a batch into temp_meetings', details: insertError }),
+              JSON.stringify({ error: 'Failed to upsert a batch into temp_meetings', details: upsertError.message }),
               { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
           }
@@ -207,14 +213,14 @@ serve(async (req) => {
           } else {
             console.log('ℹ️ No unprocessed temp_meeting found to kickstart at this moment.')
           }
-          totalInserted += sub.length
+          totalInserted += sub.length // Note: This counts both inserts and updates
         }
 
         pageToken = data.nextPageToken
       } while (pageToken)
     }
 
-    console.log(`📊 GOOGLE DATA (ALL CALENDARS): Total fetched=${totalFetched}, total inserted=${totalInserted}`)
+    console.log(`📊 GOOGLE DATA (ALL CALENDARS): Total fetched=${totalFetched}, total upserted=${totalInserted}`)
 
     // After all calendars processed, return success
     if (totalFetched === 0) {
@@ -222,19 +228,8 @@ serve(async (req) => {
     }
     console.log('✅ SYNC COMPLETED: returning 200 OK', { totalFetched, totalInserted })
     return new Response(
-      JSON.stringify({ message: 'Sync completed', fetched: totalFetched, inserted: totalInserted }),
+      JSON.stringify({ message: 'Sync completed', fetched: totalFetched, upserted: totalInserted }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
-
-    return new Response(
-      JSON.stringify({ 
-        message: 'Raw sync completed', 
-        syncedEvents: allEvents.length 
-      }),
-      { 
-        status: 200, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
     )
 
   } catch (error) {
