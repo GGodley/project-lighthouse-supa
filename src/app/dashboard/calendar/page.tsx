@@ -59,11 +59,12 @@ export default function CalendarPage() {
       const meetings: Meeting[] = await meetingsResponse.json()
       
       // Transform meetings to FullCalendar events
-      const calendarEvents: EventInput[] = meetings.map(meeting => ({
-        id: String(meeting.google_event_id ?? meeting.id ?? crypto.randomUUID()),
+      const calendarEvents: EventInput[] = meetings.map((meeting) => ({
+        id: String(meeting.google_event_id ?? meeting.id ?? `local-${Date.now()}`),
         title: meeting.title || 'Untitled Meeting',
-        start: (meeting as any).start_time ?? (meeting as any).meeting_date,
-        end: (meeting as any).end_time ?? undefined,
+        start: (meeting as Meeting & Partial<{ start_time: string; meeting_date: string }>).start_time ??
+               (meeting as Meeting & Partial<{ start_time: string; meeting_date: string }>).meeting_date,
+        end: (meeting as Meeting & Partial<{ end_time: string }>).end_time ?? undefined,
         extendedProps: {
           location: meeting.location,
           description: meeting.description,

@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useSupabase } from '@/components/SupabaseProvider'
 import { Database } from '@/types/database.types'
 import { Button } from '@/components/ui/Button'
 import { Plus, Search, MoreVertical } from 'lucide-react'
