@@ -45,11 +45,26 @@ export async function fetchCustomerProfileWithInteractions(customerId: string, r
       throw new Error(`Failed to fetch customer profile with interactions: ${error.message}`)
     }
 
-    const profile = data || {}
+    function isRecord(value: unknown): value is Record<string, unknown> {
+      return typeof value === 'object' && value !== null && !Array.isArray(value)
+    }
+
+    type ProfileLike = {
+      emails?: unknown
+      meetings?: unknown
+    } & Record<string, unknown>
+
+    const base: ProfileLike = isRecord(data) ? (data as ProfileLike) : {}
+    const emailsRaw = base.emails
+    const meetingsRaw = base.meetings
+
+    const emails = Array.isArray(emailsRaw) ? emailsRaw : []
+    const meetings = Array.isArray(meetingsRaw) ? meetingsRaw : []
+
     return {
-      ...profile,
-      emails: Array.isArray(profile.emails) ? profile.emails : [],
-      meetings: Array.isArray(profile.meetings) ? profile.meetings : []
+      ...base,
+      emails,
+      meetings,
     }
   } catch (error) {
     console.error('Error in fetchCustomerProfileWithInteractions:', error)
