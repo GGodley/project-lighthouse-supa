@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, CheckCircle, AlertTriangle, XCircle, Mail, Phone, Check } from 'lucide-react';
+import { ArrowLeft, CheckCircle, AlertTriangle, XCircle, Check } from 'lucide-react';
 import InteractionTimeline from '@/components/InteractionTimeline';
+import type { Database } from '@/types/database.types'
 
 // Define types for our data for better type safety
 type Interaction = {
@@ -35,12 +36,19 @@ type CustomerProfile = {
   featureRequests: { urgency: string; features: { title: string } }[];
 };
 
+type EmailRow = Database['public']['Tables']['emails']['Row']
+type MeetingRow = Database['public']['Tables']['meetings']['Row']
+type CustomerWithInteractions = CustomerProfile & {
+  emails?: EmailRow[]
+  meetings?: MeetingRow[]
+}
+
 export default function CustomerProfilePage() {
   const params = useParams();
   const router = useRouter();
   const { id } = params;
 
-  const [customer, setCustomer] = useState<CustomerProfile | null>(null);
+  const [customer, setCustomer] = useState<CustomerWithInteractions | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('Overview');
@@ -207,28 +215,30 @@ export default function CustomerProfilePage() {
                     <div className="md:col-span-2">
                         <h3 className="text-md font-semibold text-gray-700 mb-3">Recent Interactions</h3>
                         <ul className="space-y-4">
-                            {(() => {
-                              const emails = Array.isArray((customer as any).emails) ? (customer as any).emails : []
-                              const meetings = Array.isArray((customer as any).meetings) ? (customer as any).meetings : []
-                              const items = [
-                                ...emails.map((e: any) => ({ date: e.received_at, summary: e.snippet })),
-                                ...meetings.map((m: any) => ({ date: m.start_time, summary: m.summary }))
-                              ]
-                                .filter(i => !!i.date)
-                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                                .slice(0, 3)
+                          {(() => {
+                            const emails: EmailRow[] = Array.isArray(customer?.emails) ? (customer!.emails as EmailRow[]) : []
+                            const meetings: MeetingRow[] = Array.isArray(customer?.meetings) ? (customer!.meetings as MeetingRow[]) : []
 
-                              return items.length > 0 ? (
-                                items.map((item, index) => (
-                                  <li key={index}>
-                                    <p className="font-medium text-gray-800 text-sm">{item.summary || 'No summary available.'}</p>
-                                    <p className="text-xs text-gray-500">{new Date(item.date).toLocaleDateString()}</p>
-                                  </li>
-                                ))
-                              ) : (
-                                <li className="text-gray-500 text-sm">No interactions found</li>
-                              )
-                            })()}
+                            type Item = { date: string; summary: string | null }
+                            const items: Item[] = [
+                              ...emails.map((e): Item => ({ date: e.received_at ?? '', summary: e.snippet })),
+                              ...meetings.map((m): Item => ({ date: (m as any).start_time ?? (m as any).meeting_date ?? '', summary: m.summary }))
+                            ]
+                              .filter((i) => Boolean(i.date))
+                              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                              .slice(0, 3)
+
+                            return items.length > 0 ? (
+                              items.map((item, index) => (
+                                <li key={index}>
+                                  <p className="font-medium text-gray-800 text-sm">{item.summary || 'No summary available.'}</p>
+                                  <p className="text-xs text-gray-500">{new Date(item.date).toLocaleDateString()}</p>
+                                </li>
+                              ))
+                            ) : (
+                              <li className="text-gray-500 text-sm">No interactions found</li>
+                            )
+                          })()}
                         </ul>
                     </div>
                     <div>
