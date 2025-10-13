@@ -16,12 +16,12 @@ export async function GET() {
       )
     }
 
-    // Fetch all meetings for the current user, ordered by meeting_date
+    // Fetch all meetings for the current user, ordered by start_time
     const { data: meetings, error: fetchError } = await supabase
       .from('meetings')
       .select('*')
       .eq('user_id', user.id)
-      .order('meeting_date', { ascending: true })
+      .order('start_time', { ascending: true })
 
     if (fetchError) {
       console.error('Error fetching meetings:', fetchError)

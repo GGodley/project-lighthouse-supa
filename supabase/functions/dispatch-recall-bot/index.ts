@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
     // 3. Fetch meeting details to get the meeting_url for Recall.ai API
     const { data: meeting, error: meetingError } = await supabaseClient
       .from('meetings')
-      .select('hangout_link, title')
+      .select('hangout_link, title, start_time')
       .eq('google_event_id', meeting_id)
       .single()
 
@@ -42,8 +42,12 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Join 1 minute before the scheduled start_time
+    const joinAtIso = new Date(new Date(meeting.start_time).getTime() - 60000).toISOString()
+
     const recallPayload = {
       meeting_url: meeting.hangout_link,
+      join_at: joinAtIso,
       recording_config: {
         transcript: {
           provider: { 'gladia_v2_streaming': {} },
@@ -78,7 +82,7 @@ Deno.serve(async (req) => {
         meeting_url: meeting.hangout_link,
         user_id: user_id,
         customer_id: customer_id,
-        status: 'processing'
+        status: 'scheduled'
       })
       .select()
       .single()
@@ -93,7 +97,7 @@ Deno.serve(async (req) => {
     console.log('Successfully inserted into transcription_jobs.')
 
     // 5. Update meeting status to indicate recording is in progress
-    await supabaseClient.from('meetings').update({ status: 'recording_in_progress' }).eq('google_event_id', meeting_id)
+    await supabaseClient.from('meetings').update({ status: 'recording_scheduled' }).eq('google_event_id', meeting_id)
 
     // 6. Return the created job data
     return new Response(JSON.stringify({

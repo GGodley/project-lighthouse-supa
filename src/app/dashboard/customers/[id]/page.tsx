@@ -44,8 +44,8 @@ type CustomerWithInteractions = CustomerProfile & {
 }
 
 function getMeetingStart(meeting: MeetingRow): string {
-  const m = meeting as unknown as { start_time?: string; meeting_date?: string }
-  return m.start_time ?? m.meeting_date ?? ''
+  const m = meeting as unknown as { start_time?: string }
+  return m.start_time ?? ''
 }
 
 export default function CustomerProfilePage() {

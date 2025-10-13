@@ -356,6 +356,11 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/sync-calendar/index.ts"
 
+[functions.process-events]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/process-events/index.ts"
+
 [functions.email-summarizer]
 enabled = true
 verify_jwt = false

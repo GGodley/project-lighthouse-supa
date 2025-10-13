@@ -86,12 +86,14 @@ serve(async (req) => {
     }
     console.log('✅ PROVIDER TOKEN: Successfully received Google access token')
 
-    // Calculate date range (next 3 months)
+    // Calculate date range: past 90 days to next 3 months
     const now = new Date()
+    const pastNinetyDays = new Date()
+    pastNinetyDays.setDate(pastNinetyDays.getDate() - 90)
     const threeMonthsFromNow = new Date()
     threeMonthsFromNow.setMonth(threeMonthsFromNow.getMonth() + 3)
 
-    const timeMin = now.toISOString()
+    const timeMin = pastNinetyDays.toISOString()
     const timeMax = threeMonthsFromNow.toISOString()
 
     // Stage 1: fetch list of all calendars the user has access to

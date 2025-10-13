@@ -10,8 +10,8 @@ type GoogleCalendarEvent = {
   id: string
   summary?: string
   description?: string
-  start?: { dateTime?: string; date?: string }
-  end?: { dateTime?: string; date?: string }
+  start?: { dateTime?: string; date?: string; timeZone?: string }
+  end?: { dateTime?: string; date?: string; timeZone?: string }
   hangoutLink?: string | null
   attendees?: Attendee[]
 }
@@ -145,6 +145,8 @@ serve(async (req) => {
           console.log('ℹ️ No primaryCustomer domain determined; skipping customer link.')
         }
 
+        // Determine status: mark past events as 'passed_event'
+        const isPastEvent = new Date(endIso).getTime() < Date.now()
         const upsertPayload = {
           user_id: userId,
           google_event_id: event.id, // This is now the primary key
@@ -155,6 +157,7 @@ serve(async (req) => {
           attendees: externalEmails,
           meeting_customer: primaryCustomer,
           customer_id: customerId,
+          status: isPastEvent ? 'passed_event' : undefined,
         }
         console.log('📦 UPSERT meetings payload:', JSON.stringify(upsertPayload))
         const { error: upsertErr } = await supabase

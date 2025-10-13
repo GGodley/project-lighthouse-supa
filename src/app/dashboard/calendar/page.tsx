@@ -62,8 +62,7 @@ export default function CalendarPage() {
       const calendarEvents: EventInput[] = meetings.map((meeting) => ({
         id: String(meeting.google_event_id ?? meeting.id ?? `local-${Date.now()}`),
         title: meeting.title || 'Untitled Meeting',
-        start: (meeting as Meeting & Partial<{ start_time: string; meeting_date: string }>).start_time ??
-               (meeting as Meeting & Partial<{ start_time: string; meeting_date: string }>).meeting_date,
+        start: (meeting as Meeting & Partial<{ start_time: string }>).start_time,
         end: (meeting as Meeting & Partial<{ end_time: string }>).end_time ?? undefined,
         extendedProps: {
           location: meeting.location,

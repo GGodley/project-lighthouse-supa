@@ -65,7 +65,7 @@ export default async function DashboardPage() {
         .from('meetings')
         .select('*')
         .eq('user_id', user.id)
-        .gte('meeting_date', new Date().toISOString())
+        .gte('start_time', new Date().toISOString())
 
       // Fetch recent emails
       const { data: emails } = await supabase

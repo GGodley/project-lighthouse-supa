@@ -31,10 +31,10 @@ export default function EventsPage() {
           customer:customers(*)
         `)
         .eq('user_id', user.id)
-        .order('meeting_date', { ascending: true })
+        .order('start_time', { ascending: true })
 
       if (view === 'upcoming') {
-        query = query.gte('meeting_date', new Date().toISOString())
+        query = query.gte('start_time', new Date().toISOString())
       }
 
       const { data, error } = await query
@@ -65,7 +65,7 @@ export default function EventsPage() {
     const grouped: { [key: string]: MeetingWithCustomer[] } = {}
     
     events.forEach(event => {
-      const date = new Date(event.meeting_date).toDateString()
+      const date = new Date((event as any).start_time).toDateString()
       if (!grouped[date]) {
         grouped[date] = []
       }
@@ -141,7 +141,7 @@ export default function EventsPage() {
               </div>
               <div className="divide-y divide-gray-200">
                 {dayEvents.map((event) => {
-                  const meetingTime = formatDate(event.meeting_date)
+                  const meetingTime = formatDate((event as any).start_time)
                   
                   return (
                     <div key={event.id} className="p-6 hover:bg-gray-50">
