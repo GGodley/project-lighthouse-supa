@@ -21,7 +21,7 @@ export async function GET(
           cookieStore.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
-          cookieStore.set({ name, value, '', ...options });
+          cookieStore.set({ name, value: '', ...options });
         },
       },
     }
