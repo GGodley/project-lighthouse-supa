@@ -221,7 +221,7 @@ serve(async (req) => {
               }
               
               if (customerId) {
-                  emailsToStore.push({
+                  const emailData = {
                       user_id: userId,
                       gmail_message_id: msgJson.id,
                       subject: subject,
@@ -231,9 +231,10 @@ serve(async (req) => {
                       body_html: bodies.html, // ✅ FIX: Save the HTML body
                       received_at: new Date(Number(msgJson.internalDate)).toISOString(),
                       customer_id: customerId, // ✅ LINK: Associate email with customer
-                  });
+                  };
                   
-                  console.log(`✅ Successfully processed email ${msgId} - Customer ID: ${customerId}`);
+                  emailsToStore.push(emailData);
+                  console.log(`✅ Successfully processed email ${msgId} - Customer ID: ${customerId} - Added to batch (${emailsToStore.length} emails)`);
               } else {
                   console.warn(`Skipping email from "${senderEmail}" (Subject: "${subject}") because no valid customer could be created.`);
               }
@@ -245,13 +246,18 @@ serve(async (req) => {
 
     // Use upsert to avoid duplicates
     if (emailsToStore.length > 0) {
+      console.log(`📧 Saving ${emailsToStore.length} emails to database...`);
       const { error: upsertErr } = await supabaseAdmin
         .from('emails')
         .upsert(emailsToStore, { onConflict: 'gmail_message_id' });
       if (upsertErr) {
+        console.error("Database error saving emails:", upsertErr);
         await supabaseAdmin.from('sync_jobs').update({ status: 'failed', details: `Database upsert error: ${upsertErr.message}` }).eq('id', jobId);
         throw upsertErr;
       }
+      console.log(`✅ Successfully saved ${emailsToStore.length} emails to database`);
+    } else {
+      console.log("⚠️ No emails to save - all emails were skipped due to missing customers");
     }
 
     // Chain to the next page or complete the job
