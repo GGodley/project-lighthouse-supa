@@ -60,7 +60,7 @@ export default function CalendarPage() {
       
       // Transform meetings to FullCalendar events
       const calendarEvents: EventInput[] = meetings.map((meeting) => ({
-        id: String(meeting.google_event_id ?? meeting.id ?? `local-${Date.now()}`),
+        id: String(meeting.google_event_id ?? `local-${Date.now()}`),
         title: meeting.title || 'Untitled Meeting',
         start: (meeting as Meeting & Partial<{ start_time: string }>).start_time,
         end: (meeting as Meeting & Partial<{ end_time: string }>).end_time ?? undefined,
