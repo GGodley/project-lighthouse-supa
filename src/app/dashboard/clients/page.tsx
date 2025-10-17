@@ -36,11 +36,10 @@ export default function ClientsPage() {
   }, [fetchClients])
 
   const filteredClients = clients.filter(client => {
-    const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         client.contact_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         client.company_name?.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = client.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         client.email?.toLowerCase().includes(searchTerm.toLowerCase())
     
-    const matchesStatus = statusFilter === 'all' || client.status === statusFilter
+    const matchesStatus = statusFilter === 'all' || client.overall_sentiment === statusFilter
     
     return matchesSearch && matchesStatus
   })
@@ -124,34 +123,34 @@ export default function ClientsPage() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredClients.map((client) => (
-                <tr key={client.id} className="hover:bg-gray-50">
+                <tr key={client.customer_id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-10 w-10">
                         <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
                           <span className="text-sm font-medium text-gray-700">
-                            {client.name.charAt(0).toUpperCase()}
+                            {(client.full_name || 'N').charAt(0).toUpperCase()}
                           </span>
                         </div>
                       </div>
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900">
-                          {client.name}
+                          {client.full_name || 'No Name'}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {client.contact_email || 'No email'}
+                          {client.email || 'No email'}
                         </div>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">
-                      {client.company_name || 'N/A'}
+                      Company ID: {client.company_id}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(client.status || 'Unknown')}`}>
-                      {client.status || 'Unknown'}
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(client.overall_sentiment || 'Unknown')}`}>
+                      {client.overall_sentiment || 'Unknown'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

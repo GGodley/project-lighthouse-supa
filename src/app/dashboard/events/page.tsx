@@ -11,13 +11,10 @@ type Customer = Database['public']['Tables']['customers']['Row']
 
 interface MeetingWithCustomer extends MeetingRow {
   customer: Customer | null
-  start_time?: string
-  end_time?: string | null
 }
 
 const getStartTime = (m: MeetingWithCustomer): string => {
-  // Prefer start_time if present; fall back to legacy meeting_date in types
-  return (m.start_time ?? (m as Pick<MeetingWithCustomer, 'meeting_date'>).meeting_date) as string
+  return m.start_time || ''
 }
 
 export default function EventsPage() {
@@ -151,7 +148,7 @@ export default function EventsPage() {
                   const meetingTime = formatDate(getStartTime(event))
                   
                   return (
-                    <div key={event.id} className="p-6 hover:bg-gray-50">
+                    <div key={event.google_event_id} className="p-6 hover:bg-gray-50">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center space-x-3 mb-2">
@@ -172,7 +169,7 @@ export default function EventsPage() {
                               <span>{meetingTime.time}</span>
                             </div>
                             {event.customer && (
-                              <span>Customer: <span className="font-medium text-gray-900">{event.customer.name}</span></span>
+                              <span>Customer: <span className="font-medium text-gray-900">{event.customer?.full_name || 'Unknown'}</span></span>
                             )}
                           </div>
                         </div>

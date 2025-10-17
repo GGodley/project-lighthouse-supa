@@ -184,16 +184,16 @@ export async function syncEmailsToDatabase(
         // Try to find associated customer by email
         const { data: customer } = await supabase
           .from('customers')
-          .select('id')
+          .select('customer_id')
           .eq('user_id', userId)
-          .eq('contact_email', email.sender)
+          .eq('email', email.sender)
           .single()
 
         await supabase
           .from('emails')
           .insert({
             user_id: userId,
-            client_id: customer?.id || null,
+            customer_id: customer?.customer_id || null,
             message_id: email.id,
             thread_id: email.threadId,
             subject: email.subject,
