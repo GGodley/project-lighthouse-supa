@@ -65,10 +65,9 @@ export default function CalendarPage() {
         start: (meeting as Meeting & Partial<{ start_time: string }>).start_time,
         end: (meeting as Meeting & Partial<{ end_time: string }>).end_time ?? undefined,
         extendedProps: {
-          location: meeting.location,
           description: meeting.description,
-          attendees: meeting.attendees as string[],
-          externalAttendees: meeting.external_attendees as string[],
+          attendees: meeting.attendees,
+          hangoutLink: meeting.hangout_link,
         },
       }))
 
