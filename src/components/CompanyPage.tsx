@@ -74,7 +74,8 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
         setCompanyData(data);
       } catch (err) {
         console.error('Error fetching company data:', err);
-        setError(err.message || 'Failed to fetch company data');
+        const errorMessage = err instanceof Error ? err.message : 'Failed to fetch company data';
+        setError(errorMessage);
       } finally {
         setLoading(false);
       }
