@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import type { Database } from '@/types/database.types';
 
 export async function GET(
   request: Request,
@@ -59,7 +60,7 @@ export async function GET(
 
     // Fetch emails associated with customers of this company
     const customerIds = customers?.map(c => c.customer_id) || [];
-    let emails: any[] = [];
+    let emails: Database['public']['Tables']['emails']['Row'][] = [];
     
     if (customerIds.length > 0) {
       const { data: emailsData, error: emailsError } = await supabase
