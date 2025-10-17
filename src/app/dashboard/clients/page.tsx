@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Database } from '@/types/database.types'
+import { Database } from '@/types/database'
 import { Button } from '@/components/ui/Button'
 import { Plus, Search, MoreVertical } from 'lucide-react'
 

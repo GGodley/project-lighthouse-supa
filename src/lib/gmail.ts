@@ -1,6 +1,6 @@
 import { google, gmail_v1 } from 'googleapis'
 import { OAuth2Client } from 'google-auth-library'
-import { Database } from '@/types/database.types'
+import { Database } from '@/types/database'
 import type { SupabaseClient as SupabaseClientType } from '@supabase/supabase-js'
 
 // type Profile = Database['public']['Tables']['profiles']['Row']

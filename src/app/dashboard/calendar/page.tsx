@@ -6,7 +6,7 @@ import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import { EventInput } from '@fullcalendar/core'
 import { useSupabase } from '@/components/SupabaseProvider'
-import { Database } from '@/types/database.types'
+import { Database } from '@/types/database'
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { useRouter } from 'next/navigation'
 import Sidebar from './Sidebar'
-import { Database } from '@/types/database.types'
+import { Database } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 

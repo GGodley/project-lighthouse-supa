@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
-import { Database } from '@/types/database.types'
+import { Database } from '@/types/database'
 import { Button } from '@/components/ui/Button'
 import { Mail, User, Key, Trash2, RefreshCw } from 'lucide-react'
 
