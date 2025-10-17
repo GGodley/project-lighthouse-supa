@@ -15,7 +15,17 @@ serve(async (req) => {
   try {
     // Get company_id from query parameters
     const url = new URL(req.url);
-    const companyId = url.searchParams.get('company_id');
+    let companyId = url.searchParams.get('company_id');
+    
+    // If not found in URL and request is POST, try to get from request body
+    if (!companyId && req.method === 'POST') {
+      try {
+        const body = await req.json();
+        companyId = body.company_id;
+      } catch (bodyError) {
+        console.error('Error parsing request body:', bodyError);
+      }
+    }
     
     if (!companyId) {
       return new Response(
