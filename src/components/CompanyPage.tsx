@@ -1,11 +1,59 @@
 import React, { useState, useEffect } from 'react';
 import { Phone, Mail, Calendar, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 
-const CompanyPage = ({ companyId }) => {
-  const [companyData, setCompanyData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [activeView, setActiveView] = useState('Overview');
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+interface CompanyPageProps {
+  companyId: string;
+}
+
+interface CompanyDetails {
+  company_id: string;
+  company_name: string | null;
+  domain_name: string;
+  health_score: number | null;
+  status: string | null;
+  mrr: number | null;
+  renewal_date: string | null;
+  last_interaction_at: string | null;
+  created_at: string | null;
+}
+
+interface ProductFeedback {
+  id: string;
+  title: string;
+  description: string;
+  urgency: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Interaction {
+  interaction_type: 'email' | 'meeting';
+  interaction_date: string;
+  id: string;
+  title: string;
+  summary: string;
+  sentiment: string;
+}
+
+interface CompanyData {
+  company_details: CompanyDetails;
+  product_feedback: ProductFeedback[];
+  interaction_timeline: Interaction[];
+  all_next_steps: string[];
+}
+
+const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
+  const [companyData, setCompanyData] = useState<CompanyData | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<'Overview' | 'Interaction Timeline'>('Overview');
 
   useEffect(() => {
     const fetchCompanyData = async () => {
@@ -35,7 +83,7 @@ const CompanyPage = ({ companyId }) => {
     fetchCompanyData();
   }, [companyId]);
 
-  const getSentimentColor = (sentiment) => {
+  const getSentimentColor = (sentiment: string | null): string => {
     switch (sentiment?.toLowerCase()) {
       case 'positive':
       case 'very positive':
@@ -50,7 +98,7 @@ const CompanyPage = ({ companyId }) => {
     }
   };
 
-  const getSentimentIcon = (sentiment) => {
+  const getSentimentIcon = (sentiment: string | null): React.ReactElement => {
     switch (sentiment?.toLowerCase()) {
       case 'positive':
       case 'very positive':
@@ -63,7 +111,7 @@ const CompanyPage = ({ companyId }) => {
     }
   };
 
-  const formatDate = (dateString) => {
+  const formatDate = (dateString: string): string => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
