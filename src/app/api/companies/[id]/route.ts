@@ -67,7 +67,7 @@ export async function GET(
         .from('emails')
         .select('*')
         .in('customer_id', customerIds)
-        .order('date', { ascending: false })
+        .order('received_at', { ascending: false })
         .limit(50);
 
       if (emailsError) {
@@ -84,7 +84,7 @@ export async function GET(
       emails: emails,
       total_customers: customers?.length || 0,
       total_emails: emails.length,
-      last_interaction_at: emails.length > 0 ? emails[0].date : company.last_interaction_at
+      last_interaction_at: emails.length > 0 ? emails[0].received_at : company.last_interaction_at
     };
 
     return NextResponse.json(companyProfile, { status: 200 });

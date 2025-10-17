@@ -30,7 +30,7 @@ export default function InteractionTimeline({ data }) {
     for (const email of emails) {
       items.push({
         type: 'email',
-        date: email?.date || null,
+        date: email?.received_at || null,
         title: email?.subject || 'Email',
         content: email?.snippet || 'No summary available.',
         key: `email-${email?.id ?? Math.random()}`,

@@ -49,7 +49,7 @@ export default async function DashboardPage() {
     upcomingMeetings: 0,
     recentEmails: 0
   }
-  let recentEmails: Array<{ id: number; subject: string | null; sender: string | null; date: string | null; snippet: string | null }> = []
+  let recentEmails: Array<{ id: number; subject: string | null; sender: string | null; received_at: string | null; snippet: string | null }> = []
 
   try {
     const { data: { user } } = await supabase.auth.getUser()
@@ -72,7 +72,7 @@ export default async function DashboardPage() {
         .from('emails')
         .select('*')
         .eq('user_id', user.id)
-        .order('date', { ascending: false })
+        .order('received_at', { ascending: false })
         .limit(10)
 
       recentEmails = emails || []
@@ -184,7 +184,7 @@ export default async function DashboardPage() {
                   <div className="flex items-center justify-between">
                     <div className="font-medium text-gray-900 truncate">{e.subject || 'No Subject'}</div>
                     <div className="text-xs text-gray-500 ml-4 whitespace-nowrap">
-                      {e.date ? new Date(e.date).toLocaleString() : ''}
+                      {e.received_at ? new Date(e.received_at).toLocaleString() : ''}
                     </div>
                   </div>
                   <div className="text-sm text-gray-600 truncate">From: {e.sender}</div>
