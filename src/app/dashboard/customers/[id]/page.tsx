@@ -18,27 +18,37 @@ type Interaction = {
   outstanding_issues: string[];
 };
 
-type CustomerProfile = {
-  id: string;
-  name: string;
-  contact_email: string;
+type CompanyProfile = {
+  company_id: string;
   company_name: string | null;
+  domain_name: string;
   health_score: number | null;
-  status: 'Healthy' | 'Needs Attention' | 'At Risk';
+  status: string | null;
   mrr: number | null;
   renewal_date: string | null;
   last_interaction_at: string | null;
-  overall_sentiment: string | null;
-  email: string | null;
-  created_at: string;
-  user_id: string;
-  allInteractions: Interaction[];
-  featureRequests: { urgency: string; features: { title: string } }[];
+  created_at: string | null;
+  customers: Array<{
+    customer_id: string;
+    email: string | null;
+    full_name: string | null;
+    company_id: string;
+  }>;
+  emails: Array<{
+    id: string;
+    subject: string;
+    sender: string;
+    received_at: string;
+    body_text: string | null;
+    body_html: string | null;
+  }>;
+  total_customers: number;
+  total_emails: number;
 };
 
 type EmailRow = Database['public']['Tables']['emails']['Row']
 type MeetingRow = Database['public']['Tables']['meetings']['Row']
-type CustomerWithInteractions = CustomerProfile & {
+type CompanyWithInteractions = CompanyProfile & {
   emails?: EmailRow[]
   meetings?: MeetingRow[]
 }
@@ -48,12 +58,12 @@ function getMeetingStart(meeting: MeetingRow): string {
   return m.start_time ?? ''
 }
 
-export default function CustomerProfilePage() {
+export default function CompanyProfilePage() {
   const params = useParams();
   const router = useRouter();
   const { id } = params;
 
-  const [customer, setCustomer] = useState<CustomerWithInteractions | null>(null);
+  const [company, setCompany] = useState<CompanyProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('Overview');
@@ -61,23 +71,23 @@ export default function CustomerProfilePage() {
 
   useEffect(() => {
     if (id) {
-      const fetchCustomerData = async () => {
+      const fetchCompanyData = async () => {
         setLoading(true);
         try {
-          const response = await fetch(`/api/customers/${id}`);
+          const response = await fetch(`/api/companies/${id}`);
           if (!response.ok) {
-            throw new Error('Failed to fetch customer data');
+            throw new Error('Failed to fetch company data');
           }
           const data = await response.json();
-          setCustomer(data);
+          setCompany(data);
         } catch (err: unknown) {
-          const errorMessage = err instanceof Error ? err.message : 'Failed to fetch customer data';
+          const errorMessage = err instanceof Error ? err.message : 'Failed to fetch company data';
           setError(errorMessage);
         } finally {
           setLoading(false);
         }
       };
-      fetchCustomerData();
+      fetchCompanyData();
     }
   }, [id]);
   
@@ -95,7 +105,7 @@ export default function CustomerProfilePage() {
   };
 
   function renderTimeline() {
-    return <InteractionTimeline data={customer} />
+    return <InteractionTimeline data={company} />
   }
 
   function renderInteractionModal() {
@@ -162,8 +172,8 @@ export default function CustomerProfilePage() {
     return <div className="p-8 text-red-500">Error: {error}</div>;
   }
 
-  if (!customer) {
-    return <div className="p-8">Customer not found.</div>;
+  if (!company) {
+    return <div className="p-8">Company not found.</div>;
   }
 
   return (
@@ -173,14 +183,16 @@ export default function CustomerProfilePage() {
         <div className="mb-6">
           <button onClick={() => router.back()} className="flex items-center text-sm text-gray-500 hover:text-gray-800 mb-4">
             <ArrowLeft size={16} className="mr-2" />
-            Back to Customers
+            Back to Companies
           </button>
-          <h1 className="text-3xl font-bold text-gray-900">{customer.company_name || customer.name}</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{company.company_name}</h1>
           <div className="flex items-center space-x-4 text-sm text-gray-600 mt-2">
-            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusStyles[customer.status]}`}>{customer.status}</span>
-            <span>Contact Email: <span className="font-semibold">{customer.contact_email}</span></span>
-            <span>Health Score: <span className="font-semibold">{customer.health_score || 'Not set'}%</span></span>
-            <span>MRR: <span className="font-semibold">${customer.mrr ? customer.mrr.toLocaleString() : 'Not set'}</span></span>
+            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusStyles[company.status as keyof typeof statusStyles] || statusStyles['Healthy']}`}>{company.status || 'Active'}</span>
+            <span>Domain: <span className="font-semibold">{company.domain_name}</span></span>
+            <span>Health Score: <span className="font-semibold">{company.health_score || 'Not set'}%</span></span>
+            <span>MRR: <span className="font-semibold">${company.mrr ? company.mrr.toLocaleString() : 'Not set'}</span></span>
+            <span>Customers: <span className="font-semibold">{company.total_customers}</span></span>
+            <span>Emails: <span className="font-semibold">{company.total_emails}</span></span>
           </div>
         </div>
 
@@ -198,14 +210,24 @@ export default function CustomerProfilePage() {
               Overview
             </button>
             <button
-              onClick={() => setActiveTab('Timeline')}
+              onClick={() => setActiveTab('Customers')}
               className={`px-4 py-2 text-sm font-medium rounded-full transition-all duration-200 ${
-                activeTab === 'Timeline' 
+                activeTab === 'Customers' 
                   ? 'bg-white text-gray-900 shadow-sm' 
                   : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
               }`}
             >
-              Interaction Timeline
+              Customers
+            </button>
+            <button
+              onClick={() => setActiveTab('Emails')}
+              className={`px-4 py-2 text-sm font-medium rounded-full transition-all duration-200 ${
+                activeTab === 'Emails' 
+                  ? 'bg-white text-gray-900 shadow-sm' 
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Emails
             </button>
           </nav>
         </div>
@@ -213,72 +235,101 @@ export default function CustomerProfilePage() {
         {/* Tab Content */}
         {activeTab === 'Overview' && (
           <div className="space-y-8">
-            {/* Overview Section */}
+            {/* Company Overview Section */}
             <div className="bg-white p-6 rounded-lg border border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-800 mb-4">Overview</h2>
-                <div className="grid md:grid-cols-3 gap-6">
-                    <div className="md:col-span-2">
-                        <h3 className="text-md font-semibold text-gray-700 mb-3">Recent Interactions</h3>
-                        <ul className="space-y-4">
-                          {(() => {
-                            const emails: EmailRow[] = Array.isArray(customer?.emails) ? (customer!.emails as EmailRow[]) : []
-                            const meetings: MeetingRow[] = Array.isArray(customer?.meetings) ? (customer!.meetings as MeetingRow[]) : []
-
-                            type Item = { date: string; summary: string | null }
-                            const items: Item[] = [
-                              ...emails.map((e): Item => ({ date: e.received_at ?? '', summary: e.snippet })),
-                              ...meetings.map((m): Item => ({ date: getMeetingStart(m), summary: m.summary }))
-                            ]
-                              .filter((i) => Boolean(i.date))
-                              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                              .slice(0, 3)
-
-                            return items.length > 0 ? (
-                              items.map((item, index) => (
-                                <li key={index}>
-                                  <p className="font-medium text-gray-800 text-sm">{item.summary || 'No summary available.'}</p>
-                                  <p className="text-xs text-gray-500">{new Date(item.date).toLocaleDateString()}</p>
-                                </li>
-                              ))
-                            ) : (
-                              <li className="text-gray-500 text-sm">No interactions found</li>
-                            )
-                          })()}
-                        </ul>
+                <h2 className="text-lg font-semibold text-gray-800 mb-4">Company Overview</h2>
+                <div className="grid md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 className="text-md font-semibold text-gray-700 mb-3">Company Details</h3>
+                        <div className="space-y-2">
+                            <p><span className="font-medium">Company Name:</span> {company.company_name}</p>
+                            <p><span className="font-medium">Domain:</span> {company.domain_name}</p>
+                            <p><span className="font-medium">Status:</span> {company.status || 'Active'}</p>
+                            <p><span className="font-medium">Health Score:</span> {company.health_score || 'Not set'}%</p>
+                            <p><span className="font-medium">MRR:</span> ${company.mrr ? company.mrr.toLocaleString() : 'Not set'}</p>
+                            <p><span className="font-medium">Renewal Date:</span> {company.renewal_date ? new Date(company.renewal_date).toLocaleDateString() : 'Not set'}</p>
+                        </div>
                     </div>
                     <div>
-                        <h3 className="text-md font-semibold text-gray-700 mb-3">Overall Sentiment</h3>
-                         <div className="bg-green-50 border-l-4 border-green-400 p-4 rounded-r-lg">
-                            <p className="text-sm font-semibold text-green-800 flex items-center"><CheckCircle size={16} className="mr-2" /> Positive</p>
-                            <p className="text-xs text-green-700 mt-1">Customer shows high satisfaction with current services. Recent interactions indicate strong engagement.</p>
+                        <h3 className="text-md font-semibold text-gray-700 mb-3">Activity Summary</h3>
+                        <div className="space-y-2">
+                            <p><span className="font-medium">Total Customers:</span> {company.total_customers}</p>
+                            <p><span className="font-medium">Total Emails:</span> {company.total_emails}</p>
+                            <p><span className="font-medium">Last Interaction:</span> {company.last_interaction_at ? new Date(company.last_interaction_at).toLocaleDateString() : 'Not set'}</p>
+                            <p><span className="font-medium">Created:</span> {company.created_at ? new Date(company.created_at).toLocaleDateString() : 'Not set'}</p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Product Feedback Section */}
+            {/* Company Activity Section */}
             <div className="bg-white p-6 rounded-lg border border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-800 mb-4">Product Feedback</h2>
+                <h2 className="text-lg font-semibold text-gray-800 mb-4">Recent Activity</h2>
                 <div className="space-y-4">
-                    {(customer.featureRequests ?? []).map((req, index) => (
-                        <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-md">
-                            <div>
-                                <p className="font-medium text-gray-800">{req.features.title}</p>
-                                <div className="flex items-center space-x-2 mt-1">
-                                    <span className={`text-xs px-2 py-0.5 rounded-full ${req.urgency === 'High' ? 'bg-red-100 text-red-800' : req.urgency === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>
-                                        Urgency: {req.urgency}
-                                    </span>
+                    {company.emails.length > 0 ? (
+                        company.emails.slice(0, 3).map((email, index) => (
+                            <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-md">
+                                <div>
+                                    <p className="font-medium text-gray-800">{email.subject}</p>
+                                    <p className="text-sm text-gray-600">From: {email.sender}</p>
                                 </div>
+                                <span className="text-xs text-gray-500">{new Date(email.received_at).toLocaleDateString()}</span>
                             </div>
-                            <span className="text-xs font-medium text-gray-500">Planned</span>
-                        </div>
-                    ))}
+                        ))
+                    ) : (
+                        <p className="text-gray-500">No recent activity found.</p>
+                    )}
                 </div>
             </div>
           </div>
         )}
 
-        {activeTab === 'Timeline' && renderTimeline()}
+        {activeTab === 'Customers' && (
+          <div className="bg-white p-6 rounded-lg border border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">Company Customers</h2>
+            {company.customers.length > 0 ? (
+              <div className="space-y-4">
+                {company.customers.map((customer) => (
+                  <div key={customer.customer_id} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-medium text-gray-900">{customer.full_name}</h3>
+                        <p className="text-sm text-gray-600">{customer.email}</p>
+                      </div>
+                      <span className="text-xs text-gray-500">Customer ID: {customer.customer_id}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500">No customers found for this company.</p>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'Emails' && (
+          <div className="bg-white p-6 rounded-lg border border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">Recent Emails</h2>
+            {company.emails.length > 0 ? (
+              <div className="space-y-4">
+                {company.emails.slice(0, 10).map((email) => (
+                  <div key={email.id} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-medium text-gray-900">{email.subject}</h3>
+                      <span className="text-xs text-gray-500">{new Date(email.received_at).toLocaleDateString()}</span>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-2">From: {email.sender}</p>
+                    {email.body_text && (
+                      <p className="text-sm text-gray-700 line-clamp-3">{email.body_text.substring(0, 200)}...</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500">No emails found for this company.</p>
+            )}
+          </div>
+        )}
       </div>
       
       {/* Interaction Modal */}

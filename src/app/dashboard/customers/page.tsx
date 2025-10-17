@@ -157,9 +157,12 @@ const CustomersSection: React.FC = () => {
                     <tr key={index} className="bg-white border-b hover:bg-gray-50">
                       <td className="p-4"><input type="checkbox" className="rounded" /></td>
                       <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
-                        <span className="text-gray-900">
+                        <Link 
+                          href={`/dashboard/customers/${company.company_id}`} 
+                          className="hover:text-purple-600 transition-colors"
+                        >
                           {company.company_name}
-                        </span>
+                        </Link>
                       </td>
                       <td className="px-6 py-4">
                         {company.health_score ? (

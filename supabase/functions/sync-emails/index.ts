@@ -127,114 +127,118 @@ serve(async (req) => {
       // (The batching logic using Gmail Batch API is complex and less readable,
       // let's revert to a slightly slower but more robust individual fetch for easier debugging)
       for (const msgId of messageIds) {
-          console.log(`📧 Processing email with messageId: ${msgId}`);
-          const msgResp = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=full`, {
-            headers: { Authorization: `Bearer ${provider_token}` }
-          });
-          if (!msgResp.ok) {
-              console.warn(`Failed to fetch details for message ${msgId}. Skipping.`);
-              continue;
-          }
-          const msgJson = await msgResp.json();
-          const headers = msgJson?.payload?.headers || [];
-          const subject = headers.find((h: { name: string; value: string }) => h.name.toLowerCase() === 'subject')?.value || 'No Subject';
-          const from = headers.find((h: { name: string; value: string }) => h.name.toLowerCase() === 'from')?.value || 'Unknown Sender';
-          
-          console.log(`📧 Email details - Subject: "${subject}", From: "${from}"`);
-          
-          // ✅ FIX: Use the robust helper function to get email bodies
-          const bodies = collectBodies(msgJson.payload);
-          
-          // Extract sender email and name from the 'From' header
-          const senderEmail = from.match(/<([^>]+)>/) ? from.match(/<([^>]+)>/)![1] : from.split(' ').pop() || from;
-          const senderName = from.includes('<') ? from.split('<')[0].trim().replace(/"/g, '') : from;
-          
-          // Extract domain from senderEmail
-          const domain = senderEmail ? senderEmail.split('@')[1] : null;
-          
-          // ✅ COMPANY AND CUSTOMER CREATION: Two-step process
-          let customerId = null;
-          if (senderEmail && domain) {
-            try {
-              // Step 1: Create or find company based on domain
-              const companyName = domain.split('.')[0]
-                .split('-')
-                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                .join(' ');
-              
-              console.log(`Creating/finding company: ${companyName} for domain: ${domain}`);
-              
-              const { data: company, error: companyError } = await supabaseAdmin
-                .from('companies')
-                .upsert(
-                  {
-                    domain_name: domain,
-                    company_name: companyName,
-                    user_id: userId
-                  },
-                  { onConflict: 'user_id, domain_name', ignoreDuplicates: false }
-                )
-                .select('company_id')
-                .single();
-
-              if (companyError) {
-                console.error('Company upsert error:', companyError);
-                throw companyError;
-              }
-
-              const companyId = company?.company_id;
-              
-              if (companyId) {
-                console.log(`Company created/found with ID: ${companyId}`);
-                
-                // Step 2: Create or find customer linked to company
-                const { data: customer, error: customerError } = await supabaseAdmin
-                  .from('customers')
-                  .upsert(
-                    {
-                      email: senderEmail,
-                      full_name: senderName,
-                      company_id: companyId
-                    },
-                    { onConflict: 'email', ignoreDuplicates: false }
-                  )
-                  .select('customer_id')
-                  .single();
-
-                if (customerError) {
-                  console.error('Customer upsert error:', customerError);
-                  throw customerError;
-                }
-
-                if (customer) {
-                  customerId = customer.customer_id;
-                  console.log(`Customer created/found with ID: ${customerId}`);
-                }
-              } else {
-                console.error('Failed to get company ID');
-              }
-            } catch (error) {
-              console.error('Error in company/customer creation:', error);
-              // Continue processing other emails even if this one fails
-            }
-          }
-          
-          if (customerId) {
-              emailsToStore.push({
-                  user_id: userId,
-                  gmail_message_id: msgJson.id,
-                  subject: subject,
-                  sender: from,
-                  snippet: msgJson.snippet,
-                  body_text: bodies.text, // ✅ FIX: Save the text body
-                  body_html: bodies.html, // ✅ FIX: Save the HTML body
-                  received_at: new Date(Number(msgJson.internalDate)).toISOString(),
-                  customer_id: customerId, // ✅ LINK: Associate email with customer
+          try {
+              console.log(`📧 Processing email with messageId: ${msgId}`);
+              const msgResp = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=full`, {
+                headers: { Authorization: `Bearer ${provider_token}` }
               });
+              if (!msgResp.ok) {
+                  console.warn(`Failed to fetch details for message ${msgId}. Skipping.`);
+                  continue;
+              }
+              const msgJson = await msgResp.json();
+              const headers = msgJson?.payload?.headers || [];
+              const subject = headers.find((h: { name: string; value: string }) => h.name.toLowerCase() === 'subject')?.value || 'No Subject';
+              const from = headers.find((h: { name: string; value: string }) => h.name.toLowerCase() === 'from')?.value || 'Unknown Sender';
               
-              console.log(`✅ Successfully processed email ${msgId} - Customer ID: ${customerId}`);
-          } else {
-              console.warn(`Skipping email from "${senderEmail}" (Subject: "${subject}") because no valid customer could be created.`);
+              console.log(`📧 Email details - Subject: "${subject}", From: "${from}"`);
+              
+              // ✅ FIX: Use the robust helper function to get email bodies
+              const bodies = collectBodies(msgJson.payload);
+              
+              // Extract sender email and name from the 'From' header
+              const senderEmail = from.match(/<([^>]+)>/) ? from.match(/<([^>]+)>/)![1] : from.split(' ').pop() || from;
+              const senderName = from.includes('<') ? from.split('<')[0].trim().replace(/"/g, '') : from;
+              
+              // Extract domain from senderEmail
+              const domain = senderEmail ? senderEmail.split('@')[1] : null;
+              
+              // ✅ COMPANY AND CUSTOMER CREATION: Two-step process
+              let customerId = null;
+              if (senderEmail && domain) {
+                try {
+                  // Step 1: Create or find company based on domain
+                  const companyName = domain.split('.')[0]
+                    .split('-')
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(' ');
+                  
+                  console.log(`Creating/finding company: ${companyName} for domain: ${domain}`);
+                  
+                  const { data: company, error: companyError } = await supabaseAdmin
+                    .from('companies')
+                    .upsert(
+                      {
+                        domain_name: domain,
+                        company_name: companyName,
+                        user_id: userId
+                      },
+                      { onConflict: 'user_id, domain_name', ignoreDuplicates: false }
+                    )
+                    .select('company_id')
+                    .single();
+
+                  if (companyError) {
+                    console.error('Company upsert error:', companyError);
+                    throw companyError;
+                  }
+
+                  const companyId = company?.company_id;
+                  
+                  if (companyId) {
+                    console.log(`Company created/found with ID: ${companyId}`);
+                    
+                    // Step 2: Create or find customer linked to company
+                    const { data: customer, error: customerError } = await supabaseAdmin
+                      .from('customers')
+                      .upsert(
+                        {
+                          email: senderEmail,
+                          full_name: senderName,
+                          company_id: companyId
+                        },
+                        { onConflict: 'email', ignoreDuplicates: false }
+                      )
+                      .select('customer_id')
+                      .single();
+
+                    if (customerError) {
+                      console.error('Customer upsert error:', customerError);
+                      throw customerError;
+                    }
+
+                    if (customer) {
+                      customerId = customer.customer_id;
+                      console.log(`Customer created/found with ID: ${customerId}`);
+                    }
+                  } else {
+                    console.error('Failed to get company ID');
+                  }
+                } catch (error) {
+                  console.error('Error in company/customer creation:', error);
+                  // Continue processing other emails even if this one fails
+                }
+              }
+              
+              if (customerId) {
+                  emailsToStore.push({
+                      user_id: userId,
+                      gmail_message_id: msgJson.id,
+                      subject: subject,
+                      sender: from,
+                      snippet: msgJson.snippet,
+                      body_text: bodies.text, // ✅ FIX: Save the text body
+                      body_html: bodies.html, // ✅ FIX: Save the HTML body
+                      received_at: new Date(Number(msgJson.internalDate)).toISOString(),
+                      customer_id: customerId, // ✅ LINK: Associate email with customer
+                  });
+                  
+                  console.log(`✅ Successfully processed email ${msgId} - Customer ID: ${customerId}`);
+              } else {
+                  console.warn(`Skipping email from "${senderEmail}" (Subject: "${subject}") because no valid customer could be created.`);
+              }
+          } catch (error) {
+              console.error(`Failed to process message ${msgId}. Skipping. Error:`, error);
           }
       }
     }
