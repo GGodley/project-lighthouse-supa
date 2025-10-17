@@ -12,7 +12,7 @@ type Email = {
   subject: string;
   sender: string;
   snippet: string;
-  received_at: string;
+  date: string;
   created_at: string;
 };
 
@@ -205,7 +205,7 @@ export default function EmailsPage() {
                     </div>
                     <div className="flex items-center space-x-2">
                       <span className="text-sm text-gray-500">
-                        {email.received_at ? formatDate(email.received_at) : ''}
+                        {email.date ? formatDate(email.date) : ''}
                       </span>
                     </div>
                   </div>

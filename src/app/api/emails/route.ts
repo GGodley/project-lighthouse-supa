@@ -16,7 +16,7 @@ export async function GET() {
       .from('emails')
       .select('*')
       .eq('user_id', user.id)
-      .order('received_at', { ascending: false })
+      .order('date', { ascending: false })
       .limit(10)
 
     if (error) {
