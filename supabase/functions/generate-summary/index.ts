@@ -40,23 +40,35 @@ Deno.serve(async (req) => {
     // --- Construct the AI Prompt ---
     const prompt = `
       You are a helpful assistant for a Customer Success Manager.
-      Your task is to create a concise, structured summary of a customer meeting.
+      Your task is to create a concise, structured summary of a customer meeting and analyze the customer's sentiment.
       Use the provided context and transcript to generate the summary.
 
-      **Context:**
+      Context:
       - Meeting Title/URL: ${meetingTitle}
       - Meeting Attendees: ${attendeeList}
 
-      **Meeting Transcript:**
+      Meeting Transcript:
       """
       ${transcriptText}
       """
 
-      **Instructions:**
+      Instructions:
       Generate a summary with the following sections:
-      1.  **Key Discussion Points:** A brief overview of the main topics discussed.
-      2.  **Action Items:** A bulleted list of any tasks or follow-ups assigned to anyone. If none, state "No action items were identified."
-      3.  **Customer Sentiment:** A one-sentence analysis of the customer's mood or satisfaction level during the call.
+
+      Key Discussion Points: A brief overview of the main topics discussed.
+
+      Action Items: A bulleted list of any tasks or follow-ups assigned to anyone. If none, state "No action items were identified."
+
+      Customer Sentiment: A single word describing the overall customer sentiment.
+
+      Response Format:
+      Return your response as a valid JSON object with exactly three keys:
+      
+      "discussion_points": A string containing the key discussion points.
+      
+      "action_items": A string containing the bulleted list of action items.
+      
+      "sentiment": A single word for the sentiment (choose from: "positive", "negative", "neutral").
     `;
 
     // --- Call OpenAI API ---
@@ -66,8 +78,8 @@ Deno.serve(async (req) => {
       model: "gpt-3.5-turbo",
     });
 
-    const summary = chatCompletion.choices[0].message.content;
-    console.log("Received summary from OpenAI.");
+    const responseContent = chatCompletion.choices[0].message.content;
+    console.log("Received response from OpenAI.");
 
     // --- Update the Database ---
     const supabaseClient = createClient(
@@ -81,8 +93,8 @@ Deno.serve(async (req) => {
     const { error: updateError } = await supabaseClient
       .from('transcription_jobs')
       .update({
-        summary: summary,
-        status: 'completed',
+        summary_raw_response: responseContent ?? '',
+        status: 'summary_received',
         completed_at: new Date().toISOString()
       })
       .eq('id', job.id);
@@ -92,11 +104,11 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to update transcription job: ${updateError.message}`);
     }
 
-    console.log(`Successfully updated job ${job.id} with summary.`);
+    console.log(`Successfully updated transcription job ${job.id} with raw summary response.`);
     return new Response(JSON.stringify({ success: true }), { status: 200 });
 
   } catch (error) {
     console.error("Error in generate-summary function:", error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500 });
   }
 });

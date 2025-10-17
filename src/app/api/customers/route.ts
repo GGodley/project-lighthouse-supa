@@ -30,18 +30,18 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: customers, error: customerError } = await supabase
-      .from('customers')
-      .select('*') // This now fetches all columns, including last_interaction_at
+    const { data: companies, error: companyError } = await supabase
+      .from('companies')
+      .select('company_id, company_name, health_score, status, mrr, renewal_date, last_interaction_at, created_at')
       .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+      .order('company_name', { ascending: true });
 
-    if (customerError) {
-      console.error('Supabase fetch error:', customerError.message);
+    if (companyError) {
+      console.error('Supabase fetch error:', companyError.message);
       return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 
-    return NextResponse.json({ customers: customers ?? [] }, { status: 200 });
+    return NextResponse.json({ companies: companies ?? [] }, { status: 200 });
   } catch (e) {
     console.error('Unexpected API error:', e);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

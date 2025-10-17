@@ -73,19 +73,19 @@ export async function fetchCustomerProfileWithInteractions(customerId: string, r
 }
 
 /**
- * Fetches all customers for a user using the API route
- * @returns Promise with customers array or error
+ * Fetches all companies for a user using the API route
+ * @returns Promise with companies array or error
  */
-export async function fetchCustomers() {
+export async function fetchCompanies() {
   try {
     const response = await fetch('/api/customers', { cache: 'no-store' })
     if (!response.ok) {
-      throw new Error('Failed to fetch customers')
+      throw new Error('Failed to fetch companies')
     }
     const data = await response.json()
-    return data.customers || []
+    return data.companies || []
   } catch (error) {
-    console.error('Error in fetchCustomers:', error)
+    console.error('Error in fetchCompanies:', error)
     throw error
   }
 }

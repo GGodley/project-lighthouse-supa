@@ -361,6 +361,16 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/process-events/index.ts"
 
+[functions.process-summary]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/process-summary/index.ts"
+
+[functions.cleanup-meeting-data]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/cleanup-meeting-data/index.ts"
+
 [functions.email-summarizer]
 enabled = true
 verify_jwt = false

@@ -46,23 +46,63 @@ Deno.serve(async (req) => {
       );
 
       // --- 3. Database Lookup ---
-      console.log(`[LOG] Searching for job with recall_bot_id: ${botIdFromPayload}`);
+      console.log(`[LOG] Searching for meeting with recall_bot_id: ${botIdFromPayload}`);
+      const { data: meeting, error: meetingFetchError } = await supabaseClient
+        .from('meetings')
+        .select('google_event_id')
+        .eq('recall_bot_id', botIdFromPayload)
+        .maybeSingle();
+
+      if (meetingFetchError) {
+        console.error(`Database fetch error: ${meetingFetchError.message}`);
+        throw new Error(`Database fetch error: ${meetingFetchError.message}`);
+      }
+      
+      if (!meeting) {
+        console.warn(`No meeting found for bot_id: ${botIdFromPayload}. Returning 200 to stop webhook retries.`);
+        return new Response("OK (no matching meeting found)", { status: 200 });
+      }
+      
+      console.log(`[LOG] Found meeting with google_event_id: ${meeting.google_event_id}`);
+      
+      // Update meeting status to 'processing'
+      console.log(`[LOG] Updating meeting status to 'processing'`);
+      const { error: processingUpdateError } = await supabaseClient
+        .from('meetings')
+        .update({ status: 'processing' })
+        .eq('recall_bot_id', botIdFromPayload);
+        
+      if (processingUpdateError) {
+        console.error(`Failed to update meeting status to processing: ${processingUpdateError.message}`);
+        throw new Error(`Failed to update meeting status: ${processingUpdateError.message}`);
+      }
+      console.log(`[LOG] Meeting status updated to 'processing'`);
+      
+      // Now fetch the transcription job using the meeting's google_event_id
       const { data: job, error: fetchError } = await supabaseClient
         .from('transcription_jobs')
         .select('id, status')
-        .eq('recall_bot_id', botIdFromPayload)
-        .single();
+        .eq('meeting_id', meeting.google_event_id)
+        .maybeSingle();
 
-      if (fetchError) throw new Error(`Database fetch error: ${fetchError.message}`);
-      if (!job) throw new Error(`No job found for bot_id: ${botIdFromPayload}`);
+      if (fetchError) {
+        console.error(`Database fetch error: ${fetchError.message}`);
+        throw new Error(`Database fetch error: ${fetchError.message}`);
+      }
+      
+      if (!job) {
+        console.warn(`No transcription job found for meeting: ${meeting.google_event_id}. Returning 200 to stop webhook retries.`);
+        return new Response("OK (no matching job found)", { status: 200 });
+      }
+      
       console.log(`[LOG] Found job ${job.id} with status: '${job.status}'`);
 
       // --- 4. Idempotency Check ---
-      if (job.status !== 'processing') {
-        console.log(`[LOG] Idempotency check failed. Job status is not 'processing'. Exiting successfully.`);
+      if (job.status === 'completed' || job.status === 'failed') {
+        console.log(`[LOG] Job is already finished with status: '${job.status}'. Exiting successfully.`);
         return new Response("OK (already processed)", { status: 200 });
       }
-      console.log("[LOG] Idempotency check passed.");
+      console.log("[LOG] Idempotency check passed. Job status:", job.status);
 
       // --- 5. Fetch Transcript from Recall.ai ---
       const transcriptId = payload.data?.transcript?.id;
@@ -107,6 +147,32 @@ Deno.serve(async (req) => {
         throw new Error(`Failed to update job ${job.id}: ${updateError.message}`);
       }
       console.log(`[SUCCESS] Job ${job.id} updated successfully in the database.`);
+      
+      // Final update: set meeting status to 'done'
+      console.log(`[LOG] Updating meeting status to 'done'`);
+      const { error: doneUpdateError } = await supabaseClient
+        .from('meetings')
+        .update({ status: 'done' })
+        .eq('recall_bot_id', botIdFromPayload);
+        
+      if (doneUpdateError) {
+        console.error(`Failed to update meeting status to done: ${doneUpdateError.message}`);
+        throw new Error(`Failed to update meeting status to done: ${doneUpdateError.message}`);
+      }
+      console.log(`[LOG] Meeting status updated to 'done'`);
+
+      // Update transcription_jobs status to 'awaiting_summary'
+      console.log(`[LOG] Updating transcription_jobs status to 'awaiting_summary'`);
+      const { error: jobCompleteError } = await supabaseClient
+        .from('transcription_jobs')
+        .update({ status: 'awaiting_summary' })
+        .eq('id', job.id);
+        
+      if (jobCompleteError) {
+        console.error(`Failed to update transcription_jobs status to awaiting_summary: ${jobCompleteError.message}`);
+        throw new Error(`Failed to update transcription_jobs status: ${jobCompleteError.message}`);
+      }
+      console.log(`[LOG] Transcription job status updated to 'awaiting_summary'`);
     }
     
     console.log("[END] Process complete. Returning 200 OK.");

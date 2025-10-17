@@ -62,29 +62,27 @@ const ActionsDropdown: React.FC<{ customerId: string }> = ({ customerId }) => {
   )
 }
 
-// Customer type based on your database structure
-type Customer = {
-  id: string
-  name: string
-  company_name?: string
-  contact_email: string
-  health_score?: number
-  status?: string
-  mrr?: number
-  renewal_date?: string
-  last_interaction_at?: string
-  created_at: string
+// Company type based on exact database schema
+type Company = {
+  company_id: string
+  company_name: string | null
+  health_score: number | null
+  status: string | null
+  mrr: number | null
+  renewal_date: string | null
+  last_interaction_at: string | null
+  created_at: string | null
 }
 
-// Main Customer Dashboard Component
+// Main Company Dashboard Component
 const CustomersSection: React.FC = () => {
-  const [customers, setCustomers] = useState<Customer[]>([])
+  const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const supabase = useSupabase()
 
   useEffect(() => {
-    const fetchCustomers = async () => {
+    const fetchCompanies = async () => {
       try {
         setLoading(true)
 
@@ -92,11 +90,11 @@ const CustomersSection: React.FC = () => {
         const resp = await fetch('/api/customers', { cache: 'no-store' })
         if (!resp.ok) {
           const msg = await resp.text()
-          setError(msg || 'Failed to fetch customers')
+          setError(msg || 'Failed to fetch companies')
           return
         }
         const json = await resp.json()
-        setCustomers((json.customers as Customer[]) || [])
+        setCompanies((json.companies as Company[]) || [])
       } catch (err) {
         console.error('Error:', err)
         setError('An unexpected error occurred')
@@ -105,7 +103,7 @@ const CustomersSection: React.FC = () => {
       }
     }
 
-    fetchCustomers()
+    fetchCompanies()
   }, [supabase])
 
   return (
@@ -115,30 +113,30 @@ const CustomersSection: React.FC = () => {
         {/* Header */}
         <header className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Customers</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Companies</h1>
             <p className="text-sm text-gray-500 mt-1">
-              <a href="/dashboard" className="hover:underline">Dashboard</a> / <span className="font-medium">Customers</span>
+              <a href="/dashboard" className="hover:underline">Dashboard</a> / <span className="font-medium">Companies</span>
             </p>
           </div>
           <div className="flex items-center space-x-4">
-            <input type="text" placeholder="Search customers..." className="px-4 py-2 border rounded-md text-sm" />
+            <input type="text" placeholder="Search companies..." className="px-4 py-2 border rounded-md text-sm" />
             <button className="px-5 py-2 text-sm font-semibold text-white bg-purple-600 rounded-md hover:bg-purple-700">
-              + Add Customer
+              + Add Company
             </button>
           </div>
         </header>
 
-        {/* Customer Table */}
+        {/* Company Table */}
         <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
           <div className="p-4 border-b">
-            <h2 className="text-lg font-semibold text-gray-800">Customer Overview</h2>
+            <h2 className="text-lg font-semibold text-gray-800">Company Overview</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left text-gray-600">
               <thead className="text-xs text-gray-700 uppercase bg-gray-50">
                 <tr>
                   <th scope="col" className="p-4"><input type="checkbox" className="rounded" /></th>
-                  <th scope="col" className="px-6 py-3">Customer Name</th>
+                  <th scope="col" className="px-6 py-3">Company Name</th>
                   <th scope="col" className="px-6 py-3">Health Score</th>
                   <th scope="col" className="px-6 py-3">Status</th>
                   <th scope="col" className="px-6 py-3">MRR</th>
@@ -149,51 +147,56 @@ const CustomersSection: React.FC = () => {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8} className="text-center p-8">Loading customers...</td></tr>
+                  <tr><td colSpan={8} className="text-center p-8">Loading companies...</td></tr>
                 ) : error ? (
                   <tr><td colSpan={8} className="text-center p-8 text-red-500">{error}</td></tr>
-                ) : customers.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center p-8 text-gray-500">No customers found. Add your first customer to get started.</td></tr>
+                ) : companies.length === 0 ? (
+                  <tr><td colSpan={8} className="text-center p-8 text-gray-500">No companies found. Companies will appear here after email sync.</td></tr>
                 ) : (
-                  customers.map((customer) => (
-                    <tr key={customer.id} className="bg-white border-b hover:bg-gray-50">
+                  companies.map((company, index) => (
+                    <tr key={index} className="bg-white border-b hover:bg-gray-50">
                       <td className="p-4"><input type="checkbox" className="rounded" /></td>
                       <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
-                        <Link 
-                          href={`/dashboard/customers/${customer.id}`} 
-                          className="hover:text-purple-600 transition-colors"
-                        >
-                          {customer.company_name || customer.name}
-                        </Link>
+                        <span className="text-gray-900">
+                          {company.company_name}
+                        </span>
                       </td>
                       <td className="px-6 py-4">
-                        {customer.health_score ? (
-                          <HealthScore score={customer.health_score} />
+                        {company.health_score ? (
+                          <HealthScore score={company.health_score} />
                         ) : (
                           <span className="text-gray-400">Not set</span>
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        {customer.status ? (
-                          <StatusBadge status={customer.status} />
+                        {company.status ? (
+                          <StatusBadge status={company.status} />
                         ) : (
                           <span className="text-gray-400">Not set</span>
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        {customer.mrr ? `$${customer.mrr.toLocaleString()}` : <span className="text-gray-400">Not set</span>}
+                        {company.mrr ? `$${company.mrr.toLocaleString()}` : <span className="text-gray-400">Not set</span>}
                       </td>
                       <td className="px-6 py-4">
-                        {customer.renewal_date || <span className="text-gray-400">Not set</span>}
-                      </td>
-                      <td className="px-6 py-4">
-                        {customer.last_interaction_at ? (
-                          new Date(customer.last_interaction_at).toLocaleDateString('en-CA')
+                        {company.renewal_date ? (
+                          new Date(company.renewal_date).toLocaleDateString('en-CA')
                         ) : (
                           <span className="text-gray-400">Not set</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-center"><ActionsDropdown customerId={customer.id} /></td>
+                      <td className="px-6 py-4">
+                        {company.last_interaction_at ? (
+                          new Date(company.last_interaction_at).toLocaleDateString('en-CA')
+                        ) : (
+                          <span className="text-gray-400">Not set</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <button className="text-purple-600 hover:text-purple-800 text-sm font-medium">
+                          View Details
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}

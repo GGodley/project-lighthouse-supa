@@ -21,7 +21,37 @@ Deno.serve(async (req) => {
 
     const supabaseClient = createClient(supabaseUrl!, serviceKey!)
 
-    // 3. Fetch meeting details to get the meeting_url for Recall.ai API
+    // 3. Atomic lock: conditionally update status to 'scheduling_in_progress' only if status is 'new'
+    console.log('Attempting atomic lock by updating status to scheduling_in_progress')
+    const { count, error: lockError } = await supabaseClient
+      .from('meetings')
+      .update({ status: 'scheduling_in_progress' })
+      .eq('google_event_id', meeting_id)
+      .eq('status', 'new')
+      .select('*', { count: 'exact', head: true })
+
+    if (lockError) {
+      console.error('Failed to acquire atomic lock:', lockError)
+      return new Response(JSON.stringify({ error: 'Failed to acquire lock for scheduling' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Gatekeeper check: if count is 0, another instance won the race
+    if (count === 0) {
+      console.log('Job already claimed or not in \'new\' state. Exiting.')
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: 'Job already claimed or not in new state'
+      }), { 
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+    console.log('Successfully acquired atomic lock')
+
+    // 4. Fetch meeting details after claiming the job
     const { data: meeting, error: meetingError } = await supabaseClient
       .from('meetings')
       .select('hangout_link, title, start_time')
@@ -29,13 +59,25 @@ Deno.serve(async (req) => {
       .single()
 
     if (meetingError || !meeting) {
-      return new Response(JSON.stringify({ error: 'Meeting not found. Ensure meeting_id is valid.' }), {
+      console.error('Failed to fetch meeting details after lock:', meetingError)
+      // Update status to error before throwing
+      await supabaseClient
+        .from('meetings')
+        .update({ status: 'error' })
+        .eq('google_event_id', meeting_id)
+      return new Response(JSON.stringify({ error: 'Meeting not found after lock acquisition.' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' },
       })
     }
 
     if (!meeting.hangout_link) {
+      console.error('Meeting does not have a hangout link')
+      // Update status to error before throwing
+      await supabaseClient
+        .from('meetings')
+        .update({ status: 'error' })
+        .eq('google_event_id', meeting_id)
       return new Response(JSON.stringify({ error: 'Meeting does not have a hangout link for recording.' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
@@ -65,6 +107,12 @@ Deno.serve(async (req) => {
 
     if (!response.ok) {
       const errorBody = await response.text()
+      console.error('Recall.ai API failed:', errorBody)
+      // Update status to error before throwing
+      await supabaseClient
+        .from('meetings')
+        .update({ status: 'error' })
+        .eq('google_event_id', meeting_id)
       throw new Error(`Recall.ai API failed: ${errorBody}`)
     }
 
@@ -72,7 +120,23 @@ Deno.serve(async (req) => {
     const recallData = await response.json()
     const recallBotId = recallData.id
 
-    // 4. Insert the transcription job directly using the provided meeting_id
+    // 5. Update meeting with recall_bot_id and final status
+    console.log(`Updating meetings table with recall_bot_id: ${recallBotId}`)
+    const { error: meetingUpdateError } = await supabaseClient
+      .from('meetings')
+      .update({ recall_bot_id: recallBotId, status: 'recording_scheduled' })
+      .eq('google_event_id', meeting_id)
+
+    if (meetingUpdateError) {
+      console.error('Failed to update meetings table with recall_bot_id:', meetingUpdateError)
+      return new Response(JSON.stringify({ error: 'Failed to update meeting with bot ID' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    console.log('Successfully updated meetings table with recall_bot_id')
+
+    // 6. Insert the transcription job with recording_scheduled status
     console.log('Attempting to insert into transcription_jobs...')
     const { data: job, error: jobError } = await supabaseClient
       .from('transcription_jobs')
@@ -82,7 +146,7 @@ Deno.serve(async (req) => {
         meeting_url: meeting.hangout_link,
         user_id: user_id,
         customer_id: customer_id,
-        status: 'scheduled'
+        status: 'recording_scheduled'
       })
       .select()
       .single()
@@ -95,9 +159,6 @@ Deno.serve(async (req) => {
       })
     }
     console.log('Successfully inserted into transcription_jobs.')
-
-    // 5. Update meeting status to indicate recording is in progress
-    await supabaseClient.from('meetings').update({ status: 'recording_scheduled' }).eq('google_event_id', meeting_id)
 
     // 6. Return the created job data
     return new Response(JSON.stringify({
