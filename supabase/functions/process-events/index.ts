@@ -33,6 +33,7 @@ type MeetingPayload = {
   attendees: string[]
   meeting_customer: string | null
   customer_id: string | null
+  company_id: string | null
   status: string
   dispatch_status: string
 }
@@ -189,6 +190,7 @@ serve(async (req) => {
         attendees: externalEmails,
         meeting_customer: externalEmails.length > 0 ? externalEmails[0] : null,
         customer_id: customerId,
+        company_id: companyId,
         status: statusToSet,
         dispatch_status: 'pending'
       }
