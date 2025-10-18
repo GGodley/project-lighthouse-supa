@@ -159,7 +159,6 @@ serve(async (req) => {
         .from('customers')
         .select('customer_id, company_id')
         .in('email', externalEmails)
-        .eq('user_id', userId)
         .limit(1)
         .maybeSingle();
 
