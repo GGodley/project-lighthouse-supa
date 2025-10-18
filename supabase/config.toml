@@ -363,7 +363,7 @@ entrypoint = "./functions/process-events/index.ts"
 
 [functions.process-summary]
 enabled = true
-no-verify-jwt = true
+verify_jwt = false
 entrypoint = "./functions/process-summary/index.ts"
 
 [functions.cleanup-meeting-data]
@@ -384,7 +384,7 @@ entrypoint = "./functions/sentiment-analyzer/index.ts"
 
 [functions.generate-summary]
 enabled = true
-no-verify-jwt = true
+verify_jwt = false
 import_map = "./functions/generate-summary/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
@@ -422,10 +422,10 @@ entrypoint = "./functions/process-meetings/index.ts"
 
 [functions.process-transcript]
 enabled = true
-no-verify-jwt = true
+verify_jwt = false
 entrypoint = "./functions/process-transcript/index.ts"
 
 [functions.confirm-cleanup]
 enabled = true
-no-verify-jwt = true
+verify_jwt = false
 entrypoint = "./functions/confirm-cleanup/index.ts"
