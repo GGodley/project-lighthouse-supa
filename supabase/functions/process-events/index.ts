@@ -148,40 +148,30 @@ serve(async (req) => {
       const externalDomains: (string | undefined)[] = externalAttendees.map(a => a.email?.split('@')[1])
       const primaryCustomer: string | null = (externalDomains.find(Boolean) as string | undefined) ?? null
 
-      // Find or create customer
-      let customerId: string | null = null
-      if (primaryCustomer) {
-        const { data: existingCustomer, error: findCustErr } = await supabase
-          .from('customers')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('company_name', primaryCustomer)
-          .maybeSingle()
-        
-        if (findCustErr) {
-          console.error('❌ Customer lookup failed:', findCustErr)
-        } else if (existingCustomer?.id) {
-          customerId = existingCustomer.id as string
-        } else {
-          const firstExternalEmail = externalAttendees[0]?.email || null
-          const newCustomer = {
-            user_id: userId,
-            name: primaryCustomer,
-            company_name: primaryCustomer,
-            contact_email: firstExternalEmail,
-            last_interaction_at: startIso,
-          }
-          const { data: createdCustomer, error: createCustErr } = await supabase
-            .from('customers')
-            .insert(newCustomer)
-            .select('id')
-            .single()
-          if (createCustErr) {
-            console.error('❌ Customer create failed:', createCustErr)
-          } else if (createdCustomer?.id) {
-            customerId = createdCustomer.id as string
-          }
-        }
+      console.log(`🔍 Searching for existing customer using emails: ${externalEmails.join(', ')}`);
+
+      let customerId = null;
+      let companyId = null;
+
+      // Find the first customer that matches any of the external attendees
+      const { data: customer, error: findErr } = await supabase
+        .from('customers')
+        .select('customer_id, company_id')
+        .in('email', externalEmails)
+        .eq('user_id', userId)
+        .limit(1)
+        .maybeSingle();
+
+      if (findErr) {
+        console.error('❌ Customer lookup failed:', findErr);
+      } else if (customer) {
+        // We found a match!
+        customerId = customer.customer_id;
+        companyId = customer.company_id;
+        console.log(`✅ Found matching customer: ${customerId} (Company: ${companyId})`);
+      } else {
+        // No match was found.
+        console.warn(`ℹ️ No known customer found for this meeting. The meeting will be saved without a customer link.`);
       }
 
       // Determine status
@@ -197,7 +187,7 @@ serve(async (req) => {
         end_time: endIso,
         hangout_link: event.hangoutLink ?? null,
         attendees: externalEmails,
-        meeting_customer: primaryCustomer,
+        meeting_customer: externalEmails.length > 0 ? externalEmails[0] : null,
         customer_id: customerId,
         status: statusToSet,
         dispatch_status: 'pending'
