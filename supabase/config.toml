@@ -397,3 +397,30 @@ entrypoint = "./functions/generate-summary/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/get-company-page-details/index.ts"
+
+[functions.add-to-summarization-queue]
+enabled = true
+verify_jwt = false
+import_map = "./functions/add-to-summarization-queue/deno.json"
+entrypoint = "./functions/add-to-summarization-queue/index.ts"
+
+[functions.dispatch-recall-bot]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/dispatch-recall-bot/index.ts"
+
+[functions.email-sentiment]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/email-sentiment/index.ts"
+
+[functions.process-meetings]
+enabled = true
+verify_jwt = false
+import_map = "./functions/process-meetings/deno.json"
+entrypoint = "./functions/process-meetings/index.ts"
+
+[functions.process-transcript]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/process-transcript/index.ts"
