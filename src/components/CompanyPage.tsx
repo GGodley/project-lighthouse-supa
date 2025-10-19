@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Phone, Mail, Calendar, TrendingUp, AlertCircle, CheckCircle, ListBulletIcon, ArrowUpRightIcon } from 'lucide-react';
+import { Phone, Mail, Calendar, TrendingUp, AlertCircle, CheckCircle, List, ArrowUpRight } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -220,7 +220,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
               {/* Card Header */}
               <div className="bg-gray-100 px-4 py-3 border-b">
                 <div className="flex items-center">
-                  <ListBulletIcon className="h-5 w-5 text-gray-500" />
+                  <List className="h-5 w-5 text-gray-500" />
                   <h3 className="text-lg font-semibold ml-2">Overview</h3>
                 </div>
               </div>
@@ -252,7 +252,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                   <h3 className="font-semibold mb-3">Overall Sentiment</h3>
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                     <div className="flex items-center mb-2">
-                      <ArrowUpRightIcon className="h-5 w-5 text-green-600" />
+                      <ArrowUpRight className="h-5 w-5 text-green-600" />
                       <strong className="ml-2 text-green-800">Positive</strong>
                     </div>
                     <p className="text-sm text-gray-700">
