@@ -89,14 +89,14 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
     switch (sentiment?.toLowerCase()) {
       case 'positive':
       case 'very positive':
-        return 'bg-green-100 text-green-800 border-green-200';
+        return 'bg-green-100 text-green-800';
       case 'neutral':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
+        return 'bg-blue-100 text-blue-800';
       case 'frustrated':
       case 'negative':
-        return 'bg-red-100 text-red-800 border-red-200';
+        return 'bg-red-100 text-red-800';
       default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -309,33 +309,40 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
         {/* Interaction Timeline View */}
         {activeView === 'Interaction Timeline' && (
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-semibold text-slate-800 mb-6">Interaction Timeline</h2>
+            <h2 className="text-xl font-semibold text-slate-800 mb-2">Interaction Timeline</h2>
+            <p className="text-sm text-gray-600 mb-6">Complete history of calls and emails with detailed summaries.</p>
+            
             <div className="space-y-4">
               {interaction_timeline.map((interaction, index) => (
-                <div key={index} className="flex items-start space-x-4 p-4 bg-slate-50 rounded-lg">
-                  <div className="flex-shrink-0">
-                    {interaction.interaction_type === 'meeting' ? (
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <Phone className="w-5 h-5 text-blue-600" />
-                      </div>
-                    ) : (
-                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                        <Mail className="w-5 h-5 text-green-600" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-medium text-slate-800">{interaction.title}</h3>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm text-slate-500">{formatDate(interaction.interaction_date)}</span>
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getSentimentColor(interaction.sentiment)}`}>
-                          {getSentimentIcon(interaction.sentiment)}
-                          <span className="ml-1">{interaction.sentiment}</span>
+                <div key={index} className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 mb-4">
+                  <div className="flex flex-row gap-4">
+                    {/* Left Icon Block */}
+                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-pink-100 flex items-center justify-center">
+                      {interaction.interaction_type === 'meeting' ? (
+                        <Phone className="w-5 h-5 text-pink-600" />
+                      ) : (
+                        <Mail className="w-5 h-5 text-pink-600" />
+                      )}
+                    </div>
+                    
+                    {/* Right Content Block */}
+                    <div className="flex-1">
+                      {/* Top Row (Metadata) */}
+                      <div className="flex items-center gap-3 mb-1">
+                        <span className="font-semibold">{interaction.interaction_type === 'meeting' ? 'Call' : 'Email'}</span>
+                        <span className="text-sm text-gray-500">{formatDate(interaction.interaction_date)}</span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getSentimentColor(interaction.sentiment)}`}>
+                          {interaction.sentiment}
                         </span>
                       </div>
+                      
+                      {/* Middle Row (Description) */}
+                      <p className="text-gray-800">{interaction.title}</p>
+                      <p className="text-sm text-gray-600 mt-1">{interaction.summary}</p>
+                      
+                      {/* Bottom Row (Link) */}
+                      <span className="mt-2 text-sm text-indigo-600 cursor-pointer hover:underline">Click to view full details</span>
                     </div>
-                    <p className="text-slate-600">{interaction.summary}</p>
                   </div>
                 </div>
               ))}
