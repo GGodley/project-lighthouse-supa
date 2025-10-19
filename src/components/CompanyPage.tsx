@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Phone, Mail, Calendar, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
+import { Phone, Mail, Calendar, TrendingUp, AlertCircle, CheckCircle, ListBulletIcon, ArrowUpRightIcon } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -215,50 +215,50 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
         {/* Overview View */}
         {activeView === 'Overview' && (
           <div className="space-y-6">
-            {/* Recent Interactions */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-semibold text-slate-800 mb-4">Recent Interactions</h2>
-              <div className="space-y-4">
-                {interaction_timeline.slice(0, 3).map((interaction, index) => (
-                  <div key={index} className="flex items-start space-x-3 p-4 bg-slate-50 rounded-lg">
-                    <div className="flex-shrink-0">
-                      {interaction.interaction_type === 'meeting' ? (
-                        <Phone className="w-5 h-5 text-blue-600" />
-                      ) : (
-                        <Mail className="w-5 h-5 text-green-600" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-medium text-slate-800">{interaction.title}</h3>
-                        <span className="text-sm text-slate-500">{formatDate(interaction.interaction_date)}</span>
-                      </div>
-                      <p className="text-slate-600 mt-1">{interaction.summary}</p>
-                    </div>
-                  </div>
-                ))}
+            {/* Overview Card */}
+            <div className="bg-white rounded-lg shadow-md">
+              {/* Card Header */}
+              <div className="bg-gray-100 px-4 py-3 border-b">
+                <div className="flex items-center">
+                  <ListBulletIcon className="h-5 w-5 text-gray-500" />
+                  <h3 className="text-lg font-semibold ml-2">Overview</h3>
+                </div>
               </div>
-            </div>
+              
+              {/* Card Content - 2 Column Layout */}
+              <div className="flex flex-col md:flex-row">
+                {/* Left Column - Recent Interactions */}
+                <div className="w-full md:w-2/3 p-4">
+                  <h3 className="font-semibold mb-3">Recent Interactions</h3>
+                  <div className="space-y-3">
+                    {interaction_timeline.slice(0, 3).map((interaction, index) => (
+                      <div key={index} className="flex py-3">
+                        {/* Left Side - Type & Date */}
+                        <div className="w-1/4">
+                          <span className="font-semibold text-indigo-600">Call</span>
+                          <div className="text-sm text-gray-500">{formatDate(interaction.interaction_date)}</div>
+                        </div>
+                        {/* Right Side - Description */}
+                        <div className="w-3/4">
+                          <p className="text-gray-700">{interaction.title}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
-            {/* Health Data */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-semibold text-slate-800 mb-4">Health Data</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="text-center p-4 bg-slate-50 rounded-lg">
-                  <div className="text-2xl font-bold text-slate-800">{company_details.health_score || 'N/A'}</div>
-                  <div className="text-sm text-slate-600">Health Score</div>
-                </div>
-                <div className="text-center p-4 bg-slate-50 rounded-lg">
-                  <div className="text-2xl font-bold text-slate-800">
-                    ${company_details.mrr ? company_details.mrr.toLocaleString() : 'N/A'}
+                {/* Right Column - Overall Sentiment */}
+                <div className="w-full md:w-1/3 p-4">
+                  <h3 className="font-semibold mb-3">Overall Sentiment</h3>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center mb-2">
+                      <ArrowUpRightIcon className="h-5 w-5 text-green-600" />
+                      <strong className="ml-2 text-green-800">Positive</strong>
+                    </div>
+                    <p className="text-sm text-gray-700">
+                      Customer shows high satisfaction with current services. Recent interactions indicate strong engagement and interest in expanding usage. No major concerns raised in recent communications.
+                    </p>
                   </div>
-                  <div className="text-sm text-slate-600">Monthly Revenue</div>
-                </div>
-                <div className="text-center p-4 bg-slate-50 rounded-lg">
-                  <div className="text-2xl font-bold text-slate-800">
-                    {company_details.renewal_date ? formatDate(company_details.renewal_date) : 'N/A'}
-                  </div>
-                  <div className="text-sm text-slate-600">Renewal Date</div>
                 </div>
               </div>
             </div>
