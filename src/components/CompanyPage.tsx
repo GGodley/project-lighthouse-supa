@@ -167,6 +167,36 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
     'At Risk': 'bg-red-100 text-red-800',
   };
 
+  // Convert raw health score to display percentage
+  const convertScoreToPercentage = (score: number): number => {
+    const baselinePercent = 70;
+    const maxScore = 10;  // Score at which we hit 100%
+    const minScore = -10; // Score at which we hit 0%
+
+    // Handle the ceiling
+    if (score >= maxScore) { return 100; }
+
+    // Handle the floor
+    if (score <= minScore) { return 0; }
+
+    // Handle positive scores
+    if (score > 0) {
+      // Calculate how much % to add per point
+      const percentPerPoint = (100 - baselinePercent) / maxScore; // (100 - 70) / 10 = 3
+      return Math.round(baselinePercent + (score * percentPerPoint));
+    }
+
+    // Handle negative scores
+    if (score < 0) {
+      // Calculate how much % to lose per point
+      const percentPerPoint = (baselinePercent - 0) / Math.abs(minScore); // (70 - 0) / 10 = 7
+      return Math.round(baselinePercent + (score * percentPerPoint)); // e.g., 70 + (-5 * 7) = 35
+    }
+
+    // Default case (score is 0)
+    return baselinePercent;
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="max-w-6xl mx-auto p-6">
@@ -197,7 +227,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
 
                 {/* Health score */}
                 <span className="text-slate-600">
-                  Health Score: {company_details.health_score ?? 'N/A'}%
+                  Health Score: {company_details.health_score !== null ? convertScoreToPercentage(company_details.health_score) : 'N/A'}%
                 </span>
 
                 {/* MRR */}
