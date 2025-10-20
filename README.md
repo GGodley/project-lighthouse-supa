@@ -181,3 +181,4 @@ To run from source:
 # Go >= 1.22
 go run . help
 ```
+# Trigger Vercel redeploy - Mon Oct 20 21:21:03 IDT 2025
