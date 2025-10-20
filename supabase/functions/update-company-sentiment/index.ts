@@ -34,7 +34,7 @@ serve(async (req) => {
     // Logic Step 1: Query the vw_all_interactions View (last 30 days, non-neutral only)
     const { data: interactions, error: viewError } = await supabaseAdmin
       .from('vw_all_interactions')
-      .select('sentiment_score')
+      .select('interaction_date, sentiment_score')
       .eq('company_id', company_id)
       .gt('interaction_date', thirtyDaysAgoISO) // Only last 30 days
       .neq('sentiment_score', 0); // Ignore Neutral
@@ -50,7 +50,7 @@ serve(async (req) => {
         .update({
           overall_sentiment: 'Healthy',
           health_score: 0,
-          last_interaction_at: new Date().toISOString()
+          last_interaction_at: null // Set to null if no interactions
         })
         .eq('company_id', company_id);
 
@@ -76,13 +76,19 @@ serve(async (req) => {
     let finalSentimentStatus: 'Healthy' | 'At Risk';
     if (finalHealthScore < 0) { finalSentimentStatus = 'At Risk'; } else { finalSentimentStatus = 'Healthy'; }
 
+    // Sort interactions by date to get the most recent one
+    const sortedInteractions = interactions.sort((a, b) => 
+      new Date(b.interaction_date).getTime() - new Date(a.interaction_date).getTime()
+    );
+
     // Logic Step 5: Update the companies Table
     const { error: updateError } = await supabaseAdmin
       .from('companies')
       .update({
         overall_sentiment: finalSentimentStatus,
         health_score: parseFloat(finalHealthScore.toFixed(2)),
-        last_interaction_at: new Date().toISOString()
+        // Use the date from the first interaction in our sorted list (most recent)
+        last_interaction_at: sortedInteractions[0].interaction_date
       })
       .eq('company_id', company_id);
 

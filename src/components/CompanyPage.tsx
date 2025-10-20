@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Phone, Mail, Calendar, TrendingUp, AlertCircle, CheckCircle, List, ArrowUpRight } from 'lucide-react';
+import { Phone, Mail, Calendar, TrendingUp, AlertCircle, CheckCircle, List, ArrowUpRight, Clock, Users, Sparkles } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -55,6 +55,18 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'Overview' | 'Interaction Timeline'>('Overview');
+  
+  // Next Steps state management
+  const [nextSteps, setNextSteps] = useState<Array<{id: number, text: string, completed: boolean}>>([]);
+
+  // Toggle function for next steps
+  const toggleNextStep = (id: number) => {
+    setNextSteps(
+      nextSteps.map(step => 
+        step.id === id ? { ...step, completed: !step.completed } : step
+      )
+    );
+  };
 
   useEffect(() => {
     const fetchCompanyData = async () => {
@@ -74,6 +86,17 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
         }
 
         setCompanyData(data);
+        
+        // Initialize next steps state
+        if (data && data.all_next_steps) {
+          setNextSteps(
+            data.all_next_steps.map((step, index) => ({
+              id: index,
+              text: step,
+              completed: false
+            }))
+          );
+        }
       } catch (err) {
         console.error('Error fetching company data:', err);
         const errorMessage = err instanceof Error ? err.message : 'Failed to fetch company data';
@@ -346,19 +369,92 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
               </div>
             )}
 
-            {/* Next Steps */}
-            {all_next_steps && all_next_steps.length > 0 && (
+            {/* Next Steps - New Nexus Design */}
+            {nextSteps && nextSteps.length > 0 && (
               <div className="bg-white rounded-lg shadow-sm p-6">
-                <h2 className="text-xl font-semibold text-slate-800 mb-4">Next Steps</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {all_next_steps.map((step, index) => (
-                    <div key={index} className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                      <div className="flex items-center space-x-2">
-                        <CheckCircle className="w-4 h-4 text-blue-600" />
-                        <span className="text-slate-800">{step}</span>
-                      </div>
+                {/* Main Section Header */}
+                <div className="flex items-center gap-2 mb-4">
+                  <Clock className="h-6 w-6 text-gray-500" />
+                  <h3 className="text-xl font-semibold text-gray-900">Next Steps</h3>
+                </div>
+                
+                {/* Two-Column Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* COLUMN 1: Discussed with Customer (Dynamic) */}
+                  <div>
+                    {/* Column 1 Title */}
+                    <div className="flex items-center gap-2 mb-3">
+                      <Users className="h-5 w-5 text-gray-500" />
+                      <h4 className="font-semibold">Discussed with Customer</h4>
                     </div>
-                  ))}
+                    
+                    {/* Dynamic List */}
+                    <ul className="space-y-3">
+                      {nextSteps.map((step) => (
+                        <li key={step.id} className="flex justify-between items-center">
+                          <div className="flex items-center gap-3">
+                            {/* Circular Checkbox */}
+                            <button
+                              onClick={() => toggleNextStep(step.id)}
+                              className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                                step.completed
+                                  ? 'bg-indigo-600 border-indigo-600'
+                                  : 'border-gray-300 hover:border-indigo-600'
+                              }`}
+                            >
+                              {step.completed && <CheckCircle className="w-3 h-3 text-white" />}
+                            </button>
+                            {/* Text (with line-through on complete) */}
+                            <span className={`text-gray-700 ${step.completed ? 'line-through text-gray-400' : ''}`}>
+                              {step.text}
+                            </span>
+                          </div>
+                          
+                          {/* Status Pill */}
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              step.completed
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}
+                          >
+                            {step.completed ? 'Done' : 'To Do'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  
+                  {/* COLUMN 2: Suggested Best Practices (Static) */}
+                  <div>
+                    {/* Column 2 Title */}
+                    <div className="flex items-center gap-2 mb-3">
+                      <Sparkles className="h-5 w-5 text-gray-500" />
+                      <h4 className="font-semibold">Suggested Best Practices</h4>
+                    </div>
+                    
+                    {/* Static List */}
+                    <ul className="space-y-3">
+                      <li className="p-3 bg-pink-50 border border-pink-100 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <span className="w-1.5 h-1.5 bg-pink-700 rounded-full flex-shrink-0"></span>
+                          <span className="text-gray-700">Proactive outreach before renewal date (90 days prior)</span>
+                        </div>
+                      </li>
+                      <li className="p-3 bg-pink-50 border border-pink-100 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <span className="w-1.5 h-1.5 bg-pink-700 rounded-full flex-shrink-0"></span>
+                          <span className="text-gray-700">Introduce customer to success manager for better support</span>
+                        </div>
+                      </li>
+                      <li className="p-3 bg-pink-50 border border-pink-100 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <span className="w-1.5 h-1.5 bg-pink-700 rounded-full flex-shrink-0"></span>
+                          <span className="text-gray-700">Schedule executive-level relationship building meeting</span>
+                        </div>
+                      </li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             )}

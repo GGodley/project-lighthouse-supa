@@ -145,7 +145,7 @@ const CustomersSection: React.FC = () => {
                     return (
                       <tr key={index} className="bg-white border-b hover:bg-gray-50">
                         <td className="p-4"><input type="checkbox" className="rounded" /></td>
-                        <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
+                        <td className="px-6 py-3 font-medium text-gray-900 whitespace-nowrap">
                           <Link 
                             href={`/dashboard/customers/${company.company_id}`} 
                             className="hover:text-purple-600 transition-colors"
@@ -153,7 +153,7 @@ const CustomersSection: React.FC = () => {
                             {company.company_name}
                           </Link>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-3">
                           <div className="flex items-center">
                             <span className={`w-12 font-medium ${scoreTextStyles(displayPercent)}`}>
                               {displayPercent}%
@@ -166,31 +166,31 @@ const CustomersSection: React.FC = () => {
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-3">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                             statusPillStyles[company.overall_sentiment || ''] || 'bg-gray-100 text-gray-800'
                           }`}>
                             {company.overall_sentiment || 'Not set'}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-3 text-gray-500">
                           <span>{formatMRR(company.mrr)}</span>
                         </td>
-                        <td className="px-6 py-4 text-gray-400">
+                        <td className="px-6 py-3 text-gray-500">
                           {company.renewal_date ? (
                             new Date(company.renewal_date).toLocaleDateString('en-CA')
                           ) : (
                             <span className="text-gray-400">Not set</span>
                           )}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-3 text-gray-500">
                           {company.last_interaction_at ? (
                             new Date(company.last_interaction_at).toLocaleDateString('en-CA')
                           ) : (
                             <span className="text-gray-400">Not set</span>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-center">
+                        <td className="px-6 py-3 text-center">
                           <button className="text-gray-500 hover:text-gray-800">
                             <MoreHorizontal className="h-5 w-5" />
                           </button>
