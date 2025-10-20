@@ -16,6 +16,7 @@ interface CompanyDetails {
   company_name: string | null;
   domain_name: string;
   health_score: number | null;
+  overall_sentiment: string | null;
   status: string | null;
   mrr: number | null;
   renewal_date: string | null;
@@ -160,6 +161,12 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
 
   const { company_details, product_feedback, interaction_timeline, all_next_steps } = companyData;
 
+  // Sentiment chip styles for company overall sentiment
+  const sentimentStyles: Record<string, string> = {
+    'Healthy': 'bg-green-100 text-green-800',
+    'At Risk': 'bg-red-100 text-red-800',
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="max-w-6xl mx-auto p-6">
@@ -172,12 +179,28 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
             </div>
             <div className="text-right">
               <div className="flex items-center space-x-4 text-sm">
+                {/* Status pill */}
                 <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-800">
                   {company_details.status || 'Active'}
                 </span>
+
+                {/* Overall Sentiment pill */}
+                {company_details.overall_sentiment && (
+                  <span
+                    className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      sentimentStyles[company_details.overall_sentiment] || 'bg-gray-100 text-gray-800'
+                    }`}
+                  >
+                    {company_details.overall_sentiment}
+                  </span>
+                )}
+
+                {/* Health score */}
                 <span className="text-slate-600">
-                  Health: {company_details.health_score || 'N/A'}%
+                  Health Score: {company_details.health_score ?? 'N/A'}%
                 </span>
+
+                {/* MRR */}
                 <span className="text-slate-600">
                   MRR: ${company_details.mrr ? company_details.mrr.toLocaleString() : 'N/A'}
                 </span>

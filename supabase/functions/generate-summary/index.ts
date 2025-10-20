@@ -37,11 +37,10 @@ Deno.serve(async (req) => {
       throw new Error(`Job ${job.id} has no transcript text to summarize.`);
     }
 
-    // --- Construct the AI Prompt ---
+    // --- Construct the AI Prompt (UPGRADED) ---
     const prompt = `
-      You are a helpful assistant for a Customer Success Manager.
-      Your task is to create a concise, structured summary of a customer meeting and analyze the customer's sentiment.
-      Use the provided context and transcript to generate the summary.
+      You are an expert Customer Success Manager assistant.
+      Your task is to analyze a customer meeting transcript and provide a structured summary, key action items, and a detailed sentiment analysis.
 
       Context:
       - Meeting Title/URL: ${meetingTitle}
@@ -53,29 +52,38 @@ Deno.serve(async (req) => {
       """
 
       Instructions:
-      Generate a summary with the following sections:
+      Generate a response as a valid JSON object. The customer's sentiment is the most important part.
+      Analyze the customer's words, tone, and feedback to determine their sentiment.
 
-      Key Discussion Points: A brief overview of the main topics discussed.
-
-      Action Items: A bulleted list of any tasks or follow-ups assigned to anyone. If none, state "No action items were identified."
-
-      Customer Sentiment: A single word describing the overall customer sentiment.
+      Sentiment Categories & Scores:
+      - "Very Positive" (Score: 3): Enthusiastic, explicit praise, clear plans for expansion.
+      - "Positive" (Score: 2): Satisfied, complimentary, minor issues resolved, optimistic.
+      - "Neutral" (Score: 0): No strong feelings, factual, informational, no complaints but no praise.
+      - "Negative" (Score: -2): Frustrated, confused, mentioned blockers, unhappy with a feature or price.
+      - "Frustrated" (Score: -3): Explicitly angry, threatening to churn, multiple major issues.
 
       Response Format:
-      Return your response as a valid JSON object with exactly three keys:
+      Return a valid JSON object with exactly four keys:
       
-      "discussion_points": A string containing the key discussion points.
+      "discussion_points": A string containing a concise summary of the main topics.
       
-      "action_items": A string containing the bulleted list of action items.
+      "action_items": A string containing a bulleted list of tasks. If none, state "No action items were identified."
       
-      "sentiment": A single word for the sentiment (choose from: "positive", "negative", "neutral").
+      "sentiment": A single string phrase chosen from the Sentiment Categories above (e.g., "Positive", "Negative").
+      
+      "sentiment_score": The numeric score (e.g., 2, -2) that corresponds to the chosen sentiment.
     `;
 
     // --- Call OpenAI API ---
     console.log("Sending prompt to OpenAI...");
     const chatCompletion = await openai.chat.completions.create({
-      messages: [{ role: "user", content: prompt }],
-      model: "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      model: "gpt-4o" // UPGRADED from gpt-3.5-turbo
     });
 
     const responseContent = chatCompletion.choices[0].message.content;

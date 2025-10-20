@@ -23,6 +23,7 @@ export type Database = {
           health_score: number | null
           last_interaction_at: string | null
           mrr: number | null
+          overall_sentiment: string | null
           renewal_date: string | null
           status: string | null
           updated_at: string | null
@@ -36,6 +37,7 @@ export type Database = {
           health_score?: number | null
           last_interaction_at?: string | null
           mrr?: number | null
+          overall_sentiment?: string | null
           renewal_date?: string | null
           status?: string | null
           updated_at?: string | null
@@ -49,6 +51,7 @@ export type Database = {
           health_score?: number | null
           last_interaction_at?: string | null
           mrr?: number | null
+          overall_sentiment?: string | null
           renewal_date?: string | null
           status?: string | null
           updated_at?: string | null
@@ -339,6 +342,7 @@ export type Database = {
           meeting_customer: string | null
           next_steps: string | null
           recall_bot_id: string | null
+          sentiment_score: number | null
           start_time: string | null
           status: string | null
           summary: string | null
@@ -359,6 +363,7 @@ export type Database = {
           meeting_customer?: string | null
           next_steps?: string | null
           recall_bot_id?: string | null
+          sentiment_score?: number | null
           start_time?: string | null
           status?: string | null
           summary?: string | null
@@ -379,6 +384,7 @@ export type Database = {
           meeting_customer?: string | null
           next_steps?: string | null
           recall_bot_id?: string | null
+          sentiment_score?: number | null
           start_time?: string | null
           status?: string | null
           summary?: string | null

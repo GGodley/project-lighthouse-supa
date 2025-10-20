@@ -1,91 +1,93 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-type WebhookPayload = {
-  record: TranscriptionJobRecord
-}
-
-type TranscriptionJobRecord = {
-  id: string
-  meeting_id: string
-  summary_raw_response: string | null
-}
-
-// No parsing helpers needed; we now accept strict JSON (discussion_points, action_items, sentiment)
-
-Deno.serve(async (req) => {
+Deno.serve(async (req)=>{
   try {
-    const body = (await req.json()) as WebhookPayload
-    const job = body.record
-
+    const body = await req.json();
+    const job = body.record;
     if (!job || !job.id || !job.meeting_id) {
-      return new Response(JSON.stringify({ error: 'Invalid payload: missing job or identifiers' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      return new Response(JSON.stringify({
+        error: 'Invalid payload: missing job or identifiers'
+      }), {
+        status: 400
+      });
     }
 
-    // Parse strict JSON response from generate-summary
-    const raw = job.summary_raw_response ?? ''
-    let discussionPoints = ''
-    let actionItems = ''
-    let sentimentText = 'neutral'
+    const raw = job.summary_raw_response ?? '';
+    let discussionPoints = '';
+    let actionItems = '';
+    let sentimentText = 'Neutral'; // Default text
+    let sentimentScore = 0;     // Default score (Neutral)
+
     try {
-      const parsed = JSON.parse(raw) as { discussion_points?: unknown; action_items?: unknown; sentiment?: unknown }
-      discussionPoints = typeof parsed.discussion_points === 'string' ? parsed.discussion_points.trim() : ''
-      actionItems = typeof parsed.action_items === 'string' ? parsed.action_items.trim() : ''
-      const s = typeof parsed.sentiment === 'string' ? parsed.sentiment.trim().toLowerCase() : 'neutral'
-      sentimentText = ['positive', 'negative', 'neutral'].includes(s) ? s : 'neutral'
+      const parsed = JSON.parse(raw);
+      
+      discussionPoints = typeof parsed.discussion_points === 'string' ? parsed.discussion_points.trim() : '';
+      actionItems = typeof parsed.action_items === 'string' ? parsed.action_items.trim() : '';
+
+      // Get the new sentiment text
+      const s = typeof parsed.sentiment === 'string' ? parsed.sentiment.trim() : 'Neutral';
+      sentimentText = [
+        'Very Positive',
+        'Positive',
+        'Neutral',
+        'Negative',
+        'Frustrated'
+      ].includes(s) ? s : 'Neutral';
+
+      // Get the new sentiment score
+      const score = parsed.sentiment_score;
+      sentimentScore = typeof score === 'number' && score >= -3 && score <= 3 ? score : 0;
+
     } catch (e) {
-      console.error('Failed to parse summary_raw_response JSON. Falling back to empty fields.', e)
-      discussionPoints = ''
-      actionItems = ''
-      sentimentText = 'neutral'
+      console.error('Failed to parse summary_raw_response JSON. Falling back to empty/neutral fields.', e);
+      discussionPoints = '';
+      actionItems = '';
+      sentimentText = 'Neutral';
+      sentimentScore = 0;
     }
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    )
+    const supabase = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'));
 
-    // Update meetings with parsed sections
-    const { error: meetingErr } = await supabase
-      .from('meetings')
-      .update({ summary: discussionPoints, next_steps: actionItems, customer_sentiment: sentimentText })
-      .eq('google_event_id', job.meeting_id)
+    // --- THIS IS THE KEY UPDATE ---
+    // Update meetings with all four parsed sections
+    const { error: meetingErr } = await supabase.from('meetings').update({
+      summary: discussionPoints,
+      next_steps: actionItems,
+      customer_sentiment: sentimentText,  // The text (e.g., "Positive")
+      sentiment_score: sentimentScore     // The number (e.g., 2)
+    }).eq('google_event_id', job.meeting_id);
+    // ----------------------------
 
     if (meetingErr) {
-      console.error('Failed to update meetings:', meetingErr)
-      return new Response(JSON.stringify({ error: 'Failed to update meeting' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      console.error('Failed to update meetings:', meetingErr);
+      throw new Error(`Failed to update meeting: ${meetingErr.message}`);
     }
 
     // Finalize transcription job status
-    const { error: jobErr } = await supabase
-      .from('transcription_jobs')
-      .update({ status: 'completed', completed_at: new Date().toISOString() })
-      .eq('id', job.id)
+    const { error: jobErr } = await supabase.from('transcription_jobs').update({
+      status: 'completed',
+      completed_at: new Date().toISOString()
+    }).eq('id', job.id);
 
     if (jobErr) {
-      console.error('Failed to update transcription_jobs:', jobErr)
-      return new Response(JSON.stringify({ error: 'Failed to update job status' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      console.error('Failed to update transcription_jobs:', jobErr);
+      throw new Error(`Failed to update job status: ${jobErr.message}`);
     }
 
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return new Response(JSON.stringify({
+      success: true
+    }), {
+      status: 200
+    });
+
   } catch (err) {
-    console.error('process-summary error:', err)
-    return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    console.error('process-summary error:', err);
+    return new Response(JSON.stringify({
+      error: err.message
+    }), {
+      status: 500
+    });
   }
-})
+});
 
 

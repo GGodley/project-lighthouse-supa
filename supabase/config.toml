@@ -429,3 +429,8 @@ entrypoint = "./functions/process-transcript/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/confirm-cleanup/index.ts"
+
+[functions.update-company-sentiment]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/update-company-sentiment/index.ts"
