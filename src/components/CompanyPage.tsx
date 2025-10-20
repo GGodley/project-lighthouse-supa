@@ -258,7 +258,13 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                       <div key={index} className="flex py-3">
                         {/* Left Side - Type & Date */}
                         <div className="w-1/4">
-                          <span className="font-semibold text-indigo-600">Call</span>
+                          <div className={`font-semibold ${
+                            interaction.interaction_type === 'meeting' 
+                              ? 'text-indigo-600' 
+                              : 'text-pink-600'
+                          }`}>
+                            {interaction.interaction_type === 'meeting' ? 'Call' : 'Email'}
+                          </div>
                           <div className="text-sm text-gray-500">{formatDate(interaction.interaction_date)}</div>
                         </div>
                         {/* Right Side - Description */}
