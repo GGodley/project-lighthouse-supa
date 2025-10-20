@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useSupabase } from '@/components/SupabaseProvider'
-import { EllipsisHorizontalIcon } from '@heroicons/react/24/outline'
+import { MoreHorizontal } from 'lucide-react'
 
 
 // Company type based on exact database schema
@@ -192,7 +192,7 @@ const CustomersSection: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 text-center">
                           <button className="text-gray-500 hover:text-gray-800">
-                            <EllipsisHorizontalIcon className="h-5 w-5" />
+                            <MoreHorizontal className="h-5 w-5" />
                           </button>
                         </td>
                       </tr>
