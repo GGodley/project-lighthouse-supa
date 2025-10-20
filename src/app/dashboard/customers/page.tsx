@@ -3,70 +3,15 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useSupabase } from '@/components/SupabaseProvider'
+import { EllipsisHorizontalIcon } from '@heroicons/react/24/outline'
 
-// Health Score component with a visual bar
-const HealthScore: React.FC<{ score: number }> = ({ score }) => {
-  let barColorClass = 'bg-green-500'
-  if (score < 70) barColorClass = 'bg-yellow-500'
-  if (score < 50) barColorClass = 'bg-red-500'
-
-  return (
-    <div className="flex items-center space-x-2">
-      <span className="font-medium text-gray-700">{score}%</span>
-      <div className="w-20 h-2 bg-gray-200 rounded-full">
-        <div className={`${barColorClass} h-2 rounded-full`} style={{ width: `${score}%` }}></div>
-      </div>
-    </div>
-  )
-}
-
-// Status Badge component
-const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
-  let colorClasses = 'bg-green-100 text-green-800'
-  if (status === 'Needs Attention') colorClasses = 'bg-yellow-100 text-yellow-800'
-  if (status === 'At Risk') colorClasses = 'bg-red-100 text-red-800'
-
-  return (
-    <span className={`px-3 py-1 text-xs font-medium rounded-full ${colorClasses}`}>
-      {status}
-    </span>
-  )
-}
-
-// Actions Dropdown component
-const ActionsDropdown: React.FC<{ customerId: string }> = ({ customerId }) => {
-  const [isOpen, setIsOpen] = useState(false)
-
-  return (
-    <div className="relative">
-      <button onClick={() => setIsOpen(!isOpen)} className="p-2 rounded-full hover:bg-gray-100">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500">
-          <circle cx="12" cy="12" r="1"></circle>
-          <circle cx="12" cy="5" r="1"></circle>
-          <circle cx="12" cy="19" r="1"></circle>
-        </svg>
-      </button>
-      {isOpen && (
-        <div className="absolute right-0 z-10 w-40 mt-1 bg-white border border-gray-200 rounded-md shadow-lg">
-          <ul className="py-1 text-sm text-gray-700">
-            <li>
-              <a href={`/customers/${customerId}/view`} className="block px-4 py-2 hover:bg-gray-100">View Account</a>
-            </li>
-            <li>
-              <a href={`/customers/${customerId}/edit`} className="block px-4 py-2 hover:bg-gray-100">Edit Customer</a>
-            </li>
-          </ul>
-        </div>
-      )}
-    </div>
-  )
-}
 
 // Company type based on exact database schema
 type Company = {
   company_id: string
   company_name: string | null
   health_score: number | null
+  overall_sentiment: string | null
   status: string | null
   mrr: number | null
   renewal_date: string | null
@@ -80,6 +25,49 @@ const CustomersSection: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const supabase = useSupabase()
+
+  // Helper functions
+  const convertScoreToPercentage = (score: number | null): number => {
+    if (score === null || score === undefined) return 0;
+    const baselinePercent = 70;
+    const maxScore = 10;
+    const minScore = -10;
+
+    if (score >= maxScore) return 100;
+    if (score <= minScore) return 0;
+
+    if (score > 0) {
+      const percentPerPoint = (100 - baselinePercent) / maxScore;
+      return Math.round(baselinePercent + (score * percentPerPoint));
+    }
+    if (score < 0) {
+      const percentPerPoint = (baselinePercent - 0) / Math.abs(minScore);
+      return Math.round(baselinePercent + (score * percentPerPoint));
+    }
+    return baselinePercent;
+  };
+
+  const formatMRR = (mrr: number | null) => {
+    if (mrr === null || mrr === undefined) return 'Not set';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(mrr);
+  };
+
+  const statusPillStyles: { [key: string]: string } = {
+    'Healthy': 'bg-green-100 text-green-800',
+    'At Risk': 'bg-red-100 text-red-800',
+    'Needs Attention': 'bg-yellow-100 text-yellow-800',
+  };
+
+  const scoreTextStyles = (percent: number): string => {
+    if (percent >= 70) return 'text-green-600';
+    if (percent >= 40) return 'text-orange-500';
+    return 'text-red-600';
+  };
 
   useEffect(() => {
     const fetchCompanies = async () => {
@@ -107,9 +95,8 @@ const CustomersSection: React.FC = () => {
   }, [supabase])
 
   return (
-    <div className="flex h-screen bg-gray-50 font-sans">
-      {/* Sidebar is handled by app layout in this project; keeping content area only */}
-      <main className="flex-1 p-8 overflow-y-auto w-full">
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto p-6">
         {/* Header */}
         <header className="flex items-center justify-between mb-8">
           <div>
@@ -127,8 +114,8 @@ const CustomersSection: React.FC = () => {
         </header>
 
         {/* Company Table */}
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
-          <div className="p-4 border-b">
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="mb-6">
             <h2 className="text-lg font-semibold text-gray-800">Company Overview</h2>
           </div>
           <div className="overflow-x-auto">
@@ -153,61 +140,70 @@ const CustomersSection: React.FC = () => {
                 ) : companies.length === 0 ? (
                   <tr><td colSpan={8} className="text-center p-8 text-gray-500">No companies found. Companies will appear here after email sync.</td></tr>
                 ) : (
-                  companies.map((company, index) => (
-                    <tr key={index} className="bg-white border-b hover:bg-gray-50">
-                      <td className="p-4"><input type="checkbox" className="rounded" /></td>
-                      <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
-                        <Link 
-                          href={`/dashboard/customers/${company.company_id}`} 
-                          className="hover:text-purple-600 transition-colors"
-                        >
-                          {company.company_name}
-                        </Link>
-                      </td>
-                      <td className="px-6 py-4">
-                        {company.health_score ? (
-                          <HealthScore score={company.health_score} />
-                        ) : (
-                          <span className="text-gray-400">Not set</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        {company.status ? (
-                          <StatusBadge status={company.status} />
-                        ) : (
-                          <span className="text-gray-400">Not set</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        {company.mrr ? `$${company.mrr.toLocaleString()}` : <span className="text-gray-400">Not set</span>}
-                      </td>
-                      <td className="px-6 py-4">
-                        {company.renewal_date ? (
-                          new Date(company.renewal_date).toLocaleDateString('en-CA')
-                        ) : (
-                          <span className="text-gray-400">Not set</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        {company.last_interaction_at ? (
-                          new Date(company.last_interaction_at).toLocaleDateString('en-CA')
-                        ) : (
-                          <span className="text-gray-400">Not set</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <button className="text-purple-600 hover:text-purple-800 text-sm font-medium">
-                          View Details
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  companies.map((company, index) => {
+                    const displayPercent = convertScoreToPercentage(company.health_score);
+                    return (
+                      <tr key={index} className="bg-white border-b hover:bg-gray-50">
+                        <td className="p-4"><input type="checkbox" className="rounded" /></td>
+                        <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
+                          <Link 
+                            href={`/dashboard/customers/${company.company_id}`} 
+                            className="hover:text-purple-600 transition-colors"
+                          >
+                            {company.company_name}
+                          </Link>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center">
+                            <span className={`w-12 font-medium ${scoreTextStyles(displayPercent)}`}>
+                              {displayPercent}%
+                            </span>
+                            <div className="w-full bg-gray-200 rounded-full h-1.5 ml-2">
+                              <div
+                                className={`h-1.5 rounded-full ${displayPercent >= 70 ? 'bg-green-500' : displayPercent >= 40 ? 'bg-orange-500' : 'bg-red-500'}`}
+                                style={{ width: `${displayPercent}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            statusPillStyles[company.overall_sentiment || ''] || 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {company.overall_sentiment || 'Not set'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span>{formatMRR(company.mrr)}</span>
+                        </td>
+                        <td className="px-6 py-4 text-gray-400">
+                          {company.renewal_date ? (
+                            new Date(company.renewal_date).toLocaleDateString('en-CA')
+                          ) : (
+                            <span className="text-gray-400">Not set</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          {company.last_interaction_at ? (
+                            new Date(company.last_interaction_at).toLocaleDateString('en-CA')
+                          ) : (
+                            <span className="text-gray-400">Not set</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <button className="text-gray-500 hover:text-gray-800">
+                            <EllipsisHorizontalIcon className="h-5 w-5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   )
 }
