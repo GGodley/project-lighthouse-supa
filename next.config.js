@@ -8,9 +8,6 @@ const nextConfig = {
     tsconfigPath: './tsconfig.json',
   },
   serverExternalPackages: ['@supabase/ssr'],
-  experimental: {
-    serverComponentsExternalPackages: ['@supabase/ssr'],
-  },
 }
 
 module.exports = nextConfig
