@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Phone, Mail, Calendar, TrendingUp, AlertCircle, CheckCircle, List, ArrowUpRight, Clock, Users, Sparkles } from 'lucide-react';
+import { Phone, Mail, TrendingUp, AlertCircle, CheckCircle, List, ArrowUpRight, Clock, Users, Sparkles } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -90,7 +90,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
         // Initialize next steps state
         if (data && data.all_next_steps) {
           setNextSteps(
-            data.all_next_steps.map((step, index) => ({
+            data.all_next_steps.map((step: string, index: number) => ({
               id: index,
               text: step,
               completed: false
@@ -124,18 +124,6 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
     }
   };
 
-  const getSentimentIcon = (sentiment: string | null): React.ReactElement => {
-    switch (sentiment?.toLowerCase()) {
-      case 'positive':
-      case 'very positive':
-        return <CheckCircle className="w-4 h-4" />;
-      case 'frustrated':
-      case 'negative':
-        return <AlertCircle className="w-4 h-4" />;
-      default:
-        return <TrendingUp className="w-4 h-4" />;
-    }
-  };
 
   const formatDate = (dateString: string): string => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -182,7 +170,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
     );
   }
 
-  const { company_details, product_feedback, interaction_timeline, all_next_steps } = companyData;
+  const { company_details, product_feedback, interaction_timeline } = companyData;
 
   // Sentiment chip styles for company overall sentiment
   const sentimentStyles: Record<string, string> = {
