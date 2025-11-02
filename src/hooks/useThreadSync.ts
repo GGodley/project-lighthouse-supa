@@ -1,0 +1,165 @@
+'use client';
+
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSupabase } from '@/components/SupabaseProvider';
+import { SyncStatus } from '@/lib/types/threads';
+
+interface UseThreadSyncReturn {
+  syncStatus: SyncStatus;
+  syncDetails: string;
+  jobId: number | null;
+  startSync: () => Promise<void>;
+}
+
+export function useThreadSync(provider_token: string | null | undefined, user_email: string | null | undefined): UseThreadSyncReturn {
+  const [jobId, setJobId] = useState<number | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
+  const [syncDetails, setSyncDetails] = useState<string>('');
+  const supabase = useSupabase();
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Clear polling interval on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const startSync = useCallback(async () => {
+    if (!provider_token || !user_email) {
+      setSyncStatus('failed');
+      setSyncDetails('Missing provider token or user email');
+      return;
+    }
+
+    try {
+      setSyncStatus('creating_job');
+      setSyncDetails('Creating sync job...');
+
+      // Get current user
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
+        throw new Error('No authenticated user found');
+      }
+
+      // Create job in sync_jobs table
+      const { data: job, error: jobError } = await supabase
+        .from('sync_jobs')
+        .insert({ 
+          user_id: session.user.id, 
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (jobError || !job) {
+        throw new Error(`Failed to create sync job: ${jobError?.message || 'Unknown error'}`);
+      }
+
+      const newJobId = job.id;
+      setJobId(newJobId);
+      setSyncDetails('Job created, invoking sync function...');
+
+      // Invoke sync-threads function (don't await - it will time out)
+      const { data: invokeData, error: invokeError } = await supabase.functions.invoke('sync-threads', {
+        body: { 
+          jobId: newJobId, 
+          provider_token 
+        }
+      });
+
+      if (invokeError) {
+        // Check if it's a 202 (Accepted) - this is expected
+        if (invokeData || invokeError.message?.includes('202')) {
+          setSyncStatus('syncing');
+          setSyncDetails('Sync started successfully');
+        } else {
+          throw new Error(`Failed to invoke function: ${invokeError.message}`);
+        }
+      } else {
+        setSyncStatus('syncing');
+        setSyncDetails('Sync started successfully');
+      }
+    } catch (error) {
+      console.error('Error starting sync:', error);
+      setSyncStatus('failed');
+      setSyncDetails(error instanceof Error ? error.message : 'Failed to start sync');
+    }
+  }, [provider_token, user_email, supabase]);
+
+  // Polling logic
+  useEffect(() => {
+    if (syncStatus !== 'syncing' || !jobId) {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      return;
+    }
+
+    const checkJobStatus = async () => {
+      try {
+        const { data: job, error } = await supabase
+          .from('sync_jobs')
+          .select('status, details')
+          .eq('id', jobId)
+          .single();
+
+        if (error) {
+          console.error('Error checking job status:', error);
+          return;
+        }
+
+        if (!job) {
+          return;
+        }
+
+        const status = job.status;
+
+        if (status === 'completed') {
+          setSyncStatus('completed');
+          setSyncDetails(job.details || 'Sync completed successfully');
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+        } else if (status === 'failed') {
+          setSyncStatus('failed');
+          setSyncDetails(job.details || 'Sync failed');
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+        } else if (status === 'running' || status === 'pending') {
+          setSyncDetails(job.details || `Sync ${status}...`);
+          // Continue polling
+        }
+      } catch (error) {
+        console.error('Error in checkJobStatus:', error);
+      }
+    };
+
+    // Poll every 3 seconds
+    pollingIntervalRef.current = setInterval(checkJobStatus, 3000);
+    
+    // Also check immediately
+    checkJobStatus();
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [syncStatus, jobId, supabase]);
+
+  return {
+    syncStatus,
+    syncDetails,
+    jobId,
+    startSync
+  };
+}
+
