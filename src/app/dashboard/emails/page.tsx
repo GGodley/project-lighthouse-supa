@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { RefreshCw, Search, Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import EmailSyncManager from '@/components/EmailSyncManager'
+import { getURL } from '@/lib/utils'
 
 type Email = {
   id: string;
@@ -82,7 +83,7 @@ export default function EmailsPage() {
         await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: `${window.location.origin}/auth/callback`,
+            redirectTo: `${getURL()}/auth/callback`,
             scopes: 'https://www.googleapis.com/auth/gmail.readonly',
             queryParams: { prompt: 'consent', access_type: 'offline' }
           }

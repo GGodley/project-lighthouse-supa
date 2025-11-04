@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { Button } from '@/components/ui/Button'
 import { Mail } from 'lucide-react'
+import { getURL } from '@/lib/utils'
 
 export default function AuthForm() {
   const [loading, setLoading] = useState(false)
@@ -13,7 +14,7 @@ export default function AuthForm() {
     setLoading(true)
     try {
       const options = {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${getURL()}/auth/callback`,
         scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly',
         queryParams: {
           access_type: 'offline',
@@ -26,7 +27,7 @@ export default function AuthForm() {
       console.log("🔍 GOOGLE OAUTH DIAGNOSTIC - Complete Options Blueprint:");
       console.log("Provider: google");
       console.log("Options:", JSON.stringify(options, null, 2));
-      console.log("Window Origin:", window.location.origin);
+      console.log("Dynamic URL:", getURL());
       console.log("Full Redirect URL:", options.redirectTo);
       console.log("Requested Scopes:", options.scopes);
       console.log("Query Parameters:", options.queryParams);
@@ -56,7 +57,7 @@ export default function AuthForm() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'azure',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${getURL()}/auth/callback`,
           scopes: 'email profile openid https://graph.microsoft.com/Mail.Read'
         }
       })
