@@ -43,6 +43,23 @@ serve(async (req) => {
       throw new Error(`Failed to query view: ${viewError.message}`);
     }
 
+    // 2. DATE QUERY: Get the single most recent interaction of ANY type.
+    const { data: lastInteraction, error: dateError } = await supabaseAdmin
+      .from('vw_all_interactions')
+      .select('interaction_date')
+      .eq('company_id', company_id)
+      .order('interaction_date', { ascending: false })
+      .limit(1);
+
+    if (dateError) {
+      throw new Error(`Failed to query for last date: ${dateError.message}`);
+    }
+
+    // Store the date (or null if none found at all)
+    const lastInteractionDate = lastInteraction && lastInteraction.length > 0 
+      ? lastInteraction[0].interaction_date 
+      : null;
+
     // Logic Step 2: Handle "No Interactions" Case (no non-neutral interactions)
     if (!interactions || interactions.length === 0) {
       const { error: updateError } = await supabaseAdmin
@@ -50,7 +67,7 @@ serve(async (req) => {
         .update({
           overall_sentiment: 'Healthy',
           health_score: 0,
-          last_interaction_at: null // Set to null if no interactions
+          last_interaction_at: lastInteractionDate // <-- This is the fix
         })
         .eq('company_id', company_id);
 
@@ -76,10 +93,6 @@ serve(async (req) => {
     let finalSentimentStatus: 'Healthy' | 'At Risk';
     if (finalHealthScore < 0) { finalSentimentStatus = 'At Risk'; } else { finalSentimentStatus = 'Healthy'; }
 
-    // Sort interactions by date to get the most recent one
-    const sortedInteractions = interactions.sort((a, b) => 
-      new Date(b.interaction_date).getTime() - new Date(a.interaction_date).getTime()
-    );
 
     // Logic Step 5: Update the companies Table
     const { error: updateError } = await supabaseAdmin
@@ -87,8 +100,7 @@ serve(async (req) => {
       .update({
         overall_sentiment: finalSentimentStatus,
         health_score: parseFloat(finalHealthScore.toFixed(2)),
-        // Use the date from the first interaction in our sorted list (most recent)
-        last_interaction_at: sortedInteractions[0].interaction_date
+        last_interaction_at: lastInteractionDate // <-- This is the fix
       })
       .eq('company_id', company_id);
 

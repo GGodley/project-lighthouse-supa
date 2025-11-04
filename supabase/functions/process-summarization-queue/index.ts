@@ -1,5 +1,5 @@
 //
-// ⚠️ THIS IS THE CORRECTED AND OPTIMIZED process-summarization-queue EDGE FUNCTION ⚠️
+// ⚠️ THIS IS THE UPGRADED process-summarization-queue EDGE FUNCTION WITH FULL EMAIL ANALYSIS ⚠️
 //
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -35,44 +35,6 @@ async function updateJobStatus(supabase: SupabaseClient, jobId: number, status: 
   }
 }
 
-async function generateSummary(bodyText: string): Promise<string | null> {
-    try {
-        const maxLength = 8000; // Increased limit, closer to what gpt-3.5-turbo can handle
-        const truncatedText = bodyText.length > maxLength ? bodyText.substring(0, maxLength) : bodyText;
-
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                model: 'gpt-3.5-turbo',
-                messages: [
-                    { role: 'system', content: 'You are an expert assistant that creates concise, one-sentence summaries of emails. Focus only on the main point or action item.' },
-                    { role: 'user', content: `Summarize this email:\n\n${truncatedText}` }
-                ],
-                max_tokens: 150,
-                temperature: 0.2,
-            })
-        });
-
-        if (!response.ok) {
-            const errorBody = await response.text();
-            console.error('❌ OpenAI API error:', response.status, errorBody);
-            return null;
-        }
-
-        const data = await response.json();
-        const summary = data.choices?.[0]?.message?.content;
-        return summary ? summary.trim() : null;
-    } catch (error) {
-        console.error('❌ Error calling OpenAI API:', error);
-        return null;
-    }
-}
-
-
 serve(async (_req) => {
   try {
     const supabaseAdmin = createClient(
@@ -87,7 +49,7 @@ serve(async (_req) => {
       .from('summarization_jobs')
       .select(`
         *,
-        emails (id, body_text)
+        emails (id, body_text, customer_id)
       `)
       .eq('status', 'pending')
       .lt('attempts', 3) // ✅ IMPROVEMENT: Only fetch jobs with less than 3 attempts
@@ -113,21 +75,184 @@ serve(async (_req) => {
           throw new Error('Email record or body_text is missing.');
         }
 
-        const summary = await generateSummary(email.body_text);
-        if (!summary) {
-          throw new Error('Failed to generate summary from OpenAI.');
+        // Get emailBody and Truncate
+        const MAX_CHARS = 20000;
+        const truncatedBody = email.body_text.length > MAX_CHARS 
+          ? email.body_text.substring(0, MAX_CHARS) 
+          : email.body_text;
+
+        // Fetch customer_id and company_id
+        const { data: customerData, error: customerError } = await supabaseAdmin
+          .from('customers')
+          .select('customer_id, company_id')
+          .eq('customer_id', email.customer_id)
+          .single();
+
+        if (customerError || !customerData) {
+          throw new Error(`Failed to fetch customer data: ${customerError?.message || 'Customer not found'}`);
         }
 
-        // Update the email with the summary
+        const { customer_id, company_id } = customerData;
+        if (!customer_id || !company_id) {
+          throw new Error('Missing customer_id or company_id');
+        }
+
+        // Define the New OpenAI Prompt
+        const prompt = `
+  You are an expert Customer Success Manager assistant.
+  Your task is to analyze a customer email and provide a structured summary, key action items, detailed sentiment analysis, and extract any feature requests.
+
+  Email Body:
+  """
+  ${truncatedBody} 
+  """
+
+  Instructions:
+  Generate a response as a valid JSON object.
+  Analyze the customer's words, tone, and feedback.
+
+  Sentiment Categories & Scores:
+  - "Very Positive" (Score: 3)
+  - "Positive" (Score: 2)
+  - "Neutral" (Score: 0)
+  - "Negative" (Score: -2)
+  - "Frustrated" (Score: -3)
+
+  Feature Request Urgency:
+  If you find a feature request, assign an urgency:
+  - "Low": A "nice to have" suggestion.
+  - "Medium": A feature that would provide significant value.
+  - "High": A critical request, blocker, or deal-breaker.
+
+  Response Format:
+  Return a valid JSON object with exactly five keys:
+  
+  "summary": A string containing a concise one-sentence summary of the email.
+  
+  "action_items": An array of strings. Each string is a single action item. If none, return an empty array [].
+  
+  "sentiment": A single string phrase chosen from the Sentiment Categories above.
+  
+  "sentiment_score": The numeric score that corresponds to the chosen sentiment.
+
+  "feature_requests": An array of objects. Each object must have three keys:
+    - "feature_title": A concise, generic title for the feature (e.g., "API Rate Limiting", "Mobile App Improvements").
+    - "request_details": A string summary of the specific feature being requested.
+    - "urgency": A string chosen from the Urgency levels ('Low', 'Medium', 'High'). 
+  If no feature requests are found, return an empty array [].
+`;
+
+        // Call OpenAI API
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [
+            { role: "system", content: prompt },
+            { role: "user", content: truncatedBody }
+          ],
+          response_format: { type: "json_object" },
+        });
+
+        const responseContent = completion.choices[0]?.message?.content;
+        if (!responseContent) {
+          throw new Error("Failed to generate analysis from AI model.");
+        }
+
+        // Parse the Full JSON Response
+        let summary, actionItems, sentimentText, sentimentScore;
+        let featureRequests: Array<{feature_title: string, request_details: string, urgency: string}> = [];
+        
+        try {
+          const parsed = JSON.parse(responseContent);
+
+          summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : 'No summary generated.';
+          
+          actionItems = Array.isArray(parsed.action_items) ? parsed.action_items : [];
+
+          sentimentText = [
+            'Very Positive',
+            'Positive',
+            'Neutral',
+            'Negative',
+            'Frustrated'
+          ].includes(parsed.sentiment) ? parsed.sentiment : 'Neutral';
+
+          const score = parsed.sentiment_score;
+          sentimentScore = typeof score === 'number' && score >= -3 && score <= 3 ? score : 1;
+
+          // Parse feature requests with validation
+          if (Array.isArray(parsed.feature_requests)) {
+            featureRequests = parsed.feature_requests.filter(req => 
+              typeof req === 'object' && 
+              req !== null &&
+              typeof req.feature_title === 'string' &&
+              typeof req.request_details === 'string' &&
+              ['Low', 'Medium', 'High'].includes(req.urgency)
+            );
+          }
+
+        } catch (e) {
+          console.error("Failed to parse AI JSON response:", e);
+          throw new Error("Failed to parse AI response. Raw content: " + responseContent);
+        }
+
+        // Update the emails Table
         const { error: updateEmailError } = await supabaseAdmin
           .from('emails')
-          .update({ summary, updated_at: new Date().toISOString() }) // ✅ IMPROVEMENT: Add updated_at
+          .update({
+            summary: summary,
+            next_steps: actionItems,
+            sentiment: sentimentText,
+            sentiment_score: sentimentScore
+          })
           .eq('id', job.email_id);
 
         if (updateEmailError) throw updateEmailError;
 
+        // Add Feature Request Saving Logic
+        if (featureRequests.length > 0) {
+          console.log(`Processing ${featureRequests.length} feature requests for email ${job.email_id}`);
+          
+          for (const req of featureRequests) {
+            try {
+              // Upsert Feature
+              const { data: featureData, error: featureError } = await supabaseAdmin
+                .from('features')
+                .upsert({ title: req.feature_title }, { onConflict: 'title' })
+                .select('id')
+                .single();
+
+              if (featureError || !featureData) {
+                throw new Error(`Failed to upsert feature: ${featureError?.message || 'No data returned'}`);
+              }
+
+              // Insert Feature Request
+              const { error: requestError } = await supabaseAdmin
+                .from('feature_requests')
+                .insert({
+                  company_id: company_id,
+                  customer_id: customer_id,
+                  feature_id: featureData.id,
+                  request_details: req.request_details,
+                  urgency: req.urgency,
+                  source: 'Email',
+                  email_id: job.email_id
+                });
+
+              if (requestError) {
+                throw new Error(`Failed to insert feature request: ${requestError.message}`);
+              }
+
+              console.log(`Successfully created feature request: ${req.feature_title}`);
+
+            } catch (error) {
+              console.error(`Error processing feature request "${req.feature_title}":`, error.message);
+              // Continue processing other requests even if one fails
+            }
+          }
+        }
+
         // Mark job as completed
-        await updateJobStatus(supabaseAdmin, job.id, 'completed', 'Summary generated successfully.');
+        await updateJobStatus(supabaseAdmin, job.id, 'completed', 'Full analysis generated successfully.');
         console.log(`✅ Successfully processed job ${job.id} for email ${job.email_id}`);
 
       } catch (error) {

@@ -1,5 +1,5 @@
 //
-// ⚠️ THIS IS THE UPGRADED email-summarizer EDGE FUNCTION ⚠️
+// ⚠️ THIS IS THE UPGRADED email-summarizer EDGE FUNCTION WITH FEATURE REQUESTS ⚠️
 //
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -36,17 +36,14 @@ serve(async (req)=>{
       throw new Error("Invalid payload. Email object with 'id' and 'body_text' is required.");
     }
 
-    // --- START: Add this new block ---
     // Set a max character limit. 20,000 chars is ~5k tokens, a very safe buffer.
     const MAX_CHARS = 20000; 
     let emailBody = email.body_text;
     
     if (emailBody.length > MAX_CHARS) {
       console.warn(`Email ${email.id} is too long (${emailBody.length} chars). Truncating to ${MAX_CHARS}.`);
-      // Cut the email body down to the max size
       emailBody = emailBody.substring(0, MAX_CHARS);
     }
-    // --- END: Add this new block ---
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -54,46 +51,74 @@ serve(async (req)=>{
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
+    // Step 1: Fetch customer_id and company_id
+    const { data: customerData, error: customerError } = await supabaseAdmin
+      .from('customers')
+      .select('customer_id, company_id')
+      .eq('customer_id', email.customer_id)
+      .single();
+
+    if (customerError || !customerData) {
+      throw new Error(`Failed to fetch customer data: ${customerError?.message || 'Customer not found'}`);
+    }
+
+    const { customer_id, company_id } = customerData;
+    if (!customer_id || !company_id) {
+      throw new Error('Missing customer_id or company_id');
+    }
+
     console.log(`Generating full analysis for email: ${email.id}`);
 
-    // --- UPGRADED PROMPT ---
+    // Step 2: Updated OpenAI Prompt with Feature Requests
     const prompt = `
-      You are an expert Customer Success Manager assistant.
-      Your task is to analyze a customer email and provide a structured summary, key action items, and a detailed sentiment analysis.
+  You are an expert Customer Success Manager assistant.
+  Your task is to analyze a customer email and provide a structured summary, key action items, detailed sentiment analysis, and extract any feature requests.
 
-      Email Body:
-      """
-      ${emailBody}
-      """
+  Email Body:
+  """
+  ${emailBody} 
+  """
 
-      Instructions:
-      Generate a response as a valid JSON object. The customer's sentiment is the most important part.
-      Analyze the customer's words, tone, and feedback to determine their sentiment.
+  Instructions:
+  Generate a response as a valid JSON object.
+  Analyze the customer's words, tone, and feedback.
 
-      Sentiment Categories & Scores:
-      - "Very Positive" (Score: 3): Enthusiastic, explicit praise, clear plans for expansion.
-      - "Positive" (Score: 2): Satisfied, complimentary, minor issues resolved, optimistic.
-      - "Neutral" (Score: 0): No strong feelings, factual, informational, no complaints but no praise.
-      - "Negative" (Score: -2): Frustrated, confused, mentioned blockers, unhappy with a feature or price.
-      - "Frustrated" (Score: -3): Explicitly angry, threatening to churn, multiple major issues.
+  Sentiment Categories & Scores:
+  - "Very Positive" (Score: 3)
+  - "Positive" (Score: 2)
+  - "Neutral" (Score: 0)
+  - "Negative" (Score: -2)
+  - "Frustrated" (Score: -3)
 
-      Response Format:
-      Return a valid JSON object with exactly four keys:
-      
-      "summary": A string containing a concise one-sentence summary of the email.
-      
-      "action_items": An array of strings. Each string is a single action item or follow-up. If none, return an empty array [].
-      
-      "sentiment": A single string phrase chosen from the Sentiment Categories above (e.g., "Positive", "Negative").
-      
-      "sentiment_score": The numeric score (e.g., 2, -2) that corresponds to the chosen sentiment.
-    `;
+  Feature Request Urgency:
+  If you find a feature request, assign an urgency:
+  - "Low": A "nice to have" suggestion.
+  - "Medium": A feature that would provide significant value.
+  - "High": A critical request, blocker, or deal-breaker.
+
+  Response Format:
+  Return a valid JSON object with exactly five keys:
+  
+  "summary": A string containing a concise one-sentence summary of the email.
+  
+  "action_items": An array of strings. Each string is a single action item. If none, return an empty array [].
+  
+  "sentiment": A single string phrase chosen from the Sentiment Categories above.
+  
+  "sentiment_score": The numeric score that corresponds to the chosen sentiment.
+
+  "feature_requests": An array of objects. Each object must have three keys:
+    - "feature_title": A concise, generic title for the feature (e.g., "API Rate Limiting", "Mobile App Improvements").
+    - "request_details": A string summary of the specific feature being requested.
+    - "urgency": A string chosen from the Urgency levels ('Low', 'Medium', 'High'). 
+  If no feature requests are found, return an empty array [].
+`;
     
     const completion = await openai.chat.completions.create({
       model: "gpt-4o", // Upgraded for better accuracy
       messages: [
         { role: "system", content: prompt },
-        { role: "user", content: emailBody } // Re-adding content here for safety, though system prompt is strong
+        { role: "user", content: emailBody }
       ],
       response_format: { type: "json_object" }, // Use JSON mode
     });
@@ -105,8 +130,9 @@ serve(async (req)=>{
 
     console.log("Generated analysis (raw):", responseContent);
 
-    // --- PARSE THE NEW JSON RESPONSE ---
+    // Step 3: Updated Response Parsing with Feature Requests
     let summary, actionItems, sentimentText, sentimentScore;
+    let featureRequests: Array<{feature_title: string, request_details: string, urgency: string}> = [];
     
     try {
       const parsed = JSON.parse(responseContent);
@@ -126,21 +152,75 @@ serve(async (req)=>{
       const score = parsed.sentiment_score;
       sentimentScore = typeof score === 'number' && score >= -3 && score <= 3 ? score : 1;
 
+      // Parse feature requests with validation
+      if (Array.isArray(parsed.feature_requests)) {
+        featureRequests = parsed.feature_requests.filter(req => 
+          typeof req === 'object' && 
+          req !== null &&
+          typeof req.feature_title === 'string' &&
+          typeof req.request_details === 'string' &&
+          ['Low', 'Medium', 'High'].includes(req.urgency)
+        );
+      }
+
     } catch (e) {
       console.error("Failed to parse AI JSON response:", e);
       throw new Error("Failed to parse AI response. Raw content: " + responseContent);
     }
 
-    // --- UPDATE DB WITH ALL 4 FIELDS ---
+    // Step 4: Insert Feature Request Logic
+    if (featureRequests.length > 0) {
+      console.log(`Processing ${featureRequests.length} feature requests for email ${email.id}`);
+      
+      for (const req of featureRequests) {
+        try {
+          // Upsert Feature
+          const { data: featureData, error: featureError } = await supabaseAdmin
+            .from('features')
+            .upsert({ title: req.feature_title }, { onConflict: 'title' })
+            .select('id')
+            .single();
+
+          if (featureError || !featureData) {
+            throw new Error(`Failed to upsert feature: ${featureError?.message || 'No data returned'}`);
+          }
+
+          // Insert Feature Request
+          const { error: requestError } = await supabaseAdmin
+            .from('feature_requests')
+            .insert({
+              company_id: company_id,
+              customer_id: customer_id,
+              feature_id: featureData.id,
+              request_details: req.request_details,
+              urgency: req.urgency,
+              source: 'Email',
+              email_id: email.id
+            });
+
+          if (requestError) {
+            throw new Error(`Failed to insert feature request: ${requestError.message}`);
+          }
+
+          console.log(`Successfully created feature request: ${req.feature_title}`);
+
+        } catch (error) {
+          console.error(`Error processing feature request "${req.feature_title}":`, error.message);
+          // Continue processing other requests even if one fails
+        }
+      }
+    }
+
+    // Update email with analysis
     console.log(`Updating email ${email.id} with full analysis.`);
     
     const { error: updateError } = await supabaseAdmin
       .from('emails')
       .update({
         summary: summary,
-        next_steps: actionItems, // This maps to your 'ARRAY' type 'next_steps' column
+        next_steps: actionItems,
         sentiment: sentimentText,
-        sentiment_score: sentimentScore // This maps to the 'sentiment_score' column we added
+        sentiment_score: sentimentScore
       })
       .eq('id', email.id);
 
@@ -152,7 +232,8 @@ serve(async (req)=>{
     console.log("Successfully updated email with full analysis.");
 
     return new Response(JSON.stringify({
-      message: `Full analysis added to email ${email.id}`
+      message: `Full analysis added to email ${email.id}`,
+      feature_requests_processed: featureRequests.length
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200
