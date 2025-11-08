@@ -32,7 +32,7 @@ export async function GET() {
 
     const { data: companies, error: companyError } = await supabase
       .from('companies')
-      .select('company_id, company_name, health_score, overall_sentiment, status, mrr, renewal_date, last_interaction_at, created_at')
+      .select('company_id, company_name, domain_name, health_score, overall_sentiment, status, mrr, renewal_date, last_interaction_at, created_at')
       .eq('user_id', user.id)
       .or('status.eq.active,status.is.null') // Include active companies and those with null status (excludes inactive/archived)
       .order('company_name', { ascending: true });

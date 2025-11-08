@@ -11,6 +11,7 @@ import { useThreadSync } from '@/hooks/useThreadSync'
 type Company = {
   company_id: string
   company_name: string | null
+  domain_name: string
   health_score: number | null
   overall_sentiment: string | null
   status: string | null
@@ -233,22 +234,62 @@ const CustomerThreadsPage: React.FC = () => {
     if (selectedCompanies.length === 0) return
 
     // NOTE: Replace this with a proper modal component in the future
-    if (window.confirm(`Are you sure you want to PERMANENTLY DELETE ${selectedCompanies.length} companies? This action cannot be undone.`)) {
-      const { error } = await supabase
-        .from('companies')
-        .delete()
-        .in('company_id', selectedCompanies)
-
-      if (!error) {
-        setSelectedCompanies([])
-        // Refresh the list
-        const resp = await fetch('/api/customers', { cache: 'no-store' })
-        if (resp.ok) {
-          const json = await resp.json()
-          setCompanies((json.companies as Company[]) || [])
+    if (window.confirm(`Are you sure you want to PERMANENTLY DELETE ${selectedCompanies.length} companies? Their domains will be added to the blocklist to prevent future imports. This action cannot be undone.`)) {
+      try {
+        // Get user ID for blocklist
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          console.error('Not authenticated')
+          return
         }
-      } else {
-        console.error('Error deleting companies:', error)
+
+        // Get the selected companies with their domain names
+        const companiesToDelete = companies.filter(c => selectedCompanies.includes(c.company_id))
+        const domainsToBlock = companiesToDelete.map(c => c.domain_name).filter(Boolean)
+
+        // Add domains to blocklist before deleting companies
+        if (domainsToBlock.length > 0) {
+          const blocklistEntries = domainsToBlock.map(domain => ({
+            user_id: user.id,
+            domain: domain.toLowerCase()
+          }))
+
+          // @ts-ignore - domain_blocklist table not yet in TypeScript types
+          const { error: blocklistError } = await supabase
+            .from('domain_blocklist')
+            .upsert(blocklistEntries, {
+              onConflict: 'user_id, domain',
+              ignoreDuplicates: false
+            })
+
+          if (blocklistError) {
+            console.error('Error adding domains to blocklist:', blocklistError)
+            // Continue with deletion even if blocklist fails
+          } else {
+            console.log(`✅ Added ${domainsToBlock.length} domain(s) to blocklist`)
+          }
+        }
+
+        // Delete the companies
+        const { error } = await supabase
+          .from('companies')
+          .delete()
+          .in('company_id', selectedCompanies)
+
+        if (!error) {
+          setSelectedCompanies([])
+          // Refresh the list
+          const resp = await fetch('/api/customers', { cache: 'no-store' })
+          if (resp.ok) {
+            const json = await resp.json()
+            setCompanies((json.companies as Company[]) || [])
+          }
+        } else {
+          console.error('Error deleting companies:', error)
+          // TODO: Show toast error
+        }
+      } catch (err) {
+        console.error('Error in handleDeleteSelected:', err)
         // TODO: Show toast error
       }
     }
