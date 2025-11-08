@@ -11,11 +11,14 @@ export async function GET(request: NextRequest) {
   console.log("Full Request URL:", request.url);
   console.log("Authorization Code received:", code ? "YES" : "NO");
 
-  // Create response object that will be used to set cookies
-  let response = NextResponse.redirect(`${requestUrl.origin}/dashboard`);
-
   if (code) {
     try {
+      // Create redirect response first - we'll update the URL later
+      const redirectUrl = new URL(`${requestUrl.origin}/dashboard`);
+      redirectUrl.searchParams.set('auth', 'success');
+      redirectUrl.searchParams.set('t', Date.now().toString());
+      let response = NextResponse.redirect(redirectUrl);
+
       // Create Supabase client with proper cookie handling for route handlers
       const supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -75,12 +78,18 @@ export async function GET(request: NextRequest) {
         console.warn("WARNING: Session object is null after successful code exchange.");
       }
 
-      // Update redirect URL with success parameter (keep the same response object to preserve cookies)
-      const redirectUrl = new URL(`${requestUrl.origin}/dashboard`);
-      redirectUrl.searchParams.set('auth', 'success');
-      redirectUrl.searchParams.set('t', Date.now().toString());
-      // Update the existing response's location header instead of creating a new response
-      response.headers.set('Location', redirectUrl.toString());
+      // Response already has redirect URL set and cookies from setAll above
+      // Add cache control headers to prevent caching issues
+      response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      response.headers.set('Pragma', 'no-cache');
+      response.headers.set('Expires', '0');
+      
+      console.log("--- REDIRECT DIAGNOSTIC ---");
+      console.log("Redirecting to:", response.headers.get('location'));
+      console.log("Cookies being set:", response.cookies.getAll().map(c => c.name));
+      console.log("--- END REDIRECT DIAGNOSTIC ---");
+      
+      return response;
 
     } catch (e) {
       const error = e as Error;
@@ -92,16 +101,4 @@ export async function GET(request: NextRequest) {
     console.log("Redirecting to login page due to missing authorization code.");
     return NextResponse.redirect(`${requestUrl.origin}/login?error=No authorization code provided`);
   }
-
-  // Add cache control headers to prevent caching issues
-  response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-  response.headers.set('Pragma', 'no-cache');
-  response.headers.set('Expires', '0');
-  
-  console.log("--- REDIRECT DIAGNOSTIC ---");
-  console.log("Redirecting to:", response.headers.get('location'));
-  console.log("Cookies being set:", response.cookies.getAll().map(c => c.name));
-  console.log("--- END REDIRECT DIAGNOSTIC ---");
-  
-  return response;
 }
