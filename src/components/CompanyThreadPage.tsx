@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, List, ArrowUpRight, Clock, Users, Sparkles, Mail } from 'lucide-react';
+import Link from 'next/link';
+import { AlertCircle, List, ArrowUpRight, Clock, Users, Sparkles, Mail, ArrowLeft } from 'lucide-react';
 import { useSupabase } from '@/components/SupabaseProvider';
 import { useCompanyThreads } from '@/hooks/useCompanyThreads';
 import ThreadListView from './ThreadListView';
@@ -184,6 +185,17 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="max-w-6xl mx-auto p-6">
+        {/* Back Button */}
+        <div className="mb-4">
+          <Link 
+            href="/dashboard/customer-threads"
+            className="inline-flex items-center text-sm text-slate-600 hover:text-slate-800 transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Customer Threads
+          </Link>
+        </div>
+
         {/* Header */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
