@@ -7,7 +7,7 @@ export function createClient() {
   
   console.log("🔧 Creating Supabase client with:");
   console.log("  - URL:", supabaseUrl);
-  console.log("  - Anon Key (first 20 chars):", supabaseAnonKey.substring(0, 20) + "...");
+  console.log("  - Anon Key (first 20 chars):", supabaseAnonKey ? supabaseAnonKey.substring(0, 20) + "..." : "UNDEFINED");
   console.log("  - URL domain:", supabaseUrl ? new URL(supabaseUrl).hostname : "UNDEFINED");
   
   return createBrowserClient(supabaseUrl, supabaseAnonKey);
