@@ -534,28 +534,50 @@ serve(async (req: Request) => {
                     
                     const senderName = fromHeader.includes(email) ? (fromHeader.split('<')[0].trim().replace(/"/g, '') || email) : email;
 
-                    const { data: customer, error: customerError } = await supabaseAdmin.from('customers').upsert({
-                      email: email,
-                      full_name: senderName,
-                      company_id: companyId
-                    }, {
-                      onConflict: 'company_id, email', // This is safer based on your schema
-                      ignoreDuplicates: false
-                    }).select('customer_id').single();
-                    
-                    if (customerError) throw customerError;
+                    const { data: customer, error: customerError } = await supabaseAdmin
+                      .from('customers')
+                      .upsert(
+                        {
+                          email: email,
+                          full_name: senderName,
+                          company_id: companyId,
+                        },
+                        {
+                          onConflict: 'email, company_id', // Fixed: matches database constraint
+                          ignoreDuplicates: false,
+                        }
+                      )
+                      .select('customer_id')
+                      .single();
 
-                    if (customer) {
-                      const customerId = customer.customer_id; // UUID
-                      discoveredCustomerIds.set(email, customerId);
-                      
-                      if (fromHeader.includes(email)) {
-                        msgCustomerMap.set(msg.id, customerId); // Map this message to its sender
-                      }
+                    // --- CRITICAL CHECK ---
+                    if (customerError) {
+                      console.error(`!!! FATAL: Failed to upsert customer ${email} for company ${companyId}. Error:`, customerError);
+                      // Throw the error to stop this thread from being processed
+                      // This will be caught by the main try/catch and fail the job.
+                      throw new Error(`Customer upsert failed: ${customerError.message}`);
+                    }
+
+                    if (!customer) {
+                      // This should not happen if the upsert is correct, but it's a good failsafe
+                      throw new Error(`Customer data not returned for ${email} after upsert.`);
+                    }
+                    // --- END CRITICAL CHECK ---
+
+                    const customerId = customer.customer_id; // UUID
+                    discoveredCustomerIds.set(email, customerId);
+                    
+                    if (fromHeader.includes(email)) {
+                      msgCustomerMap.set(msg.id, customerId); // Map this message to its sender
                     }
                   }
                 } catch (error) {
                   console.error(`Error in company/customer creation for ${email}:`, error);
+                  // Re-throw customer upsert errors to fail the job
+                  if (error instanceof Error && error.message.includes('Customer upsert failed')) {
+                    throw error;
+                  }
+                  // For other errors (like company creation), continue processing
                 }
               }
             }
@@ -620,6 +642,11 @@ serve(async (req: Request) => {
 
         } catch (error) {
           console.error(`Failed to process thread ${threadId}. Skipping. Error:`, error);
+          // Re-throw customer upsert errors to fail the entire job
+          if (error instanceof Error && error.message.includes('Customer upsert failed')) {
+            throw error;
+          }
+          // For other thread processing errors, continue with next thread
         }
       }
     }
