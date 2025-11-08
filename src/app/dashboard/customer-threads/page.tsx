@@ -212,7 +212,7 @@ const CustomerThreadsPage: React.FC = () => {
 
     const { error } = await supabase
       .from('companies')
-      .update({ status: 'archived' })
+      .update({ status: 'inactive' }) // Use 'inactive' instead of 'archived' (not in schema)
       .in('company_id', selectedCompanies)
 
     if (!error) {
