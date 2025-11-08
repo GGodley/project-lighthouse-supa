@@ -3,12 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { Trash2, Plus, Loader2 } from 'lucide-react'
-
-interface BlockedDomain {
-  id: string
-  domain: string
-  created_at: string
-}
+import { BlockedDomain } from '@/lib/types/threads'
 
 const BlocklistPage: React.FC = () => {
   const [domains, setDomains] = useState<BlockedDomain[]>([])
@@ -27,8 +22,9 @@ const BlocklistPage: React.FC = () => {
         return
       }
 
-      // @ts-ignore - domain_blocklist table not yet in TypeScript types
       const { data, error: fetchError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore - domain_blocklist table not yet in TypeScript types
         .from('domain_blocklist')
         .select('*')
         .eq('user_id', user.id)
@@ -38,7 +34,7 @@ const BlocklistPage: React.FC = () => {
         throw fetchError
       }
 
-      setDomains(data || [])
+      setDomains((data as unknown as BlockedDomain[]) || [])
     } catch (err) {
       console.error('Error fetching blocklist:', err)
       setError('Failed to load blocklist')
@@ -72,8 +68,9 @@ const BlocklistPage: React.FC = () => {
         return
       }
 
-      // @ts-ignore - domain_blocklist table not yet in TypeScript types
       const { error: insertError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore - domain_blocklist table not yet in TypeScript types
         .from('domain_blocklist')
         .insert({
           user_id: user.id,
@@ -99,14 +96,15 @@ const BlocklistPage: React.FC = () => {
     }
   }
 
-  const handleDeleteDomain = async (id: string) => {
+  const handleDeleteDomain = async (id: number) => {
     if (!window.confirm('Are you sure you want to remove this domain from the blocklist?')) {
       return
     }
 
     try {
-      // @ts-ignore - domain_blocklist table not yet in TypeScript types
       const { error: deleteError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore - domain_blocklist table not yet in TypeScript types
         .from('domain_blocklist')
         .delete()
         .eq('id', id)
