@@ -283,32 +283,34 @@ const CustomerThreadsPage: React.FC = () => {
 
         {/* Company Table */}
         <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="mb-6">
+          <div className="mb-6 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-800">Company Overview</h2>
-          </div>
-          
-          {/* Bulk Actions */}
-          {selectedCompanies.length > 0 && (
-            <div className="my-4 p-3 bg-gray-100 rounded-lg flex items-center space-x-3">
-              <span className="text-sm font-semibold text-gray-700">
-                {selectedCompanies.length} selected
-              </span>
+            
+            {/* Bulk Actions - Always visible */}
+            <div className="flex items-center space-x-3">
+              {selectedCompanies.length > 0 && (
+                <span className="text-sm font-semibold text-gray-700">
+                  {selectedCompanies.length} selected
+                </span>
+              )}
               <button
                 onClick={handleArchiveSelected}
-                className="px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 disabled={selectedCompanies.length === 0}
+                title={selectedCompanies.length === 0 ? "Select companies to archive" : `Archive ${selectedCompanies.length} companies`}
               >
-                Archive ({selectedCompanies.length})
+                Archive{selectedCompanies.length > 0 && ` (${selectedCompanies.length})`}
               </button>
               <button
                 onClick={handleDeleteSelected}
-                className="px-3 py-1 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 disabled={selectedCompanies.length === 0}
+                title={selectedCompanies.length === 0 ? "Select companies to delete" : `Delete ${selectedCompanies.length} companies`}
               >
-                Delete ({selectedCompanies.length})
+                Delete{selectedCompanies.length > 0 && ` (${selectedCompanies.length})`}
               </button>
             </div>
-          )}
+          </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left text-gray-600">
