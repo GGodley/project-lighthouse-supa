@@ -25,23 +25,22 @@ You need to add your production and preview URLs to Supabase's allowed redirect 
    ```
 
    **For Preview Deployments (Vercel):**
-   Based on your preview URL pattern `https://project-lighthouse-supa-git-*-*.vercel.app`, add:
+   ⚠️ **Important:** Supabase does NOT support wildcard URLs. You must add each preview URL individually.
+   
+   For your current preview deployment, add:
    ```
-   https://*.vercel.app/auth/callback
+   https://project-lighthouse-supa-git-f-dcd2bf-gabriels-projects-87b76bd9.vercel.app/auth/callback
    ```
-   This wildcard pattern will match all Vercel preview deployments.
+   
+   **Note:** Each time Vercel creates a new preview deployment (for a new branch or new commit), you'll need to add that specific URL to Supabase. Alternatively, you can:
+   - Use a custom domain for preview deployments
+   - Or add preview URLs as needed when testing
 
    **For Local Development:**
    ```
    http://localhost:3000/auth/callback
    http://127.0.0.1:3000/auth/callback
    ```
-
-   **Example for your current preview branch:**
-   ```
-   https://project-lighthouse-supa-git-f-dcd2bf-gabriels-projects-87b76bd9.vercel.app/auth/callback
-   ```
-   (Note: You can use the wildcard pattern above instead of adding each preview URL individually)
 
 4. **Set Site URL**
    - In the **"Site URL"** field, set your production URL:
