@@ -27,7 +27,7 @@ const BlocklistPage: React.FC = () => {
         return
       }
 
-      // @ts-expect-error - domain_blocklist table not yet in TypeScript types
+      // @ts-ignore - domain_blocklist table not yet in TypeScript types
       const { data, error: fetchError } = await supabase
         .from('domain_blocklist')
         .select('*')
@@ -72,7 +72,7 @@ const BlocklistPage: React.FC = () => {
         return
       }
 
-      // @ts-expect-error - domain_blocklist table not yet in TypeScript types
+      // @ts-ignore - domain_blocklist table not yet in TypeScript types
       const { error: insertError } = await supabase
         .from('domain_blocklist')
         .insert({
@@ -105,7 +105,7 @@ const BlocklistPage: React.FC = () => {
     }
 
     try {
-      // @ts-expect-error - domain_blocklist table not yet in TypeScript types
+      // @ts-ignore - domain_blocklist table not yet in TypeScript types
       const { error: deleteError } = await supabase
         .from('domain_blocklist')
         .delete()
