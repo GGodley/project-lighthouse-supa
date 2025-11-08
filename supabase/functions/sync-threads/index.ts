@@ -241,6 +241,41 @@ const summarizeThread = async (messages: any[], csmEmail: string): Promise<any> 
 };
 
 
+// --- Helper function to safely update job status ---
+async function updateJobStatus(jobId: string | null | undefined, status: 'pending' | 'running' | 'completed' | 'failed', details: string): Promise<void> {
+  if (!jobId) {
+    console.warn('Cannot update job status: jobId is missing');
+    return;
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables');
+      return;
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    });
+
+    const { error } = await supabaseAdmin
+      .from('sync_jobs')
+      .update({ status, details })
+      .eq('id', jobId);
+
+    if (error) {
+      console.error(`Failed to update job status for job ${jobId}:`, error);
+    } else {
+      console.log(`✅ Job ${jobId} status updated to: ${status}`);
+    }
+  } catch (error) {
+    console.error(`Error updating job status for job ${jobId}:`, error);
+  }
+}
+
 // --- Main Serve Function ---
 serve(async (req: Request) => {
   // --- UNCHANGED ---
@@ -248,33 +283,57 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  // --- MODIFIED ---
-  // Added local arrays to store data for batch insert
-  let threadsToStore: any[] = [];
-  let messagesToStore: any[] = [];
-  let linksToStore: any[] = [];
-  
-  const { jobId, provider_token, pageToken } = await req.json();
-  let localJobId = jobId; // Use a local var for error handling
+  // Initialize variables outside try block for error handling
+  let jobId: string | null = null;
+  let supabaseAdmin: ReturnType<typeof createClient> | null = null;
 
+  // Main try-catch block to ensure job status is always managed
   try {
-    // --- UNCHANGED ---
-    if (!localJobId || !provider_token) {
+    // Parse request body with error handling
+    let requestBody: any;
+    try {
+      requestBody = await req.json();
+    } catch (parseError) {
+      throw new Error(`Failed to parse request body: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
+    }
+
+    const { jobId: parsedJobId, provider_token, pageToken } = requestBody;
+    jobId = parsedJobId || null;
+
+    // Validate required parameters
+    if (!jobId || !provider_token) {
       throw new Error("Missing jobId or provider_token in request body.");
     }
-    const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "", {
+
+    // Create Supabase admin client early
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables");
+    }
+
+    supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     });
-    
-    // --- UNCHANGED ---
+
+    // Update job status to 'running' if this is the first page
     if (!pageToken) {
-      await supabaseAdmin.from('sync_jobs').update({ status: 'running', details: 'Starting thread sync...' }).eq('id', localJobId);
+      await updateJobStatus(jobId, 'running', 'Starting thread sync...');
     }
     
     // --- MODIFIED ---
+    // Added local arrays to store data for batch insert
+    let threadsToStore: any[] = [];
+    let messagesToStore: any[] = [];
+    let linksToStore: any[] = [];
+
+    // --- MODIFIED ---
     // Fetch user_email from profiles table via user_id
-    const { data: jobData, error: jobFetchError } = await supabaseAdmin.from('sync_jobs').select('user_id').eq('id', localJobId).single();
-    if (jobFetchError || !jobData) throw new Error(`Could not fetch job details for job ID: ${localJobId}`);
+    const { data: jobData, error: jobFetchError } = await supabaseAdmin.from('sync_jobs').select('user_id').eq('id', jobId).single();
+    if (jobFetchError || !jobData) {
+      throw new Error(`Could not fetch job details for job ID: ${jobId}`);
+    }
     const userId = jobData.user_id;
     
     // Get user email from profiles table
@@ -480,10 +539,7 @@ serve(async (req: Request) => {
       
       if (threadsError) {
         console.error("Database error saving threads:", threadsError);
-        await supabaseAdmin.from('sync_jobs').update({
-          status: 'failed',
-          details: `Database error saving threads: ${threadsError.message}`
-        }).eq('id', localJobId);
+        await updateJobStatus(jobId, 'failed', `Database error saving threads: ${threadsError.message}`);
         throw threadsError;
       }
       
@@ -496,10 +552,7 @@ serve(async (req: Request) => {
         
         if (messagesError) {
           console.error("Database error saving messages:", messagesError);
-          await supabaseAdmin.from('sync_jobs').update({
-            status: 'failed',
-            details: `Database error saving messages: ${messagesError.message}`
-          }).eq('id', localJobId);
+          await updateJobStatus(jobId, 'failed', `Database error saving messages: ${messagesError.message}`);
           throw messagesError;
         }
       }
@@ -513,10 +566,7 @@ serve(async (req: Request) => {
         
         if (linksError) {
           console.error("Database error saving links:", linksError);
-          await supabaseAdmin.from('sync_jobs').update({
-            status: 'failed',
-            details: `Database error saving links: ${linksError.message}`
-          }).eq('id', localJobId);
+          await updateJobStatus(jobId, 'failed', `Database error saving links: ${linksError.message}`);
           throw linksError;
         }
       }
@@ -532,17 +582,14 @@ serve(async (req: Request) => {
       // Chain to the next page
       await supabaseAdmin.functions.invoke('sync-threads', { // MODIFIED
         body: {
-          jobId: localJobId,
+          jobId: jobId,
           provider_token,
           pageToken: listJson.nextPageToken
         }
       });
     } else {
       // Complete the job
-      await supabaseAdmin.from('sync_jobs').update({
-        status: 'completed',
-        details: 'All threads have been synced.' // MODIFIED
-      }).eq('id', localJobId);
+      await updateJobStatus(jobId, 'completed', 'All threads have been synced.');
     }
 
     // --- UNCHANGED ---
@@ -554,16 +601,18 @@ serve(async (req: Request) => {
     });
 
   } catch (error) {
-    // --- UNCHANGED ---
-    // Graceful error handling
-    if (localJobId) {
-      await createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").from('sync_jobs').update({
-        status: 'failed',
-        details: error.message
-      }).eq('id', localJobId);
-    }
+    // --- ENHANCED ---
+    // Comprehensive error handling - always update job status to prevent stuck jobs
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorDetails = `Thread sync failed: ${errorMessage}`;
+    
+    console.error('❌ Error in sync-threads function:', errorDetails);
+    
+    // Always attempt to update job status, even if other operations failed
+    await updateJobStatus(jobId, 'failed', errorDetails);
+    
     return new Response(JSON.stringify({
-      error: error.message
+      error: errorMessage
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500
