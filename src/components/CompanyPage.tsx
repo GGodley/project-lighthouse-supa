@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Phone, Mail, TrendingUp, AlertCircle, CheckCircle, List, ArrowUpRight, Clock, Users, Sparkles } from 'lucide-react';
+import { Phone, Mail, AlertCircle, CheckCircle, List, ArrowUpRight, Clock, Users, Sparkles } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(

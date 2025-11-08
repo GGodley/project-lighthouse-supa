@@ -18,10 +18,6 @@ const BlocklistPage: React.FC = () => {
   const [adding, setAdding] = useState(false)
   const supabase = useSupabase()
 
-  useEffect(() => {
-    fetchBlocklist()
-  }, [supabase])
-
   const fetchBlocklist = async () => {
     try {
       setLoading(true)
@@ -31,7 +27,7 @@ const BlocklistPage: React.FC = () => {
         return
       }
 
-      const { data, error: fetchError } = await supabase
+      const { data, error: fetchError } = await (supabase as any)
         .from('domain_blocklist')
         .select('*')
         .eq('user_id', user.id)
@@ -49,6 +45,11 @@ const BlocklistPage: React.FC = () => {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchBlocklist()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase])
 
   const handleAddDomain = async () => {
     if (!newDomain.trim()) return
@@ -70,7 +71,7 @@ const BlocklistPage: React.FC = () => {
         return
       }
 
-      const { error: insertError } = await supabase
+      const { error: insertError } = await (supabase as any)
         .from('domain_blocklist')
         .insert({
           user_id: user.id,
@@ -102,7 +103,7 @@ const BlocklistPage: React.FC = () => {
     }
 
     try {
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await (supabase as any)
         .from('domain_blocklist')
         .delete()
         .eq('id', id)
