@@ -75,11 +75,12 @@ export async function GET(request: NextRequest) {
         console.warn("WARNING: Session object is null after successful code exchange.");
       }
 
-      // Update redirect URL with success parameter
+      // Update redirect URL with success parameter (keep the same response object to preserve cookies)
       const redirectUrl = new URL(`${requestUrl.origin}/dashboard`);
       redirectUrl.searchParams.set('auth', 'success');
       redirectUrl.searchParams.set('t', Date.now().toString());
-      response = NextResponse.redirect(redirectUrl);
+      // Update the existing response's location header instead of creating a new response
+      response.headers.set('Location', redirectUrl.toString());
 
     } catch (e) {
       const error = e as Error;
