@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Phone, Mail, AlertCircle, CheckCircle, List, ArrowUpRight, Clock, Users, Sparkles } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
+import InteractionDetailsModal from './InteractionDetailsModal';
+import { LLMSummary } from '@/lib/types/threads';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -41,6 +43,10 @@ interface Interaction {
   title: string;
   summary: string;
   sentiment: string;
+  thread_id?: string | null;
+  transcription_job_id?: string | null;
+  llm_summary?: LLMSummary | { error: string } | null;
+  next_steps?: string[];
 }
 
 interface CompanyData {
@@ -55,6 +61,10 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'Overview' | 'Interaction Timeline'>('Overview');
+  
+  // Modal state
+  const [selectedInteraction, setSelectedInteraction] = useState<Interaction | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   
   // Next Steps state management
   const [nextSteps, setNextSteps] = useState<Array<{id: number, text: string, completed: boolean}>>([]);
@@ -484,7 +494,15 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                       <p className="text-sm text-gray-600 mt-1">{interaction.summary}</p>
                       
                       {/* Bottom Row (Link) */}
-                      <span className="mt-2 text-sm text-indigo-600 cursor-pointer hover:underline">Click to view full details</span>
+                      <span 
+                        className="mt-2 text-sm text-indigo-600 cursor-pointer hover:underline"
+                        onClick={() => {
+                          setSelectedInteraction(interaction);
+                          setIsModalOpen(true);
+                        }}
+                      >
+                        Click to view full details
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -493,6 +511,16 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
           </div>
         )}
       </div>
+
+      {/* Interaction Details Modal */}
+      <InteractionDetailsModal
+        interaction={selectedInteraction}
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setSelectedInteraction(null);
+        }}
+      />
     </div>
   );
 };

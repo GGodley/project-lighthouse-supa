@@ -9,9 +9,10 @@ interface ThreadConversationViewProps {
   threadId: string;
   threadSummary: LLMSummary | { error: string } | null;
   onClose: () => void;
+  showSummarySidebar?: boolean;
 }
 
-export default function ThreadConversationView({ threadId, threadSummary, onClose }: ThreadConversationViewProps) {
+export default function ThreadConversationView({ threadId, threadSummary, onClose, showSummarySidebar = true }: ThreadConversationViewProps) {
   const { messages, loading, error } = useThreadMessages(threadId);
 
   const formatDate = (dateString: string | null): string => {
@@ -61,20 +62,22 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
 
   return (
     <div className="bg-white rounded-lg shadow-sm">
-      {/* Header */}
-      <div className="border-b p-4 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">Thread Conversation</h3>
-        <button
-          onClick={onClose}
-          className="text-gray-500 hover:text-gray-700"
-        >
-          <X className="h-5 w-5" />
-        </button>
-      </div>
+      {/* Header - Only show if showSummarySidebar is true (standalone mode) */}
+      {showSummarySidebar && (
+        <div className="border-b p-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Thread Conversation</h3>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      )}
 
-      <div className="flex flex-col lg:flex-row h-[600px]">
+      <div className={`flex flex-col ${showSummarySidebar ? 'lg:flex-row h-[600px]' : 'h-full'}`}>
         {/* Messages Panel */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 border-r border-gray-200">
+        <div className={`flex-1 ${showSummarySidebar ? 'overflow-y-auto border-r border-gray-200' : ''} p-4 space-y-4`}>
           {messages.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <p>No messages found in this thread.</p>
@@ -130,68 +133,70 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
           )}
         </div>
 
-        {/* Summary Sidebar */}
-        <div className="w-full lg:w-80 p-4 bg-gray-50 overflow-y-auto">
-          <h4 className="font-semibold text-gray-900 mb-4">Thread Summary</h4>
-          
-          {threadSummary && 'error' in threadSummary ? (
-            <div className="text-sm text-red-600">
-              <p>Error generating summary: {(threadSummary as { error: string }).error}</p>
-            </div>
-          ) : threadSummary ? (
-            <div className="space-y-4 text-sm">
-              {threadSummary.problem_statement && (
-                <div>
-                  <h5 className="font-medium text-gray-700 mb-1">Problem Statement</h5>
-                  <p className="text-gray-600">{threadSummary.problem_statement}</p>
-                </div>
-              )}
+        {/* Summary Sidebar - Only show if showSummarySidebar is true */}
+        {showSummarySidebar && (
+          <div className="w-full lg:w-80 p-4 bg-gray-50 overflow-y-auto">
+            <h4 className="font-semibold text-gray-900 mb-4">Thread Summary</h4>
+            
+            {threadSummary && 'error' in threadSummary ? (
+              <div className="text-sm text-red-600">
+                <p>Error generating summary: {(threadSummary as { error: string }).error}</p>
+              </div>
+            ) : threadSummary ? (
+              <div className="space-y-4 text-sm">
+                {threadSummary.problem_statement && (
+                  <div>
+                    <h5 className="font-medium text-gray-700 mb-1">Problem Statement</h5>
+                    <p className="text-gray-600">{threadSummary.problem_statement}</p>
+                  </div>
+                )}
 
-              {threadSummary.key_participants && Array.isArray(threadSummary.key_participants) && threadSummary.key_participants.length > 0 && (
-                <div>
-                  <h5 className="font-medium text-gray-700 mb-1">Key Participants</h5>
-                  <ul className="list-disc list-inside text-gray-600">
-                    {threadSummary.key_participants.map((participant: string, idx: number) => (
-                      <li key={idx}>{participant}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+                {threadSummary.key_participants && Array.isArray(threadSummary.key_participants) && threadSummary.key_participants.length > 0 && (
+                  <div>
+                    <h5 className="font-medium text-gray-700 mb-1">Key Participants</h5>
+                    <ul className="list-disc list-inside text-gray-600">
+                      {threadSummary.key_participants.map((participant: string, idx: number) => (
+                        <li key={idx}>{participant}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-              {threadSummary.timeline_summary && (
-                <div>
-                  <h5 className="font-medium text-gray-700 mb-1">Timeline</h5>
-                  <p className="text-gray-600">{threadSummary.timeline_summary}</p>
-                </div>
-              )}
+                {threadSummary.timeline_summary && (
+                  <div>
+                    <h5 className="font-medium text-gray-700 mb-1">Timeline</h5>
+                    <p className="text-gray-600">{threadSummary.timeline_summary}</p>
+                  </div>
+                )}
 
-              {threadSummary.resolution_status && (
-                <div>
-                  <h5 className="font-medium text-gray-700 mb-1">Resolution Status</h5>
-                  <p className="text-gray-600">{threadSummary.resolution_status}</p>
-                </div>
-              )}
+                {threadSummary.resolution_status && (
+                  <div>
+                    <h5 className="font-medium text-gray-700 mb-1">Resolution Status</h5>
+                    <p className="text-gray-600">{threadSummary.resolution_status}</p>
+                  </div>
+                )}
 
-              {threadSummary.customer_sentiment && (
-                <div>
-                  <h5 className="font-medium text-gray-700 mb-1">Customer Sentiment</h5>
-                  <p className="text-gray-600">{threadSummary.customer_sentiment}</p>
-                </div>
-              )}
+                {threadSummary.customer_sentiment && (
+                  <div>
+                    <h5 className="font-medium text-gray-700 mb-1">Customer Sentiment</h5>
+                    <p className="text-gray-600">{threadSummary.customer_sentiment}</p>
+                  </div>
+                )}
 
-              {threadSummary.csm_next_step && (
-                <div>
-                  <h5 className="font-medium text-gray-700 mb-1">Next Step</h5>
-                  <p className="text-gray-600">{threadSummary.csm_next_step}</p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="text-sm text-gray-500">
-              <p>No summary available for this thread.</p>
-            </div>
-          )}
-        </div>
+                {threadSummary.csm_next_step && (
+                  <div>
+                    <h5 className="font-medium text-gray-700 mb-1">Next Step</h5>
+                    <p className="text-gray-600">{threadSummary.csm_next_step}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500">
+                <p>No summary available for this thread.</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
