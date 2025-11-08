@@ -27,6 +27,7 @@ const CustomerThreadsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [providerToken, setProviderToken] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [selectedCompanies, setSelectedCompanies] = useState<string[]>([])
   const supabase = useSupabase()
 
   // Get auth session for provider token and user email
@@ -188,6 +189,71 @@ const CustomerThreadsPage: React.FC = () => {
     return null
   }
 
+  // Bulk selection handlers
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedCompanies(companies.map(c => c.company_id))
+    } else {
+      setSelectedCompanies([])
+    }
+  }
+
+  const handleSelectOne = (companyId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedCompanies([...selectedCompanies, companyId])
+    } else {
+      setSelectedCompanies(selectedCompanies.filter(id => id !== companyId))
+    }
+  }
+
+  // Bulk action handlers
+  const handleArchiveSelected = async () => {
+    if (selectedCompanies.length === 0) return
+
+    const { error } = await supabase
+      .from('companies')
+      .update({ status: 'archived' })
+      .in('company_id', selectedCompanies)
+
+    if (!error) {
+      setSelectedCompanies([])
+      // Refresh the list
+      const resp = await fetch('/api/customers', { cache: 'no-store' })
+      if (resp.ok) {
+        const json = await resp.json()
+        setCompanies((json.companies as Company[]) || [])
+      }
+    } else {
+      console.error('Error archiving companies:', error)
+      // TODO: Show toast error
+    }
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedCompanies.length === 0) return
+
+    // NOTE: Replace this with a proper modal component in the future
+    if (window.confirm(`Are you sure you want to PERMANENTLY DELETE ${selectedCompanies.length} companies? This action cannot be undone.`)) {
+      const { error } = await supabase
+        .from('companies')
+        .delete()
+        .in('company_id', selectedCompanies)
+
+      if (!error) {
+        setSelectedCompanies([])
+        // Refresh the list
+        const resp = await fetch('/api/customers', { cache: 'no-store' })
+        if (resp.ok) {
+          const json = await resp.json()
+          setCompanies((json.companies as Company[]) || [])
+        }
+      } else {
+        console.error('Error deleting companies:', error)
+        // TODO: Show toast error
+      }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto p-6">
@@ -220,11 +286,42 @@ const CustomerThreadsPage: React.FC = () => {
           <div className="mb-6">
             <h2 className="text-lg font-semibold text-gray-800">Company Overview</h2>
           </div>
+          
+          {/* Bulk Actions */}
+          {selectedCompanies.length > 0 && (
+            <div className="my-4 p-3 bg-gray-100 rounded-lg flex items-center space-x-3">
+              <span className="text-sm font-semibold text-gray-700">
+                {selectedCompanies.length} selected
+              </span>
+              <button
+                onClick={handleArchiveSelected}
+                className="px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                disabled={selectedCompanies.length === 0}
+              >
+                Archive ({selectedCompanies.length})
+              </button>
+              <button
+                onClick={handleDeleteSelected}
+                className="px-3 py-1 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
+                disabled={selectedCompanies.length === 0}
+              >
+                Delete ({selectedCompanies.length})
+              </button>
+            </div>
+          )}
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left text-gray-600">
               <thead className="text-xs text-gray-700 uppercase bg-gray-50">
                 <tr>
-                  <th scope="col" className="p-4"><input type="checkbox" className="rounded" /></th>
+                  <th scope="col" className="p-4">
+                    <input 
+                      type="checkbox" 
+                      className="rounded" 
+                      checked={companies.length > 0 && selectedCompanies.length === companies.length}
+                      onChange={handleSelectAll}
+                    />
+                  </th>
                   <th scope="col" className="px-6 py-3">Company Name</th>
                   <th scope="col" className="px-6 py-3">Health Score</th>
                   <th scope="col" className="px-6 py-3">Status</th>
@@ -244,9 +341,17 @@ const CustomerThreadsPage: React.FC = () => {
                 ) : (
                   companies.map((company, index) => {
                     const displayPercent = convertScoreToPercentage(company.health_score);
+                    const isSelected = selectedCompanies.includes(company.company_id);
                     return (
                       <tr key={index} className="bg-white border-b hover:bg-gray-50">
-                        <td className="p-4"><input type="checkbox" className="rounded" /></td>
+                        <td className="p-4">
+                          <input 
+                            type="checkbox" 
+                            className="rounded" 
+                            checked={isSelected}
+                            onChange={(e) => handleSelectOne(company.company_id, e.target.checked)}
+                          />
+                        </td>
                         <td className="px-6 py-3 font-medium text-gray-900 whitespace-nowrap">
                           <Link 
                             href={`/dashboard/customer-threads/${company.company_id}`} 

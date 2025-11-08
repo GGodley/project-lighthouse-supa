@@ -340,15 +340,38 @@ serve(async (req: Request) => {
     const { data: profileData, error: profileError } = await supabaseAdmin.from('profiles').select('email').eq('id', userId).single();
     const userEmail = profileData?.email || ""; // Get user's email for CSM role
     
+    // --- NEW CODE START ---
+    // 1. Fetch the user's blocklist
+    const { data: blockedDomains, error: blocklistError } = await supabaseAdmin
+      .from('domain_blocklist')
+      .select('domain')
+      .eq('user_id', userId);
+
+    if (blocklistError) {
+      throw new Error(`Failed to fetch domain blocklist: ${blocklistError.message}`);
+    }
+
+    // 2. Build the Gmail query exclusion string
+    let exclusionQuery = "";
+    if (blockedDomains && blockedDomains.length > 0) {
+      const exclusionString = blockedDomains.map(d => `-from:(*@${d.domain})`).join(' ');
+      exclusionQuery = ` ${exclusionString}`; // e.g., " -from:(*@binance.com)"
+    }
+    // --- NEW CODE END ---
+    
     // --- UNCHANGED ---
     // 1. Get a list of IDs
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    const query = `after:${Math.floor(ninetyDaysAgo.getTime() / 1000)}`;
+    const baseQuery = `after:${Math.floor(ninetyDaysAgo.getTime() / 1000)}`;
+    
+    // --- MODIFIED ---
+    // Combine base query with exclusion query
+    const finalQuery = `${baseQuery}${exclusionQuery}`;
     
     // --- MODIFIED ---
     // Swapped 'messages' for 'threads'
-    let listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${encodeURIComponent(query)}&maxResults=10`; // MODIFIED: maxResults=10 for safety
+    let listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${encodeURIComponent(finalQuery)}&maxResults=10`; // MODIFIED: maxResults=10 for safety
     
     // --- UNCHANGED ---
     if (pageToken) {

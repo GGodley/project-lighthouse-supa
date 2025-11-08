@@ -34,6 +34,7 @@ export async function GET() {
       .from('companies')
       .select('company_id, company_name, health_score, overall_sentiment, status, mrr, renewal_date, last_interaction_at, created_at')
       .eq('user_id', user.id)
+      .eq('status', 'active') // Filter out archived companies
       .order('company_name', { ascending: true });
 
     if (companyError) {
