@@ -254,8 +254,9 @@ const CustomerThreadsPage: React.FC = () => {
             domain: domain.toLowerCase()
           }))
 
-          // @ts-ignore - domain_blocklist table not yet in TypeScript types
           const { error: blocklistError } = await supabase
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore - domain_blocklist table not yet in TypeScript types
             .from('domain_blocklist')
             .upsert(blocklistEntries, {
               onConflict: 'user_id, domain',
