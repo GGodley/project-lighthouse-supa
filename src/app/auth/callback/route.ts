@@ -1,7 +1,4 @@
-//
-// ⚠️ THIS IS THE DIAGNOSTIC VERSION of /auth/callback/route.ts ⚠️
-//
-import { createClient } from '@/lib/supabase/server';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
@@ -14,9 +11,30 @@ export async function GET(request: NextRequest) {
   console.log("Full Request URL:", request.url);
   console.log("Authorization Code received:", code ? "YES" : "NO");
 
+  // Create response object that will be used to set cookies
+  let response = NextResponse.redirect(`${requestUrl.origin}/dashboard`);
+
   if (code) {
     try {
-      const supabase = await createClient();
+      // Create Supabase client with proper cookie handling for route handlers
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            getAll() {
+              return request.cookies.getAll();
+            },
+            setAll(cookiesToSet) {
+              cookiesToSet.forEach(({ name, value, options }) => {
+                request.cookies.set(name, value);
+                response.cookies.set(name, value, options);
+              });
+            },
+          },
+        }
+      );
+
       const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
       if (error) {
@@ -57,6 +75,12 @@ export async function GET(request: NextRequest) {
         console.warn("WARNING: Session object is null after successful code exchange.");
       }
 
+      // Update redirect URL with success parameter
+      const redirectUrl = new URL(`${requestUrl.origin}/dashboard`);
+      redirectUrl.searchParams.set('auth', 'success');
+      redirectUrl.searchParams.set('t', Date.now().toString());
+      response = NextResponse.redirect(redirectUrl);
+
     } catch (e) {
       const error = e as Error;
       console.error("FATAL ERROR in auth callback:", error.message);
@@ -68,23 +92,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${requestUrl.origin}/login?error=No authorization code provided`);
   }
 
-  // Redirect user to the dashboard with a fallback mechanism
-  const redirectUrl = `${requestUrl.origin}/dashboard`;
-  console.log("--- REDIRECT DIAGNOSTIC ---");
-  console.log("Redirecting to:", redirectUrl);
-  console.log("Request origin:", requestUrl.origin);
-  console.log("--- END REDIRECT DIAGNOSTIC ---");
-  
-  // Create a response with the redirect and add a query parameter to help with debugging
-  const response = NextResponse.redirect(`${redirectUrl}?auth=success&t=${Date.now()}`);
-  
-  // Ensure the session cookies are properly set in the response
-  console.log("Setting response headers for session persistence");
-  
   // Add cache control headers to prevent caching issues
   response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   response.headers.set('Pragma', 'no-cache');
   response.headers.set('Expires', '0');
+  
+  console.log("--- REDIRECT DIAGNOSTIC ---");
+  console.log("Redirecting to:", response.headers.get('location'));
+  console.log("Cookies being set:", response.cookies.getAll().map(c => c.name));
+  console.log("--- END REDIRECT DIAGNOSTIC ---");
   
   return response;
 }
