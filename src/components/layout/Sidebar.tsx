@@ -11,13 +11,15 @@ import {
   Home,
   UserSquare2,
   PieChart,
-  Calendar
+  Calendar,
+  MessageSquare
 } from 'lucide-react'
 
 const navigation = [
   { name: 'Current', href: '/dashboard', icon: BarChart3 },
   { name: 'Home', href: '/dashboard/home', icon: Home },
   { name: 'Customers', href: '/dashboard/customers', icon: UserSquare2 },
+  { name: 'Customer Threads', href: '/dashboard/customer-threads', icon: MessageSquare },
   { name: 'Analytics', href: '/dashboard/analytics', icon: PieChart },
   { name: 'Emails', href: '/dashboard/emails', icon: Mail },
   { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
