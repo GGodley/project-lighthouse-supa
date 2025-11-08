@@ -16,6 +16,64 @@ const openai = new OpenAI({
   apiKey: Deno.env.get("OPENAI_API_KEY")
 });
 
+// --- Utility Functions ---
+// Sleep helper for retry delays
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// OpenAI API call wrapper with retry and backoff for rate limits
+async function openAiCallWithBackoff<T>(
+  apiCallFunction: () => Promise<T>,
+  maxRetries: number = 5
+): Promise<T> {
+  let attempt = 0;
+  
+  while (attempt < maxRetries) {
+    try {
+      return await apiCallFunction();
+    } catch (error: any) {
+      attempt++;
+      
+      // Check if we've exhausted retries
+      if (attempt >= maxRetries) {
+        console.error(`❌ OpenAI API call failed after ${maxRetries} attempts:`, error);
+        throw error;
+      }
+      
+      // Check if it's a rate limit error (only retry if we haven't exhausted attempts)
+      if (error?.code === 'rate_limit_exceeded') {
+        console.warn(`⚠️ OpenAI rate limit hit (attempt ${attempt}/${maxRetries})`);
+        
+        // Try to get retry-after time from headers
+        let retryAfterMs = 2000; // Default fallback
+        
+        if (error.headers?.['retry-after-ms']) {
+          retryAfterMs = parseInt(error.headers['retry-after-ms'], 10);
+        } else if (error.message) {
+          // Try to parse from error message like "Please try again in 1.224s"
+          const match = error.message.match(/try again in ([\d.]+)s/i);
+          if (match) {
+            retryAfterMs = Math.ceil(parseFloat(match[1]) * 1000);
+          }
+        }
+        
+        // Add 500ms buffer
+        const waitTime = retryAfterMs + 500;
+        console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+        await sleep(waitTime);
+        
+        // Continue loop to retry
+        continue;
+      }
+      
+      // For any other error, re-throw immediately
+      throw error;
+    }
+  }
+  
+  // This should never be reached, but TypeScript needs it
+  throw new Error('Max retries exhausted');
+}
+
 // --- UNCHANGED ---
 // Helper Functions to Correctly Parse Gmail's Complex Payload
 const decodeBase64Url = (data: string | undefined): string | undefined => {
@@ -117,14 +175,19 @@ The "customer" is any participant who is NOT the "CSM".`;
   const userQuery = `Email Thread:\n\n${script}\n\nPlease analyze this thread and return the JSON summary.`;
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userQuery }
-      ],
-      response_format: { type: "json_object" }
-    });
+    // Wrap the API call with retry logic
+    const apiCallFunction = async () => {
+      return await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userQuery }
+        ],
+        response_format: { type: "json_object" }
+      });
+    };
+
+    const completion = await openAiCallWithBackoff(apiCallFunction, 5);
 
     const responseContent = completion.choices[0]?.message?.content;
     
@@ -136,7 +199,8 @@ The "customer" is any participant who is NOT the "CSM".`;
     }
   } catch (error) {
     console.error("Error in processShortThread:", error);
-    return { "error": `Failed to summarize: ${error instanceof Error ? error.message : 'Unknown error'}` };
+    // Re-throw the error so it can be caught by the main try-catch and mark job as failed
+    throw error;
   }
 };
 
@@ -165,19 +229,25 @@ const processLongThread = async (script: string): Promise<any> => {
 
   for (const chunk of chunks) {
     try {
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          { role: "system", content: mapPrompt },
-          { role: "user", content: chunk }
-        ]
-      });
+      // Wrap the API call with retry logic
+      const apiCallFunction = async () => {
+        return await openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [
+            { role: "system", content: mapPrompt },
+            { role: "user", content: chunk }
+          ]
+        });
+      };
+
+      const completion = await openAiCallWithBackoff(apiCallFunction, 5);
       
       const text = completion.choices[0]?.message?.content;
       if (text) chunkSummaries.push(text);
     } catch (error) {
       console.error("Error summarizing chunk:", error);
-      // Continue with other chunks even if one fails
+      // Re-throw error so it can be caught by main try-catch and mark job as failed
+      throw error;
     }
   }
 
@@ -198,14 +268,19 @@ Return a JSON object with the following structure:
   const reduceQuery = `Intermediate Summaries:\n\n${combinedSummaries}\n\nPlease analyze these summaries and generate the final JSON report.`;
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: reducePrompt },
-        { role: "user", content: reduceQuery }
-      ],
-      response_format: { type: "json_object" }
-    });
+    // Wrap the API call with retry logic
+    const apiCallFunction = async () => {
+      return await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: reducePrompt },
+          { role: "user", content: reduceQuery }
+        ],
+        response_format: { type: "json_object" }
+      });
+    };
+
+    const completion = await openAiCallWithBackoff(apiCallFunction, 5);
 
     const responseContent = completion.choices[0]?.message?.content;
     
@@ -217,7 +292,8 @@ Return a JSON object with the following structure:
     }
   } catch (error) {
     console.error("Error in processLongThread reduce step:", error);
-    return { "error": `Failed to summarize: ${error instanceof Error ? error.message : 'Unknown error'}` };
+    // Re-throw the error so it can be caught by the main try-catch and mark job as failed
+    throw error;
   }
 };
 

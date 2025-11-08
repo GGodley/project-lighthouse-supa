@@ -49,3 +49,12 @@ export type SyncJob = {
   updated_at: string; // ISO string
 };
 
+// --- NEW TYPE ---
+// Represents a row in the public.domain_blocklist table
+export type BlockedDomain = {
+  id: number;
+  user_id: string;
+  domain: string;
+  created_at: string; // ISO string
+};
+
