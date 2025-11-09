@@ -412,9 +412,19 @@ serve(async (req: Request) => {
     }
     const userId = jobData.user_id;
     
-    // Get user email from profiles table
-    const { data: profileData, error: profileError } = await supabaseAdmin.from('profiles').select('email').eq('id', userId).single();
-    const userEmail = profileData?.email || ""; // Get user's email for CSM role
+    // Get user email and last sync time from profiles table
+    const { data: profileData, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('email, threads_last_synced_at')
+      .eq('id', userId)
+      .single();
+    
+    if (profileError || !profileData) {
+      throw new Error(`Could not fetch profile for user ID: ${userId}`);
+    }
+    
+    const userEmail = profileData.email || ""; // Get user's email for CSM role
+    const profileLastSyncedAt = profileData.threads_last_synced_at;
     
     // --- NEW CODE START ---
     // 1. Fetch the user's blocklist
@@ -435,11 +445,31 @@ serve(async (req: Request) => {
     }
     // --- NEW CODE END ---
     
-    // --- UNCHANGED ---
-    // 1. Get a list of IDs
-    const ninetyDaysAgo = new Date();
-    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    const baseQuery = `after:${Math.floor(ninetyDaysAgo.getTime() / 1000)}`;
+    // --- NEW ---
+    // Get the last sync time from profiles table (stored in UTC)
+    // This determines what date to query Gmail from
+    // All times are handled in UTC to ensure consistency across timezones
+    let lastSyncTime: Date;
+    
+    if (profileLastSyncedAt) {
+      // Use the stored UTC timestamp from profiles table
+      lastSyncTime = new Date(profileLastSyncedAt);
+      // Subtract 1 day from last sync time to ensure we catch threads that were updated
+      // right at the boundary (Gmail's after: query is inclusive)
+      lastSyncTime = new Date(lastSyncTime.getTime() - (24 * 60 * 60 * 1000)); // Subtract 1 day
+      console.log(`📅 Last sync time (UTC): ${lastSyncTime.toISOString()}. Querying threads modified after this date.`);
+    } else {
+      // If no last sync time, default to 90 days ago (in UTC)
+      lastSyncTime = new Date();
+      lastSyncTime.setUTCDate(lastSyncTime.getUTCDate() - 90);
+      console.log(`📅 No previous sync found. Starting from 90 days ago (UTC): ${lastSyncTime.toISOString()}`);
+    }
+    
+    // --- MODIFIED ---
+    // 1. Get a list of IDs - query from last sync time (converted to Unix timestamp for Gmail API)
+    // Gmail API expects Unix timestamp in seconds
+    const unixTimestamp = Math.floor(lastSyncTime.getTime() / 1000);
+    const baseQuery = `after:${unixTimestamp}`;
     
     // --- MODIFIED ---
     // Combine base query with exclusion query
@@ -465,12 +495,48 @@ serve(async (req: Request) => {
     // Swapped 'messages' for 'threads'
     const threadIds = listJson.threads?.map((t: any) => t.id).filter(Boolean) || [];
 
+    // --- NEW ---
+    // Early exit if no threads and no next page
+    if (threadIds.length === 0 && !listJson.nextPageToken) {
+      await updateJobStatus(jobId, 'completed', 'No threads found to sync.');
+      return new Response(JSON.stringify({ message: "No threads to process." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200
+      });
+    }
+
+    // --- NEW ---
+    // Batch check for existing threads - we need last_message_date to determine if thread needs update
+    let existingThreadsMap = new Map<string, { thread_id: string; last_message_date: string | null }>();
+    if (threadIds.length > 0) {
+      const { data: existingThreads, error: existingError } = await supabaseAdmin
+        .from('threads')
+        .select('thread_id, last_message_date')
+        .eq('user_id', userId)
+        .in('thread_id', threadIds);
+      
+      if (existingError) {
+        console.warn('Failed to check existing threads:', existingError);
+        // Continue processing even if check fails
+      } else {
+        existingThreads.forEach(t => {
+          existingThreadsMap.set(t.thread_id, {
+            thread_id: t.thread_id,
+            last_message_date: t.last_message_date
+          });
+        });
+        console.log(`📊 Found ${existingThreadsMap.size} existing threads out of ${threadIds.length} total`);
+      }
+    }
+
     if (threadIds.length > 0) {
       
       // --- MODIFIED ---
       // This is the new main loop, iterating over THREADS
       for (const threadId of threadIds) {
         try {
+          const existingThread = existingThreadsMap.get(threadId);
+          
           console.log(`🧵 Processing thread with threadId: ${threadId}`);
           
           // --- MODIFIED ---
@@ -489,6 +555,28 @@ serve(async (req: Request) => {
           if (messages.length === 0) {
             console.log(`Skipping empty thread ${threadId}`);
             continue;
+          }
+          
+          // --- NEW ---
+          // Check if thread exists and if it has new messages
+          const lastMessage = messages[messages.length - 1];
+          const lastMessageDate = new Date(Number(lastMessage.internalDate));
+          
+          if (existingThread) {
+            const existingLastMessageDate = existingThread.last_message_date 
+              ? new Date(existingThread.last_message_date) 
+              : null;
+            
+            // If thread exists and last message date hasn't changed, skip processing
+            if (existingLastMessageDate && lastMessageDate.getTime() <= existingLastMessageDate.getTime()) {
+              console.log(`⏭️ Thread ${threadId} exists and has no new messages. Skipping.`);
+              continue;
+            } else {
+              console.log(`🔄 Thread ${threadId} exists but has new messages. Updating...`);
+              // Continue processing to update the thread
+            }
+          } else {
+              console.log(`✨ Thread ${threadId} is new. Processing...`);
           }
           
           // --- NEW ---
@@ -584,8 +672,29 @@ serve(async (req: Request) => {
           }
 
           // --- NEW ---
+          // For existing threads, check which messages are new
+          let existingMessageIds = new Set<string>();
+          if (existingThread) {
+            const { data: existingMessages, error: msgCheckError } = await supabaseAdmin
+              .from('thread_messages')
+              .select('message_id')
+              .eq('thread_id', threadId)
+              .eq('user_id', userId);
+            
+            if (!msgCheckError && existingMessages) {
+              existingMessageIds = new Set(existingMessages.map(m => m.message_id));
+              console.log(`📨 Found ${existingMessageIds.size} existing messages in thread ${threadId}`);
+            }
+          }
+          
+          // --- NEW ---
           // (Task 2.11) Prep Messages Loop: Create all message data objects
+          // Only add messages that don't already exist (for existing threads)
           for (const msg of messages) {
+            // Skip if message already exists (for existing threads)
+            if (existingThread && existingMessageIds.has(msg.id)) {
+              continue;
+            }
             const msgHeaders = msg.payload?.headers || [];
             const bodies = collectBodies(msg.payload);
             
@@ -616,7 +725,7 @@ serve(async (req: Request) => {
           // --- NEW ---
           // (Task 2.8 & 2.10) Prep Thread & Links
           const firstMessage = messages[0];
-          const lastMessage = messages[messages.length - 1];
+          // lastMessage was already declared earlier at line 562, reuse it
           const subject = firstMessage.payload?.headers?.find((h: any) => h.name.toLowerCase() === 'subject')?.value || 'No Subject';
           
           const threadData = {
@@ -705,16 +814,48 @@ serve(async (req: Request) => {
     // --- MODIFIED ---
     // This logic is the same, but we invoke 'sync-threads' and update the text
     if (listJson.nextPageToken) {
-      // Chain to the next page
-      await supabaseAdmin.functions.invoke('sync-threads', { // MODIFIED
-        body: {
-          jobId: jobId,
-          provider_token,
-          pageToken: listJson.nextPageToken
+      // Chain to the next page with proper error handling
+      try {
+        console.log(`📄 Invoking next page with token: ${listJson.nextPageToken.substring(0, 20)}...`);
+        const { data, error } = await supabaseAdmin.functions.invoke('sync-threads', {
+          body: {
+            jobId: jobId,
+            provider_token,
+            pageToken: listJson.nextPageToken
+          }
+        });
+        
+        if (error) {
+          console.error('❌ Failed to invoke next page:', error);
+          await updateJobStatus(jobId, 'failed', `Failed to process next page: ${error.message}`);
+          throw new Error(`Failed to invoke next page: ${error.message}`);
         }
-      });
+        
+        console.log('✅ Next page invocation successful');
+      } catch (invokeError) {
+        console.error('❌ Error invoking next page:', invokeError);
+        const errorMessage = invokeError instanceof Error ? invokeError.message : String(invokeError);
+        await updateJobStatus(jobId, 'failed', `Error processing next page: ${errorMessage}`);
+        throw invokeError;
+      }
     } else {
-      // Complete the job
+      // Complete the job and update last sync time in profiles table
+      console.log('✅ No more pages. Completing job.');
+      
+      // Update threads_last_synced_at in profiles table with current UTC time
+      const currentUTCTime = new Date().toISOString(); // ISO string is always in UTC
+      const { error: updateProfileError } = await supabaseAdmin
+        .from('profiles')
+        .update({ threads_last_synced_at: currentUTCTime })
+        .eq('id', userId);
+      
+      if (updateProfileError) {
+        console.error('⚠️ Failed to update threads_last_synced_at in profiles:', updateProfileError);
+        // Don't fail the job if timestamp update fails, but log it
+      } else {
+        console.log(`✅ Updated threads_last_synced_at to ${currentUTCTime} (UTC) for user ${userId}`);
+      }
+      
       await updateJobStatus(jobId, 'completed', 'All threads have been synced.');
     }
 
