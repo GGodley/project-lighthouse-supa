@@ -18,10 +18,9 @@ CREATE TABLE IF NOT EXISTS public.domain_blocklist (
   UNIQUE(user_id, domain)
 );
 
--- Create indexes
+-- Create indexes (status index will be created after column is added)
 CREATE INDEX IF NOT EXISTS idx_domain_blocklist_user_id ON public.domain_blocklist(user_id);
 CREATE INDEX IF NOT EXISTS idx_domain_blocklist_domain ON public.domain_blocklist(domain);
-CREATE INDEX IF NOT EXISTS idx_domain_blocklist_status ON public.domain_blocklist(status);
 
 -- Enable Row Level Security
 ALTER TABLE public.domain_blocklist ENABLE ROW LEVEL SECURITY;
@@ -58,6 +57,9 @@ BEGIN
       
       -- Update existing rows to have 'deleted' status (default)
       UPDATE public.domain_blocklist SET status = 'deleted' WHERE status IS NULL;
+      
+      -- Create index on status column after it's added
+      CREATE INDEX IF NOT EXISTS idx_domain_blocklist_status ON public.domain_blocklist(status);
     END IF;
   END IF;
 END $$;

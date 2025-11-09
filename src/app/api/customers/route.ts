@@ -31,12 +31,12 @@ export async function GET() {
     }
 
     // Fetch active companies (not archived)
+    // Use a simpler query that explicitly handles NULL and excludes archived
     const { data: activeCompanies, error: activeError } = await supabase
       .from('companies')
       .select('company_id, company_name, domain_name, health_score, overall_sentiment, status, mrr, renewal_date, last_interaction_at, created_at')
       .eq('user_id', user.id)
-      .neq('status', 'archived')
-      .or('status.eq.active,status.is.null,status.eq.inactive,status.eq.at_risk,status.eq.churned') // Include all non-archived statuses
+      .or('status.eq.active,status.is.null,status.eq.inactive,status.eq.at_risk,status.eq.churned') // Include all non-archived statuses (including NULL)
       .order('company_name', { ascending: true });
 
     // Fetch archived companies

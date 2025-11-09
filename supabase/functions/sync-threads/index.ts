@@ -298,8 +298,96 @@ Return a JSON object with the following structure:
 };
 
 // --- NEW ---
+// Incremental summarization: Updates existing summary with new messages
+const summarizeThreadIncremental = async (
+  previousSummary: any,
+  newMessages: any[],
+  csmEmail: string
+): Promise<any> => {
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!apiKey) {
+    console.warn("OPENAI_API_KEY not set, skipping summarization");
+    return { "error": "OPENAI_API_KEY not configured" };
+  }
+
+  // Format only the new messages
+  const newMessagesScript = formatThreadForLLM(newMessages, csmEmail);
+  
+  const systemPrompt = `You are a world-class Customer Success Manager (CSM) analyst. Your task is to update an existing email thread summary with new messages that have arrived.
+
+You will receive:
+1. The previous summary of the email thread (as a JSON object)
+2. New messages that have been added to the thread
+
+Your job is to:
+- Integrate the new information from the new messages into the existing summary
+- Update the timeline, sentiment, resolution status, and next steps based on the new messages
+- Maintain continuity with the previous summary while incorporating the latest developments
+- If the new messages contradict or update previous information, reflect the most current state
+
+Return a JSON object with the following structure:
+{
+  "problem_statement": "An updated clear statement of the problem or topic discussed (incorporating new information)",
+  "key_participants": ["array", "of", "all", "participant", "names", "including", "new", "ones"],
+  "timeline_summary": "An updated summary of the timeline of events, including the new messages",
+  "resolution_status": "Updated status of resolution (e.g., 'Resolved', 'In Progress', 'Pending', 'Unresolved')",
+  "customer_sentiment": "Updated customer sentiment based on all messages (e.g., 'Positive', 'Neutral', 'Negative', 'Frustrated')",
+  "csm_next_step": "Updated recommended next step for the CSM based on the latest messages"
+}
+
+The "customer" is any participant who is NOT the "CSM".`;
+
+  const userQuery = `Previous Summary:
+${JSON.stringify(previousSummary, null, 2)}
+
+New Messages in Thread:
+${newMessagesScript}
+
+Please update the summary to incorporate the new messages and return the updated JSON summary.`;
+
+  try {
+    const apiCallFunction = async () => {
+      return await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userQuery }
+        ],
+        response_format: { type: "json_object" }
+      });
+    };
+
+    const completion = await openAiCallWithBackoff(apiCallFunction, 5);
+    const responseContent = completion.choices[0]?.message?.content;
+    
+    if (responseContent) {
+      return JSON.parse(responseContent);
+    } else {
+      console.error("Invalid response from OpenAI (incremental):", completion);
+      throw new Error("Invalid response from OpenAI.");
+    }
+  } catch (error) {
+    console.error("Error in summarizeThreadIncremental:", error);
+    throw error;
+  }
+};
+
+// --- NEW ---
 // This is the main "Router" function from Task 3.4
-const summarizeThread = async (messages: any[], csmEmail: string): Promise<any> => {
+// Now supports incremental summarization when previousSummary is provided
+const summarizeThread = async (
+  messages: any[], 
+  csmEmail: string,
+  previousSummary?: any,
+  isIncremental: boolean = false
+): Promise<any> => {
+  // If we have a previous summary and this is an incremental update, use incremental summarization
+  if (isIncremental && previousSummary && !previousSummary.error) {
+    console.log("🔄 Using incremental summarization with previous summary...");
+    return await summarizeThreadIncremental(previousSummary, messages, csmEmail);
+  }
+
+  // Otherwise, process all messages (full summarization)
   const script = formatThreadForLLM(messages, csmEmail);
   const tokenCount = estimateTokens(script);
   // gpt-4o has ~128k context window, but we'll use 100k as a safe limit
@@ -307,10 +395,10 @@ const summarizeThread = async (messages: any[], csmEmail: string): Promise<any> 
 
   let summaryJson: any;
   if (tokenCount < (TOKEN_LIMIT - 2000)) {
-    console.log("Processing short thread...");
+    console.log("📝 Processing full thread (short)...");
     summaryJson = await processShortThread(script);
   } else {
-    console.log("Processing long thread (using map-reduce)...");
+    console.log("📝 Processing full thread (long, using map-reduce)...");
     summaryJson = await processLongThread(script);
   }
   return summaryJson;
@@ -396,9 +484,6 @@ serve(async (req: Request) => {
     // Update job status to 'running' if this is the first page
     if (!pageToken) {
       await updateJobStatus(jobId, 'running', 'Starting thread sync...');
-      console.log(`🚀 Starting sync for job ${jobId}, user ${userId}`);
-    } else {
-      console.log(`📄 Processing page with token: ${pageToken.substring(0, 20)}...`);
     }
     
     // --- MODIFIED ---
@@ -414,6 +499,13 @@ serve(async (req: Request) => {
       throw new Error(`Could not fetch job details for job ID: ${jobId}`);
     }
     const userId = jobData.user_id;
+    
+    // Now we can log with userId
+    if (!pageToken) {
+      console.log(`🚀 Starting sync for job ${jobId}, user ${userId}`);
+    } else {
+      console.log(`📄 Processing page with token: ${pageToken.substring(0, 20)}...`);
+    }
     
     // Get user email and last sync time from profiles table
     const { data: profileData, error: profileError } = await supabaseAdmin
@@ -688,6 +780,9 @@ serve(async (req: Request) => {
           // --- NEW ---
           // For existing threads, check which messages are new
           let existingMessageIds = new Set<string>();
+          let previousSummary: any = null;
+          let newMessages: any[] = [];
+          
           if (existingThread) {
             const { data: existingMessages, error: msgCheckError } = await supabaseAdmin
               .from('thread_messages')
@@ -699,6 +794,19 @@ serve(async (req: Request) => {
               existingMessageIds = new Set(existingMessages.map(m => m.message_id));
               console.log(`📨 Found ${existingMessageIds.size} existing messages in thread ${threadId}`);
             }
+            
+            // Get the previous summary if it exists
+            if (existingThread.llm_summary) {
+              previousSummary = existingThread.llm_summary;
+              console.log(`📋 Found existing summary for thread ${threadId}`);
+            }
+            
+            // Filter to only new messages for incremental summarization
+            newMessages = messages.filter(msg => !existingMessageIds.has(msg.id));
+            console.log(`🆕 Found ${newMessages.length} new messages out of ${messages.length} total messages`);
+          } else {
+            // For new threads, all messages are "new"
+            newMessages = messages;
           }
           
           // --- NEW ---
@@ -734,7 +842,37 @@ serve(async (req: Request) => {
 
           // --- NEW ---
           // (Task 2.12) Summarize Thread
-          const summaryJson = await summarizeThread(messages, userEmail);
+          // Use incremental summarization if we have a previous summary and new messages
+          let summaryJson: any;
+          
+          if (existingThread && newMessages.length === 0) {
+            // No new messages, keep the existing summary
+            console.log(`ℹ️ No new messages for thread ${threadId}, keeping existing summary`);
+            summaryJson = previousSummary || existingThread.llm_summary;
+          } else {
+            // Determine if we should use incremental summarization
+            // Only use incremental if: thread exists, has a previous summary, and has new messages
+            const isIncremental = existingThread && previousSummary && newMessages.length > 0;
+            
+            // If incremental: only summarize new messages (previous summary provides context)
+            // If not incremental: summarize all messages (either new thread or no previous summary)
+            const messagesToSummarize = isIncremental ? newMessages : messages;
+            
+            if (isIncremental) {
+              console.log(`🔄 Incremental summarization: updating summary with ${newMessages.length} new message(s)`);
+            } else if (existingThread && !previousSummary) {
+              console.log(`📝 Full summarization: thread exists but no previous summary, summarizing all ${messages.length} messages`);
+            } else {
+              console.log(`📝 Full summarization: new thread with ${messages.length} messages`);
+            }
+            
+            summaryJson = await summarizeThread(
+              messagesToSummarize, 
+              userEmail,
+              previousSummary,
+              isIncremental
+            );
+          }
 
           // --- NEW ---
           // (Task 2.8 & 2.10) Prep Thread & Links
