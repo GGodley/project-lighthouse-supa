@@ -73,60 +73,89 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
       </div>
 
       <div className="flex flex-col lg:flex-row h-[600px]">
-        {/* Messages Panel */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 border-r border-gray-200">
+        {/* Messages Panel - Email Thread Style */}
+        <div className="flex-1 overflow-y-auto p-6 border-r border-gray-200">
           {messages.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <p>No messages found in this thread.</p>
             </div>
           ) : (
-            messages.map((message) => {
-              const isCustomer = message.customer_id !== null;
-              const fromInfo = parseEmailAddress(message.from_address);
+            <div className="space-y-0">
+              {messages.map((message, index) => {
+                const isCustomer = message.customer_id !== null;
+                const fromInfo = parseEmailAddress(message.from_address);
+                const toAddresses = Array.isArray(message.to_addresses) ? message.to_addresses : [];
+                const ccAddresses = Array.isArray(message.cc_addresses) ? message.cc_addresses : [];
 
-              return (
-                <div
-                  key={message.message_id}
-                  className={`flex ${isCustomer ? 'justify-start' : 'justify-end'}`}
-                >
+                return (
                   <div
-                    className={`max-w-[70%] rounded-lg p-4 ${
-                      isCustomer
-                        ? 'bg-gray-100 text-gray-900'
-                        : 'bg-blue-600 text-white'
+                    key={message.message_id}
+                    className={`border-b border-gray-200 pb-4 mb-4 last:border-b-0 last:mb-0 ${
+                      index === messages.length - 1 ? 'bg-blue-50 -mx-6 px-6 pt-4 rounded-lg' : ''
                     }`}
                   >
-                    {/* Message Header */}
-                    <div className={`flex items-center gap-2 mb-2 ${isCustomer ? 'text-gray-600' : 'text-blue-100'}`}>
-                      {isCustomer ? (
-                        <User className="h-4 w-4" />
-                      ) : (
-                        <Mail className="h-4 w-4" />
-                      )}
-                      <span className="text-sm font-medium">
-                        {isCustomer ? fromInfo.name || fromInfo.email : 'You'}
-                      </span>
-                      <span className="text-xs opacity-75">
-                        {formatDate(message.sent_date)}
-                      </span>
+                    {/* Email Header - Traditional Email Style */}
+                    <div className="mb-3">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            {isCustomer ? (
+                              <User className="h-4 w-4 text-gray-600" />
+                            ) : (
+                              <Mail className="h-4 w-4 text-blue-600" />
+                            )}
+                            <span className="text-sm font-semibold text-gray-900">
+                              {isCustomer ? (fromInfo.name || fromInfo.email) : 'You'}
+                            </span>
+                            {!isCustomer && fromInfo.email && (
+                              <span className="text-xs text-gray-500">
+                                &lt;{fromInfo.email}&gt;
+                              </span>
+                            )}
+                          </div>
+                          
+                          {toAddresses.length > 0 && (
+                            <div className="text-xs text-gray-600 ml-6">
+                              <span className="font-medium">To:</span> {toAddresses.join(', ')}
+                            </div>
+                          )}
+                          
+                          {ccAddresses.length > 0 && (
+                            <div className="text-xs text-gray-600 ml-6">
+                              <span className="font-medium">Cc:</span> {ccAddresses.join(', ')}
+                            </div>
+                          )}
+                        </div>
+                        
+                        <span className="text-xs text-gray-500 whitespace-nowrap">
+                          {formatDate(message.sent_date)}
+                        </span>
+                      </div>
                     </div>
 
-                    {/* Message Body */}
-                    <div
-                      className={`text-sm ${isCustomer ? 'text-gray-900' : 'text-white'}`}
-                      dangerouslySetInnerHTML={{
-                        __html: message.body_html || message.body_text || message.snippet || 'No content'
-                      }}
-                    />
-
-                    {/* Snippet fallback if no body */}
-                    {!message.body_html && !message.body_text && message.snippet && (
-                      <p className="text-sm mt-2 opacity-90">{message.snippet}</p>
-                    )}
+                    {/* Message Body - Email Content */}
+                    <div className="ml-6">
+                      {message.body_html ? (
+                        <div
+                          className="text-sm text-gray-900 prose prose-sm max-w-none"
+                          dangerouslySetInnerHTML={{
+                            __html: message.body_html
+                          }}
+                        />
+                      ) : message.body_text ? (
+                        <div className="text-sm text-gray-900 whitespace-pre-wrap">
+                          {message.body_text}
+                        </div>
+                      ) : message.snippet ? (
+                        <p className="text-sm text-gray-600 italic">{message.snippet}</p>
+                      ) : (
+                        <p className="text-sm text-gray-400 italic">No content available</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })
+                );
+              })}
+            </div>
           )}
         </div>
 

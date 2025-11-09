@@ -31,26 +31,27 @@ export async function GET() {
     }
 
     // Fetch active companies (not archived)
-    // Use a simpler query that explicitly handles NULL and excludes archived
-    const { data: activeCompanies, error: activeError } = await supabase
+    // Get all companies first, then filter out archived in JavaScript to handle NULL properly
+    const { data: allCompanies, error: allError } = await supabase
       .from('companies')
       .select('company_id, company_name, domain_name, health_score, overall_sentiment, status, mrr, renewal_date, last_interaction_at, created_at')
       .eq('user_id', user.id)
-      .or('status.eq.active,status.is.null,status.eq.inactive,status.eq.at_risk,status.eq.churned') // Include all non-archived statuses (including NULL)
       .order('company_name', { ascending: true });
 
-    // Fetch archived companies
-    const { data: archivedCompanies, error: archivedError } = await supabase
-      .from('companies')
-      .select('company_id, company_name, domain_name, health_score, overall_sentiment, status, mrr, renewal_date, last_interaction_at, created_at')
-      .eq('user_id', user.id)
-      .eq('status', 'archived')
-      .order('company_name', { ascending: true });
-
-    if (activeError || archivedError) {
-      console.error('Supabase fetch error:', activeError?.message || archivedError?.message);
+    if (allError) {
+      console.error('Supabase fetch error:', allError.message);
       return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
+
+    // Filter out archived companies (keep NULL and all other statuses)
+    const activeCompanies = (allCompanies || []).filter(
+      company => company.status !== 'archived'
+    );
+
+    // Filter archived companies
+    const archivedCompanies = (allCompanies || []).filter(
+      company => company.status === 'archived'
+    );
 
     return NextResponse.json({ 
       companies: activeCompanies ?? [], 

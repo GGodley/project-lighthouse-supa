@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Phone, Mail, AlertCircle, CheckCircle, List, ArrowUpRight, Clock, Users, Sparkles } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
+import ThreadConversationView from './ThreadConversationView';
+import { getThreadById } from '@/lib/threads/queries';
+import { LLMSummary } from '@/lib/types/threads';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -55,6 +58,11 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'Overview' | 'Interaction Timeline'>('Overview');
+  
+  // Thread modal state
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [selectedThreadSummary, setSelectedThreadSummary] = useState<LLMSummary | { error: string } | null>(null);
+  const [loadingThread, setLoadingThread] = useState<boolean>(false);
   
   // Next Steps state management
   const [nextSteps, setNextSteps] = useState<Array<{id: number, text: string, completed: boolean}>>([]);
@@ -121,6 +129,41 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
         return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Handle clicking on an interaction timeline item
+  const handleInteractionClick = async (interaction: Interaction) => {
+    // Only handle email/thread interactions (not meetings)
+    if (interaction.interaction_type === 'email') {
+      // Check if this is a thread (thread_id format) or legacy email
+      // Thread IDs are typically long alphanumeric strings from Gmail
+      // Legacy email IDs are UUIDs
+      const isThread = interaction.id && interaction.id.length > 20 && !interaction.id.includes('-');
+      
+      if (isThread) {
+        setLoadingThread(true);
+        setSelectedThreadId(interaction.id);
+        
+        try {
+          // Fetch the thread to get its summary
+          const { data: thread, error: threadError } = await getThreadById(supabase, interaction.id);
+          
+          if (threadError || !thread) {
+            setSelectedThreadSummary({ error: threadError?.message || 'Thread not found' });
+          } else {
+            setSelectedThreadSummary(thread.llm_summary);
+          }
+        } catch (err) {
+          console.error('Error fetching thread:', err);
+          setSelectedThreadSummary({ error: 'Failed to load thread' });
+        } finally {
+          setLoadingThread(false);
+        }
+      } else {
+        // Legacy email - could show a simple modal or do nothing
+        console.log('Legacy email clicked:', interaction.id);
+      }
     }
   };
 
@@ -456,43 +499,79 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
             <p className="text-sm text-gray-600 mb-6">Complete history of calls and emails with detailed summaries.</p>
             
             <div className="space-y-4">
-              {interaction_timeline.map((interaction, index) => (
-                <div key={index} className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 mb-4">
-                  <div className="flex flex-row gap-4">
-                    {/* Left Icon Block */}
-                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-pink-100 flex items-center justify-center">
-                      {interaction.interaction_type === 'meeting' ? (
-                        <Phone className="w-5 h-5 text-pink-600" />
-                      ) : (
-                        <Mail className="w-5 h-5 text-pink-600" />
-                      )}
-                    </div>
-                    
-                    {/* Right Content Block */}
-                    <div className="flex-1">
-                      {/* Top Row (Metadata) */}
-                      <div className="flex items-center gap-3 mb-1">
-                        <span className="font-semibold">{interaction.interaction_type === 'meeting' ? 'Call' : 'Email'}</span>
-                        <span className="text-sm text-gray-500">{formatDate(interaction.interaction_date)}</span>
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getSentimentColor(interaction.sentiment)}`}>
-                          {interaction.sentiment}
-                        </span>
+              {interaction_timeline.map((interaction, index) => {
+                const isThread = interaction.interaction_type === 'email' && interaction.id && interaction.id.length > 20 && !interaction.id.includes('-');
+                const isClickable = interaction.interaction_type === 'email' && isThread;
+                
+                return (
+                  <div 
+                    key={index} 
+                    className={`bg-white border border-gray-200 rounded-lg shadow-sm p-4 mb-4 ${isClickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                    onClick={() => isClickable && handleInteractionClick(interaction)}
+                  >
+                    <div className="flex flex-row gap-4">
+                      {/* Left Icon Block */}
+                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-pink-100 flex items-center justify-center">
+                        {interaction.interaction_type === 'meeting' ? (
+                          <Phone className="w-5 h-5 text-pink-600" />
+                        ) : (
+                          <Mail className="w-5 h-5 text-pink-600" />
+                        )}
                       </div>
                       
-                      {/* Middle Row (Description) */}
-                      <p className="text-gray-800">{interaction.title}</p>
-                      <p className="text-sm text-gray-600 mt-1">{interaction.summary}</p>
-                      
-                      {/* Bottom Row (Link) */}
-                      <span className="mt-2 text-sm text-indigo-600 cursor-pointer hover:underline">Click to view full details</span>
+                      {/* Right Content Block */}
+                      <div className="flex-1">
+                        {/* Top Row (Metadata) */}
+                        <div className="flex items-center gap-3 mb-1">
+                          <span className="font-semibold">{interaction.interaction_type === 'meeting' ? 'Call' : 'Email Thread'}</span>
+                          <span className="text-sm text-gray-500">{formatDate(interaction.interaction_date)}</span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getSentimentColor(interaction.sentiment)}`}>
+                            {interaction.sentiment}
+                          </span>
+                        </div>
+                        
+                        {/* Middle Row (Description) */}
+                        <p className="text-gray-800 font-medium">{interaction.title}</p>
+                        <p className="text-sm text-gray-600 mt-1">{interaction.summary}</p>
+                        
+                        {/* Bottom Row (Link) */}
+                        {isClickable && (
+                          <span className="mt-2 text-sm text-indigo-600 hover:underline inline-block">
+                            Click to view full thread conversation →
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
       </div>
+
+      {/* Thread Conversation Modal */}
+      {selectedThreadId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {loadingThread ? (
+              <div className="flex items-center justify-center p-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <p className="ml-4 text-gray-600">Loading thread...</p>
+              </div>
+            ) : (
+              <ThreadConversationView
+                threadId={selectedThreadId}
+                threadSummary={selectedThreadSummary}
+                onClose={() => {
+                  setSelectedThreadId(null);
+                  setSelectedThreadSummary(null);
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -95,3 +95,32 @@ export async function getThreadMessages(
     .order('sent_date', { ascending: true });
 }
 
+/**
+ * Type-safe helper to query a single thread by thread_id
+ * Note: This table is not yet in generated database types.
+ * Uses type assertion through unknown (safer than any) to access untyped tables.
+ */
+export async function getThreadById(
+  supabase: SupabaseClient,
+  threadId: string
+): Promise<SupabaseQueryResponse<Thread>> {
+  // Cast through unknown to avoid 'any' - this is necessary until types are regenerated
+  type UntypedSupabase = {
+    from: (table: string) => {
+      select: (columns: string) => {
+        eq: (column: string, value: string) => {
+          single: () => Promise<SupabaseQueryResponse<Thread>>;
+        };
+      };
+    };
+  };
+
+  const client = supabase as unknown as UntypedSupabase;
+
+  return await client
+    .from('threads')
+    .select('*')
+    .eq('thread_id', threadId)
+    .single();
+}
+
