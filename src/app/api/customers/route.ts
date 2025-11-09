@@ -30,19 +30,32 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: companies, error: companyError } = await supabase
+    // Fetch active companies (not archived)
+    const { data: activeCompanies, error: activeError } = await supabase
       .from('companies')
       .select('company_id, company_name, domain_name, health_score, overall_sentiment, status, mrr, renewal_date, last_interaction_at, created_at')
       .eq('user_id', user.id)
-      .or('status.eq.active,status.is.null') // Include active companies and those with null status (excludes inactive/archived)
+      .neq('status', 'archived')
+      .or('status.eq.active,status.is.null,status.eq.inactive,status.eq.at_risk,status.eq.churned') // Include all non-archived statuses
       .order('company_name', { ascending: true });
 
-    if (companyError) {
-      console.error('Supabase fetch error:', companyError.message);
+    // Fetch archived companies
+    const { data: archivedCompanies, error: archivedError } = await supabase
+      .from('companies')
+      .select('company_id, company_name, domain_name, health_score, overall_sentiment, status, mrr, renewal_date, last_interaction_at, created_at')
+      .eq('user_id', user.id)
+      .eq('status', 'archived')
+      .order('company_name', { ascending: true });
+
+    if (activeError || archivedError) {
+      console.error('Supabase fetch error:', activeError?.message || archivedError?.message);
       return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 
-    return NextResponse.json({ companies: companies ?? [] }, { status: 200 });
+    return NextResponse.json({ 
+      companies: activeCompanies ?? [], 
+      archivedCompanies: archivedCompanies ?? [] 
+    }, { status: 200 });
   } catch (e) {
     console.error('Unexpected API error:', e);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

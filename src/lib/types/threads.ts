@@ -55,6 +55,7 @@ export type BlockedDomain = {
   id: number;
   user_id: string;
   domain: string;
+  status: 'archived' | 'deleted';
   created_at: string; // ISO string
 };
 

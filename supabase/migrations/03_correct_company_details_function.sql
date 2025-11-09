@@ -30,7 +30,27 @@ BEGIN
         ) ORDER BY interaction_date DESC
       ), '[]'::json)
       FROM (
-        -- Emails interactions
+        -- Thread-based email interactions (new system)
+        SELECT 
+          'email'::text as interaction_type,
+          t.last_message_date as interaction_date,
+          t.thread_id as id,
+          COALESCE(t.subject, 'No Subject') as title,
+          COALESCE(
+            t.llm_summary->>'problem_statement',
+            t.llm_summary->>'timeline_summary',
+            t.snippet,
+            'No summary available.'
+          ) as summary,
+          COALESCE(t.llm_summary->>'customer_sentiment', 'Neutral') as sentiment
+        FROM threads t
+        JOIN thread_company_link tcl ON t.thread_id = tcl.thread_id
+        WHERE tcl.company_id = company_id_param
+          AND t.last_message_date IS NOT NULL
+        
+        UNION ALL
+        
+        -- Legacy emails interactions (old system - for backward compatibility)
         SELECT 
           'email'::text as interaction_type,
           e.received_at as interaction_date,
@@ -41,6 +61,11 @@ BEGIN
         FROM emails e
         JOIN customers c ON e.customer_id = c.customer_id
         WHERE c.company_id = company_id_param
+          AND NOT EXISTS (
+            -- Exclude if this email is already represented in threads
+            SELECT 1 FROM thread_messages tm
+            WHERE tm.message_id = e.id::text
+          )
         
         UNION ALL
         
@@ -60,13 +85,29 @@ BEGIN
     'all_next_steps', (
       SELECT COALESCE(json_agg(DISTINCT step), '[]'::json)
       FROM (
-        -- Next steps from emails
+        -- Next steps from threads (new system)
+        SELECT t.llm_summary->>'csm_next_step' as step
+        FROM threads t
+        JOIN thread_company_link tcl ON t.thread_id = tcl.thread_id
+        WHERE tcl.company_id = company_id_param
+          AND t.llm_summary IS NOT NULL
+          AND t.llm_summary->>'csm_next_step' IS NOT NULL
+          AND t.llm_summary->>'csm_next_step' != ''
+        
+        UNION
+        
+        -- Next steps from legacy emails (old system)
         SELECT unnest(e.next_steps) as step
         FROM emails e
         JOIN customers c ON e.customer_id = c.customer_id
         WHERE c.company_id = company_id_param
           AND e.next_steps IS NOT NULL
           AND array_length(e.next_steps, 1) > 0
+          AND NOT EXISTS (
+            -- Exclude if this email is already represented in threads
+            SELECT 1 FROM thread_messages tm
+            WHERE tm.message_id = e.id::text
+          )
         
         UNION
         

@@ -24,11 +24,15 @@ type Company = {
 // Main Company Dashboard Component
 const CustomerThreadsPage: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([])
+  const [archivedCompanies, setArchivedCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [providerToken, setProviderToken] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([])
+  const [selectedArchivedCompanies, setSelectedArchivedCompanies] = useState<string[]>([])
+  const [isMainTableCollapsed, setIsMainTableCollapsed] = useState(false)
+  const [isArchivedTableCollapsed, setIsArchivedTableCollapsed] = useState(true)
   const supabase = useSupabase()
 
   // Get auth session for provider token and user email
@@ -211,22 +215,70 @@ const CustomerThreadsPage: React.FC = () => {
   const handleArchiveSelected = async () => {
     if (selectedCompanies.length === 0) return
 
-    const { error } = await supabase
-      .from('companies')
-      .update({ status: 'inactive' }) // Use 'inactive' instead of 'archived' (not in schema)
-      .in('company_id', selectedCompanies)
+    if (window.confirm(`Are you sure you want to archive ${selectedCompanies.length} companies? They will be moved to archives and no new emails will be imported from these domains. Historical data will be preserved.`)) {
+      try {
+        // Get user ID for blocklist
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          console.error('Not authenticated')
+          return
+        }
 
-    if (!error) {
-      setSelectedCompanies([])
-      // Refresh the list
-      const resp = await fetch('/api/customers', { cache: 'no-store' })
-      if (resp.ok) {
-        const json = await resp.json()
-        setCompanies((json.companies as Company[]) || [])
+        // Get the selected companies with their domain names
+        const companiesToArchive = companies.filter(c => selectedCompanies.includes(c.company_id))
+        const domainsToBlock = companiesToArchive.map(c => c.domain_name).filter(Boolean)
+
+        // Add domains to blocklist with 'archived' status
+        if (domainsToBlock.length > 0) {
+          const blocklistEntries = domainsToBlock.map(domain => ({
+            user_id: user.id,
+            domain: domain.toLowerCase(),
+            status: 'archived'
+          }))
+
+          const { error: blocklistError } = await supabase
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore - domain_blocklist table not yet in TypeScript types
+            .from('domain_blocklist')
+            .upsert(blocklistEntries, {
+              onConflict: 'user_id, domain',
+              ignoreDuplicates: false
+            })
+
+          if (blocklistError) {
+            console.error('Error adding domains to blocklist:', blocklistError)
+            // Continue with archiving even if blocklist fails
+          } else {
+            console.log(`✅ Added ${domainsToBlock.length} domain(s) to blocklist with archived status`)
+          }
+        }
+
+        // Update companies status to 'archived'
+        const { error } = await supabase
+          .from('companies')
+          .update({ status: 'archived' })
+          .in('company_id', selectedCompanies)
+
+        if (!error) {
+          setSelectedCompanies([])
+          // Wait a moment for database to process
+          await new Promise(resolve => setTimeout(resolve, 300))
+          
+          // Refresh the list
+          const resp = await fetch('/api/customers', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
+          if (resp.ok) {
+            const json = await resp.json()
+            setCompanies((json.companies as Company[]) || [])
+            setArchivedCompanies((json.archivedCompanies as Company[]) || [])
+          }
+        } else {
+          console.error('Error archiving companies:', error)
+          // TODO: Show toast error
+        }
+      } catch (err) {
+        console.error('Error in handleArchiveSelected:', err)
+        // TODO: Show toast error
       }
-    } else {
-      console.error('Error archiving companies:', error)
-      // TODO: Show toast error
     }
   }
 
@@ -251,7 +303,8 @@ const CustomerThreadsPage: React.FC = () => {
         if (domainsToBlock.length > 0) {
           const blocklistEntries = domainsToBlock.map(domain => ({
             user_id: user.id,
-            domain: domain.toLowerCase()
+            domain: domain.toLowerCase(),
+            status: 'deleted'
           }))
 
           const { error: blocklistError } = await supabase
@@ -272,6 +325,10 @@ const CustomerThreadsPage: React.FC = () => {
         }
 
         // Delete the companies
+        // This will cascade delete:
+        // - thread_company_link entries (ON DELETE CASCADE)
+        // - customers with matching company_id (ON DELETE CASCADE after migration)
+        // - thread_messages will have customer_id set to NULL (ON DELETE SET NULL)
         const { error } = await supabase
           .from('companies')
           .delete()
@@ -279,11 +336,16 @@ const CustomerThreadsPage: React.FC = () => {
 
         if (!error) {
           setSelectedCompanies([])
+          // Force a hard refresh to ensure deleted companies don't appear
+          // Wait a moment for database to process cascade deletes
+          await new Promise(resolve => setTimeout(resolve, 500))
+          
           // Refresh the list
-          const resp = await fetch('/api/customers', { cache: 'no-store' })
+          const resp = await fetch('/api/customers', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
           if (resp.ok) {
             const json = await resp.json()
             setCompanies((json.companies as Company[]) || [])
+            setArchivedCompanies((json.archivedCompanies as Company[]) || [])
           }
         } else {
           console.error('Error deleting companies:', error)
@@ -323,10 +385,17 @@ const CustomerThreadsPage: React.FC = () => {
           </div>
         </header>
 
-        {/* Company Table */}
-        <div className="bg-white rounded-lg shadow-md p-6">
+        {/* Main Company Table */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-800">Company Overview</h2>
+            <button
+              onClick={() => setIsMainTableCollapsed(!isMainTableCollapsed)}
+              className="flex items-center space-x-2 text-lg font-semibold text-gray-800 hover:text-gray-900"
+            >
+              <span>{isMainTableCollapsed ? '▶' : '▼'}</span>
+              <h2>Company Overview</h2>
+              <span className="text-sm font-normal text-gray-500">({companies.length})</span>
+            </button>
             
             {/* Bulk Actions - Always visible */}
             <div className="flex items-center space-x-3">
@@ -354,8 +423,9 @@ const CustomerThreadsPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left text-gray-600">
+          {!isMainTableCollapsed && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left text-gray-600">
               <thead className="text-xs text-gray-700 uppercase bg-gray-50">
                 <tr>
                   <th scope="col" className="p-4">
@@ -451,9 +521,204 @@ const CustomerThreadsPage: React.FC = () => {
                   })
                 )}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+          )}
         </div>
+
+        {/* Archived Company Table */}
+        {archivedCompanies.length > 0 && (
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="mb-6 flex items-center justify-between">
+              <button
+                onClick={() => setIsArchivedTableCollapsed(!isArchivedTableCollapsed)}
+                className="flex items-center space-x-2 text-lg font-semibold text-gray-800 hover:text-gray-900"
+              >
+                <span>{isArchivedTableCollapsed ? '▶' : '▼'}</span>
+                <h2>Archives</h2>
+                <span className="text-sm font-normal text-gray-500">({archivedCompanies.length})</span>
+              </button>
+              
+              {/* Bulk Actions for Archived */}
+              <div className="flex items-center space-x-3">
+                {selectedArchivedCompanies.length > 0 && (
+                  <span className="text-sm font-semibold text-gray-700">
+                    {selectedArchivedCompanies.length} selected
+                  </span>
+                )}
+                <button
+                  onClick={async () => {
+                    if (selectedArchivedCompanies.length === 0) return
+                    if (window.confirm(`Are you sure you want to restore ${selectedArchivedCompanies.length} companies from archives? They will be moved back to the main table and new emails will be imported.`)) {
+                      try {
+                        // Get user ID for blocklist
+                        const { data: { user } } = await supabase.auth.getUser()
+                        if (!user) {
+                          console.error('Not authenticated')
+                          return
+                        }
+
+                        // Get the selected companies with their domain names
+                        const companiesToRestore = archivedCompanies.filter(c => selectedArchivedCompanies.includes(c.company_id))
+                        const domainsToUnblock = companiesToRestore.map(c => c.domain_name).filter(Boolean)
+
+                        // Remove domains from blocklist (only if status is 'archived', not 'deleted')
+                        if (domainsToUnblock.length > 0) {
+                          const { error: blocklistError } = await supabase
+                            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                            // @ts-ignore - domain_blocklist table not yet in TypeScript types
+                            .from('domain_blocklist')
+                            .delete()
+                            .eq('user_id', user.id)
+                            .in('domain', domainsToUnblock.map(d => d.toLowerCase()))
+                            .eq('status', 'archived')
+
+                          if (blocklistError) {
+                            console.error('Error removing domains from blocklist:', blocklistError)
+                            // Continue with restore even if blocklist removal fails
+                          } else {
+                            console.log(`✅ Removed ${domainsToUnblock.length} domain(s) from blocklist`)
+                          }
+                        }
+
+                        // Update companies status to 'active'
+                        const { error } = await supabase
+                          .from('companies')
+                          .update({ status: 'active' })
+                          .in('company_id', selectedArchivedCompanies)
+                        
+                        if (!error) {
+                          setSelectedArchivedCompanies([])
+                          await new Promise(resolve => setTimeout(resolve, 300))
+                          const resp = await fetch('/api/customers', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
+                          if (resp.ok) {
+                            const json = await resp.json()
+                            setCompanies((json.companies as Company[]) || [])
+                            setArchivedCompanies((json.archivedCompanies as Company[]) || [])
+                          }
+                        } else {
+                          console.error('Error restoring companies:', error)
+                        }
+                      } catch (err) {
+                        console.error('Error in restore:', err)
+                      }
+                    }
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  disabled={selectedArchivedCompanies.length === 0}
+                >
+                  Restore{selectedArchivedCompanies.length > 0 && ` (${selectedArchivedCompanies.length})`}
+                </button>
+              </div>
+            </div>
+
+            {!isArchivedTableCollapsed && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left text-gray-600">
+                  <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+                    <tr>
+                      <th scope="col" className="p-4">
+                        <input 
+                          type="checkbox" 
+                          className="rounded" 
+                          checked={archivedCompanies.length > 0 && selectedArchivedCompanies.length === archivedCompanies.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedArchivedCompanies(archivedCompanies.map(c => c.company_id))
+                            } else {
+                              setSelectedArchivedCompanies([])
+                            }
+                          }}
+                        />
+                      </th>
+                      <th scope="col" className="px-6 py-3">Company Name</th>
+                      <th scope="col" className="px-6 py-3">Health Score</th>
+                      <th scope="col" className="px-6 py-3">Status</th>
+                      <th scope="col" className="px-6 py-3">MRR</th>
+                      <th scope="col" className="px-6 py-3">Renewal Date</th>
+                      <th scope="col" className="px-6 py-3">Last Interaction</th>
+                      <th scope="col" className="px-6 py-3">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {archivedCompanies.map((company, index) => {
+                      const displayPercent = convertScoreToPercentage(company.health_score);
+                      const isSelected = selectedArchivedCompanies.includes(company.company_id);
+                      return (
+                        <tr key={index} className="bg-white border-b hover:bg-gray-50">
+                          <td className="p-4">
+                            <input 
+                              type="checkbox" 
+                              className="rounded" 
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedArchivedCompanies([...selectedArchivedCompanies, company.company_id])
+                                } else {
+                                  setSelectedArchivedCompanies(selectedArchivedCompanies.filter(id => id !== company.company_id))
+                                }
+                              }}
+                            />
+                          </td>
+                          <td className="px-6 py-3 font-medium text-gray-900 whitespace-nowrap">
+                            <Link 
+                              href={`/dashboard/customer-threads/${company.company_id}`} 
+                              className="hover:text-purple-600 transition-colors"
+                            >
+                              {company.company_name}
+                            </Link>
+                          </td>
+                          <td className="px-6 py-3">
+                            <div className="flex items-center">
+                              <span className={`w-12 font-medium ${scoreTextStyles(displayPercent)}`}>
+                                {displayPercent}%
+                              </span>
+                              <div className="w-full bg-gray-200 rounded-full h-1.5 ml-2">
+                                <div
+                                  className={`h-1.5 rounded-full ${displayPercent >= 70 ? 'bg-green-500' : displayPercent >= 40 ? 'bg-orange-500' : 'bg-red-500'}`}
+                                  style={{ width: `${displayPercent}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-3">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                              statusPillStyles[company.overall_sentiment || ''] || 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {company.overall_sentiment || 'Not set'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-3 text-gray-500">
+                            <span>{formatMRR(company.mrr)}</span>
+                          </td>
+                          <td className="px-6 py-3 text-gray-500">
+                            {company.renewal_date ? (
+                              new Date(company.renewal_date).toLocaleDateString('en-CA')
+                            ) : (
+                              <span className="text-gray-400">Not set</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-3 text-gray-500">
+                            {company.last_interaction_at ? (
+                              new Date(company.last_interaction_at).toLocaleDateString('en-CA')
+                            ) : (
+                              <span className="text-gray-400">Not set</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-3 text-center">
+                            <button className="text-gray-500 hover:text-gray-800">
+                              <MoreHorizontal className="h-5 w-5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

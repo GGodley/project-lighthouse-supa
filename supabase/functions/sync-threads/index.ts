@@ -396,6 +396,9 @@ serve(async (req: Request) => {
     // Update job status to 'running' if this is the first page
     if (!pageToken) {
       await updateJobStatus(jobId, 'running', 'Starting thread sync...');
+      console.log(`🚀 Starting sync for job ${jobId}, user ${userId}`);
+    } else {
+      console.log(`📄 Processing page with token: ${pageToken.substring(0, 20)}...`);
     }
     
     // --- MODIFIED ---
@@ -426,11 +429,20 @@ serve(async (req: Request) => {
     const userEmail = profileData.email || ""; // Get user's email for CSM role
     const profileLastSyncedAt = profileData.threads_last_synced_at;
     
+    // Log timestamp status (only on first page to reduce noise)
+    if (!pageToken) {
+      if (profileLastSyncedAt) {
+        console.log(`📅 Profile last synced at: ${profileLastSyncedAt} (UTC)`);
+      } else {
+        console.log(`📅 No previous sync timestamp found in profiles table`);
+      }
+    }
+    
     // --- NEW CODE START ---
-    // 1. Fetch the user's blocklist
+    // 1. Fetch the user's blocklist (both archived and deleted domains should be blocked)
     const { data: blockedDomains, error: blocklistError } = await supabaseAdmin
       .from('domain_blocklist')
-      .select('domain')
+      .select('domain, status')
       .eq('user_id', userId);
 
     if (blocklistError) {
@@ -438,10 +450,12 @@ serve(async (req: Request) => {
     }
 
     // 2. Build the Gmail query exclusion string
+    // Block both archived and deleted domains (both should prevent new imports)
     let exclusionQuery = "";
     if (blockedDomains && blockedDomains.length > 0) {
       const exclusionString = blockedDomains.map(d => `-from:(*@${d.domain})`).join(' ');
       exclusionQuery = ` ${exclusionString}`; // e.g., " -from:(*@binance.com)"
+      console.log(`🚫 Blocking ${blockedDomains.length} domain(s) from sync (${blockedDomains.filter(d => d.status === 'archived').length} archived, ${blockedDomains.filter(d => d.status === 'deleted').length} deleted)`);
     }
     // --- NEW CODE END ---
     
@@ -816,7 +830,11 @@ serve(async (req: Request) => {
     if (listJson.nextPageToken) {
       // Chain to the next page with proper error handling
       try {
-        console.log(`📄 Invoking next page with token: ${listJson.nextPageToken.substring(0, 20)}...`);
+        // Only log on first page to reduce noise
+        if (!pageToken) {
+          console.log(`📄 Processing multiple pages. Current page has ${listJson.threads?.length || 0} threads. Chaining to next page...`);
+        }
+        
         const { data, error } = await supabaseAdmin.functions.invoke('sync-threads', {
           body: {
             jobId: jobId,
@@ -826,12 +844,12 @@ serve(async (req: Request) => {
         });
         
         if (error) {
-          console.error('❌ Failed to invoke next page:', error);
+          console.error(`❌ Failed to invoke next page (token: ${listJson.nextPageToken.substring(0, 20)}...):`, error);
           await updateJobStatus(jobId, 'failed', `Failed to process next page: ${error.message}`);
           throw new Error(`Failed to invoke next page: ${error.message}`);
         }
         
-        console.log('✅ Next page invocation successful');
+        // Don't log success for every page - too noisy. Only log errors.
       } catch (invokeError) {
         console.error('❌ Error invoking next page:', invokeError);
         const errorMessage = invokeError instanceof Error ? invokeError.message : String(invokeError);
