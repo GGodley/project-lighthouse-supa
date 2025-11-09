@@ -66,6 +66,7 @@ export type Database = {
           customer_id: string
           email: string
           full_name: string | null
+          health_score: number | null
           last_interaction_at: string | null
           overall_sentiment: string | null
         }
@@ -75,6 +76,7 @@ export type Database = {
           customer_id?: string
           email: string
           full_name?: string | null
+          health_score?: number | null
           last_interaction_at?: string | null
           overall_sentiment?: string | null
         }
@@ -84,6 +86,7 @@ export type Database = {
           customer_id?: string
           email?: string
           full_name?: string | null
+          health_score?: number | null
           last_interaction_at?: string | null
           overall_sentiment?: string | null
         }

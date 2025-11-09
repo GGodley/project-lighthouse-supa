@@ -166,9 +166,17 @@ Return a JSON object with the following structure:
   "key_participants": ["array", "of", "participant", "names"],
   "timeline_summary": "A summary of the timeline of events in the thread",
   "resolution_status": "Status of resolution (e.g., 'Resolved', 'In Progress', 'Pending', 'Unresolved')",
-  "customer_sentiment": "Customer sentiment (e.g., 'Positive', 'Neutral', 'Negative', 'Frustrated')",
+  "customer_sentiment": "Customer sentiment (e.g., 'Very Positive', 'Positive', 'Neutral', 'Negative', 'Very Negative')",
+  "sentiment_score": The numeric score that corresponds to the chosen sentiment (-2 for very negative, -1 for negative, 0 for neutral, 1 for positive, 2 for very positive),
   "csm_next_step": "Recommended next step for the CSM"
 }
+
+Sentiment Categories & Scores:
+- "Very Positive" (Score: 2): Enthusiastic, explicit praise, clear plans for expansion
+- "Positive" (Score: 1): Satisfied, complimentary, minor issues resolved, optimistic
+- "Neutral" (Score: 0): No strong feelings, factual, informational, no complaints but no praise
+- "Negative" (Score: -1): Frustrated, confused, mentioned blockers, unhappy with a feature or price
+- "Very Negative" (Score: -2): Explicitly angry, threatening to churn, multiple major issues
 
 The "customer" is any participant who is NOT the "CSM".`;
 
@@ -261,9 +269,17 @@ Return a JSON object with the following structure:
   "key_participants": ["array", "of", "participant", "names"],
   "timeline_summary": "A summary of the timeline of events in the thread",
   "resolution_status": "Status of resolution (e.g., 'Resolved', 'In Progress', 'Pending', 'Unresolved')",
-  "customer_sentiment": "Customer sentiment (e.g., 'Positive', 'Neutral', 'Negative', 'Frustrated')",
+  "customer_sentiment": "Customer sentiment (e.g., 'Very Positive', 'Positive', 'Neutral', 'Negative', 'Very Negative')",
+  "sentiment_score": The numeric score that corresponds to the chosen sentiment (-2 for very negative, -1 for negative, 0 for neutral, 1 for positive, 2 for very positive),
   "csm_next_step": "Recommended next step for the CSM"
-}`;
+}
+
+Sentiment Categories & Scores:
+- "Very Positive" (Score: 2): Enthusiastic, explicit praise, clear plans for expansion
+- "Positive" (Score: 1): Satisfied, complimentary, minor issues resolved, optimistic
+- "Neutral" (Score: 0): No strong feelings, factual, informational, no complaints but no praise
+- "Negative" (Score: -1): Frustrated, confused, mentioned blockers, unhappy with a feature or price
+- "Very Negative" (Score: -2): Explicitly angry, threatening to churn, multiple major issues`;
 
   const reduceQuery = `Intermediate Summaries:\n\n${combinedSummaries}\n\nPlease analyze these summaries and generate the final JSON report.`;
 
@@ -331,9 +347,17 @@ Return a JSON object with the following structure:
   "key_participants": ["array", "of", "all", "participant", "names", "including", "new", "ones"],
   "timeline_summary": "An updated summary of the timeline of events, including the new messages",
   "resolution_status": "Updated status of resolution (e.g., 'Resolved', 'In Progress', 'Pending', 'Unresolved')",
-  "customer_sentiment": "Updated customer sentiment based on all messages (e.g., 'Positive', 'Neutral', 'Negative', 'Frustrated')",
+  "customer_sentiment": "Updated customer sentiment based on all messages (e.g., 'Very Positive', 'Positive', 'Neutral', 'Negative', 'Very Negative')",
+  "sentiment_score": The numeric score that corresponds to the chosen sentiment (-2 for very negative, -1 for negative, 0 for neutral, 1 for positive, 2 for very positive),
   "csm_next_step": "Updated recommended next step for the CSM based on the latest messages"
 }
+
+Sentiment Categories & Scores:
+- "Very Positive" (Score: 2): Enthusiastic, explicit praise, clear plans for expansion
+- "Positive" (Score: 1): Satisfied, complimentary, minor issues resolved, optimistic
+- "Neutral" (Score: 0): No strong feelings, factual, informational, no complaints but no praise
+- "Negative" (Score: -1): Frustrated, confused, mentioned blockers, unhappy with a feature or price
+- "Very Negative" (Score: -2): Explicitly angry, threatening to churn, multiple major issues
 
 The "customer" is any participant who is NOT the "CSM".`;
 
@@ -872,6 +896,64 @@ serve(async (req: Request) => {
               previousSummary,
               isIncremental
             );
+          }
+
+          // --- NEW ---
+          // Extract and validate sentiment_score from summaryJson
+          let sentimentScore: number | null = null;
+          if (summaryJson && !summaryJson.error) {
+            const score = summaryJson.sentiment_score;
+            // Validate sentiment_score is a number between -2 and 2
+            if (typeof score === 'number' && score >= -2 && score <= 2) {
+              sentimentScore = score;
+            } else {
+              // Try to map old sentiment text to new score if sentiment_score is missing
+              const sentimentText = summaryJson.customer_sentiment;
+              if (typeof sentimentText === 'string') {
+                const sentimentMap: Record<string, number> = {
+                  'Very Positive': 2,
+                  'Positive': 1,
+                  'Neutral': 0,
+                  'Negative': -1,
+                  'Very Negative': -2,
+                  'Frustrated': -2, // Map old "Frustrated" to -2
+                };
+                sentimentScore = sentimentMap[sentimentText] ?? 0;
+              } else {
+                sentimentScore = 0; // Default to neutral
+              }
+            }
+            console.log(`📊 Extracted sentiment_score: ${sentimentScore} for thread ${threadId}`);
+          }
+
+          // Update sentiment_score for all customer messages in this thread
+          if (sentimentScore !== null) {
+            // Update new messages that will be inserted
+            for (let i = 0; i < messagesToStore.length; i++) {
+              const msg = messagesToStore[i];
+              // Only set sentiment_score for messages from customers (where customer_id is not null)
+              if (msg.customer_id) {
+                messagesToStore[i] = {
+                  ...msg,
+                  sentiment_score: sentimentScore
+                };
+              }
+            }
+            
+            // Also update existing customer messages in the thread with the new sentiment_score
+            // This ensures all messages in the thread have the same sentiment_score
+            const { error: updateError } = await supabaseAdmin
+              .from('thread_messages')
+              .update({ sentiment_score: sentimentScore })
+              .eq('thread_id', threadId)
+              .not('customer_id', 'is', null);
+            
+            if (updateError) {
+              console.warn(`⚠️ Failed to update sentiment_score for existing messages in thread ${threadId}:`, updateError);
+              // Don't throw - this is not critical, continue processing
+            } else {
+              console.log(`✅ Updated sentiment_score for existing customer messages in thread ${threadId}`);
+            }
           }
 
           // --- NEW ---

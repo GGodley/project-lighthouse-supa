@@ -11,19 +11,20 @@ AS $$
 BEGIN
   RETURN (
     SELECT json_build_object(
-      'id', c.id,
-      'name', c.name,
-      'contact_email', c.contact_email,
-      'company_name', c.company_name,
+      'customer_id', c.customer_id,
+      'id', c.customer_id,
+      'name', c.full_name,
+      'contact_email', c.email,
+      'company_name', NULL,
       'health_score', c.health_score,
-      'status', c.status,
-      'mrr', c.mrr,
-      'renewal_date', c.renewal_date,
+      'status', c.overall_sentiment,
+      'mrr', NULL,
+      'renewal_date', NULL,
       'last_interaction_at', c.last_interaction_at,
       'overall_sentiment', c.overall_sentiment,
       'email', c.email,
       'created_at', c.created_at,
-      'user_id', c.user_id,
+      'company_id', c.company_id,
 
       -- Last 10 emails
       'emails', (
@@ -39,7 +40,7 @@ BEGIN
         FROM (
           SELECT e.*
           FROM public.emails e
-          WHERE e.customer_id = c.id
+          WHERE e.customer_id = c.customer_id
           ORDER BY e.received_at DESC
           LIMIT 10
         ) e
@@ -60,14 +61,14 @@ BEGIN
         FROM (
           SELECT m.*
           FROM public.meetings m
-          WHERE m.customer_id = c.id
+          WHERE m.customer_id = c.customer_id
           ORDER BY m.start_time DESC
           LIMIT 5
         ) m
       )
     )
     FROM public.customers c
-    WHERE c.id = p_customer_id AND c.user_id = p_requesting_user_id
+    WHERE c.customer_id = p_customer_id
   );
 END;
 $$;

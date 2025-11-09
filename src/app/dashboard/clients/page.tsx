@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Database } from '@/types/database'
 import { Button } from '@/components/ui/Button'
 import { Plus, Search, MoreVertical } from 'lucide-react'
+import HealthScoreBar from '@/components/ui/HealthScoreBar'
 
 // Create a type alias for cleaner code
 type CustomerRow = Database['public']['Tables']['customers']['Row']
@@ -114,6 +115,9 @@ export default function ClientsPage() {
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Health Score
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Created
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -152,6 +156,9 @@ export default function ClientsPage() {
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(client.overall_sentiment || 'Unknown')}`}>
                       {client.overall_sentiment || 'Unknown'}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <HealthScoreBar score={client.health_score} showLabel={true} />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {new Date(client.created_at).toLocaleDateString()}

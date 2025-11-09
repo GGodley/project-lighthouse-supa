@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import ThreadConversationView from './ThreadConversationView';
 import { getThreadById } from '@/lib/threads/queries';
 import { LLMSummary } from '@/lib/types/threads';
+import HealthScoreBar from '@/components/ui/HealthScoreBar';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -280,9 +281,12 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                 )}
 
                 {/* Health score */}
-                <span className="text-slate-600">
-                  Health Score: {company_details.health_score !== null ? convertScoreToPercentage(company_details.health_score) : 'N/A'}%
-                </span>
+                {company_details.health_score !== null && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-600 text-sm">Health Score:</span>
+                    <HealthScoreBar score={company_details.health_score} showLabel={true} />
+                  </div>
+                )}
 
                 {/* MRR */}
                 <span className="text-slate-600">
