@@ -1,4 +1,4 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       const redirectUrl = new URL(`${requestUrl.origin}/dashboard`);
       redirectUrl.searchParams.set('auth', 'success');
       redirectUrl.searchParams.set('t', Date.now().toString());
-      let response = NextResponse.redirect(redirectUrl);
+      const response = NextResponse.redirect(redirectUrl);
 
       // Create Supabase client with proper cookie handling for route handlers
       const supabase = createServerClient(
