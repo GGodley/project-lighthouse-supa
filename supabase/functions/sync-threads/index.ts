@@ -168,8 +168,22 @@ Return a JSON object with the following structure:
   "resolution_status": "Status of resolution (e.g., 'Resolved', 'In Progress', 'Pending', 'Unresolved')",
   "customer_sentiment": "Customer sentiment (e.g., 'Very Positive', 'Positive', 'Neutral', 'Negative', 'Very Negative')",
   "sentiment_score": The numeric score that corresponds to the chosen sentiment (-2 for very negative, -1 for negative, 0 for neutral, 1 for positive, 2 for very positive),
-  "csm_next_step": "Recommended next step for the CSM"
+  "next_steps": [
+    {
+      "text": "Action item description",
+      "owner": "Name or email of person responsible (or null if not mentioned)",
+      "due_date": "YYYY-MM-DD or null if not mentioned"
+    }
+  ]
 }
+
+CRITICAL INSTRUCTIONS FOR NEXT STEPS:
+- Only extract next steps that are EXPLICITLY mentioned in the conversation
+- Do NOT create or infer next steps if they are not clearly stated
+- If no next steps are mentioned, return an empty array []
+- For owner: Extract the name or email of the person responsible. If not mentioned, use null
+- For due_date: Extract the date in YYYY-MM-DD format if mentioned. If not mentioned, use null
+- Do not hallucinate or make up next steps
 
 Sentiment Categories & Scores:
 - "Very Positive" (Score: 2): Enthusiastic, explicit praise, clear plans for expansion
@@ -271,8 +285,22 @@ Return a JSON object with the following structure:
   "resolution_status": "Status of resolution (e.g., 'Resolved', 'In Progress', 'Pending', 'Unresolved')",
   "customer_sentiment": "Customer sentiment (e.g., 'Very Positive', 'Positive', 'Neutral', 'Negative', 'Very Negative')",
   "sentiment_score": The numeric score that corresponds to the chosen sentiment (-2 for very negative, -1 for negative, 0 for neutral, 1 for positive, 2 for very positive),
-  "csm_next_step": "Recommended next step for the CSM"
+  "next_steps": [
+    {
+      "text": "Action item description",
+      "owner": "Name or email of person responsible (or null if not mentioned)",
+      "due_date": "YYYY-MM-DD or null if not mentioned"
+    }
+  ]
 }
+
+CRITICAL INSTRUCTIONS FOR NEXT STEPS:
+- Only extract next steps that are EXPLICITLY mentioned in the conversation
+- Do NOT create or infer next steps if they are not clearly stated
+- If no next steps are mentioned, return an empty array []
+- For owner: Extract the name or email of the person responsible. If not mentioned, use null
+- For due_date: Extract the date in YYYY-MM-DD format if mentioned. If not mentioned, use null
+- Do not hallucinate or make up next steps
 
 Sentiment Categories & Scores:
 - "Very Positive" (Score: 2): Enthusiastic, explicit praise, clear plans for expansion
@@ -349,8 +377,23 @@ Return a JSON object with the following structure:
   "resolution_status": "Updated status of resolution (e.g., 'Resolved', 'In Progress', 'Pending', 'Unresolved')",
   "customer_sentiment": "Updated customer sentiment based on all messages (e.g., 'Very Positive', 'Positive', 'Neutral', 'Negative', 'Very Negative')",
   "sentiment_score": The numeric score that corresponds to the chosen sentiment (-2 for very negative, -1 for negative, 0 for neutral, 1 for positive, 2 for very positive),
-  "csm_next_step": "Updated recommended next step for the CSM based on the latest messages"
+  "next_steps": [
+    {
+      "text": "Action item description",
+      "owner": "Name or email of person responsible (or null if not mentioned)",
+      "due_date": "YYYY-MM-DD or null if not mentioned"
+    }
+  ]
 }
+
+CRITICAL INSTRUCTIONS FOR NEXT STEPS:
+- Only extract next steps that are EXPLICITLY mentioned in the conversation (including new messages)
+- Do NOT create or infer next steps if they are not clearly stated
+- If no next steps are mentioned, return an empty array []
+- For owner: Extract the name or email of the person responsible. If not mentioned, use null
+- For due_date: Extract the date in YYYY-MM-DD format if mentioned. If not mentioned, use null
+- Do not hallucinate or make up next steps
+- Update existing next steps if they are mentioned in new messages, or add new ones if explicitly stated
 
 Sentiment Categories & Scores:
 - "Very Positive" (Score: 2): Enthusiastic, explicit praise, clear plans for expansion
@@ -1005,6 +1048,32 @@ serve(async (req: Request) => {
         onConflict: 'thread_id',
         ignoreDuplicates: false
       });
+      
+      // Process next steps for each thread that has a summary with next steps
+      if (!threadsError) {
+        for (const threadData of threadsToStore) {
+          if (threadData.llm_summary && typeof threadData.llm_summary === 'object') {
+            const summary = threadData.llm_summary as any;
+            const hasNextSteps = (
+              (summary.next_steps && Array.isArray(summary.next_steps) && summary.next_steps.length > 0) ||
+              (summary.csm_next_step && typeof summary.csm_next_step === 'string' && summary.csm_next_step.trim() !== '')
+            );
+            
+            if (hasNextSteps) {
+              // Call process-next-steps edge function asynchronously (don't wait)
+              supabaseAdmin.functions.invoke('process-next-steps', {
+                body: {
+                  source_type: 'thread',
+                  source_id: threadData.thread_id
+                }
+              }).catch(err => {
+                console.error(`Failed to invoke process-next-steps for thread ${threadData.thread_id}:`, err);
+                // Don't throw - this is not critical for the sync to continue
+              });
+            }
+          }
+        }
+      }
       
       if (threadsError) {
         console.error("Database error saving threads:", threadsError);

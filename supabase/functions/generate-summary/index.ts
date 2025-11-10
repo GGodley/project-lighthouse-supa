@@ -67,7 +67,15 @@ Deno.serve(async (req) => {
       
       "discussion_points": A string containing a concise summary of the main topics.
       
-      "action_items": A string containing a bulleted list of tasks. If none, state "No action items were identified."
+      "action_items": An array of objects, each with the following structure:
+      [
+        {
+          "text": "Action item description",
+          "owner": "Name or email of person responsible (or null if not mentioned)",
+          "due_date": "YYYY-MM-DD or null if not mentioned"
+        }
+      ]
+      CRITICAL: Only extract action items that are EXPLICITLY mentioned in the conversation. Do NOT create or infer action items if they are not clearly stated. If no action items are mentioned, return an empty array [].
       
       "sentiment": A single string phrase chosen from the Sentiment Categories above (e.g., "Positive", "Negative").
       
@@ -83,7 +91,8 @@ Deno.serve(async (req) => {
           content: prompt
         }
       ],
-      model: "gpt-4o" // UPGRADED from gpt-3.5-turbo
+      model: "gpt-4o", // UPGRADED from gpt-3.5-turbo
+      response_format: { type: "json_object" }
     });
 
     const responseContent = chatCompletion.choices[0].message.content;

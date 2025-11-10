@@ -14,7 +14,7 @@ Deno.serve(async (req)=>{
 
     const raw = job.summary_raw_response ?? '';
     let discussionPoints = '';
-    let actionItems = '';
+    let actionItems: any[] = []; // Changed to array for structured next steps
     let sentimentText = 'Neutral'; // Default text
     let sentimentScore = 0;     // Default score (Neutral)
 
@@ -22,7 +22,21 @@ Deno.serve(async (req)=>{
       const parsed = JSON.parse(raw);
       
       discussionPoints = typeof parsed.discussion_points === 'string' ? parsed.discussion_points.trim() : '';
-      actionItems = typeof parsed.action_items === 'string' ? parsed.action_items.trim() : '';
+      
+      // Handle structured action_items array
+      if (Array.isArray(parsed.action_items)) {
+        actionItems = parsed.action_items.map((item: any) => ({
+          text: typeof item.text === 'string' ? item.text.trim() : '',
+          owner: typeof item.owner === 'string' ? item.owner.trim() : null,
+          due_date: typeof item.due_date === 'string' ? item.due_date.trim() : null
+        })).filter((item: any) => item.text !== ''); // Filter out empty items
+      } else if (typeof parsed.action_items === 'string') {
+        // Legacy format: convert string to array format for backward compatibility
+        const text = parsed.action_items.trim();
+        if (text && text !== 'No action items were identified.') {
+          actionItems = [{ text, owner: null, due_date: null }];
+        }
+      }
 
       // Get the new sentiment text
       const s = typeof parsed.sentiment === 'string' ? parsed.sentiment.trim() : 'Neutral';
@@ -41,7 +55,7 @@ Deno.serve(async (req)=>{
     } catch (e) {
       console.error('Failed to parse summary_raw_response JSON. Falling back to empty/neutral fields.', e);
       discussionPoints = '';
-      actionItems = '';
+      actionItems = [];
       sentimentText = 'Neutral';
       sentimentScore = 0;
     }
@@ -50,9 +64,10 @@ Deno.serve(async (req)=>{
 
     // --- THIS IS THE KEY UPDATE ---
     // Update meetings with all four parsed sections
+    // Store actionItems as JSONB array (null if empty)
     const { error: meetingErr } = await supabase.from('meetings').update({
       summary: discussionPoints,
-      next_steps: actionItems,
+      next_steps: actionItems.length > 0 ? actionItems : null, // Store as JSONB array or null
       customer_sentiment: sentimentText,  // The text (e.g., "Positive")
       sentiment_score: sentimentScore     // The number (e.g., 2)
     }).eq('google_event_id', job.meeting_id);
@@ -61,6 +76,20 @@ Deno.serve(async (req)=>{
     if (meetingErr) {
       console.error('Failed to update meetings:', meetingErr);
       throw new Error(`Failed to update meeting: ${meetingErr.message}`);
+    }
+
+    // Process next steps if action items exist
+    if (actionItems.length > 0) {
+      // Call process-next-steps edge function asynchronously
+      supabase.functions.invoke('process-next-steps', {
+        body: {
+          source_type: 'meeting',
+          source_id: job.meeting_id
+        }
+      }).catch(err => {
+        console.error(`Failed to invoke process-next-steps for meeting ${job.meeting_id}:`, err);
+        // Don't throw - this is not critical for the summary processing to continue
+      });
     }
 
     // Finalize transcription job status

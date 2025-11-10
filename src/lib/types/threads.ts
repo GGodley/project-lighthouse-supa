@@ -1,3 +1,10 @@
+// Next step structure extracted from LLM
+export type NextStep = {
+  text: string;
+  owner: string | null;
+  due_date: string | null; // YYYY-MM-DD format or null
+};
+
 // The structured JSON summary from the LLM
 export type LLMSummary = {
   problem_statement: string;
@@ -5,7 +12,10 @@ export type LLMSummary = {
   timeline_summary: string;
   resolution_status: string;
   customer_sentiment: string;
-  csm_next_step: string;
+  sentiment_score: number;
+  next_steps: NextStep[];
+  // Legacy field for backward compatibility (deprecated)
+  csm_next_step?: string;
 };
 
 // Represents a row in the new public.threads table
