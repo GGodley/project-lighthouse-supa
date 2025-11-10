@@ -56,8 +56,8 @@ export default function HealthScoreBar({
         </span>
       )}
       <div className="flex-1 relative h-6 bg-gray-200 rounded-full overflow-hidden">
-        {/* Center line indicator */}
-        <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-yellow-500 z-10 transform -translate-x-1/2" />
+        {/* Center line indicator (always visible) */}
+        <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-gray-400 z-10 transform -translate-x-1/2" />
         
         {/* Negative bar (extends left from center) */}
         {isNegative && (
@@ -80,9 +80,22 @@ export default function HealthScoreBar({
           />
         )}
         
-        {/* Neutral indicator (small dot at center) */}
+        {/* Neutral indicator (bubble at center for zero) */}
         {isNeutral && (
-          <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-yellow-500 rounded-full z-20" />
+          <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-yellow-400 rounded-full z-20 border-2 border-gray-600 shadow-sm" />
+        )}
+        
+        {/* Moving bubble indicator for non-zero scores (spirit level style) */}
+        {!isNeutral && (
+          <div 
+            className={`absolute top-1/2 w-3 h-3 rounded-full z-20 border-2 border-gray-600 shadow-sm transition-all duration-300 ${
+              isNegative ? 'bg-red-500' : 'bg-green-500'
+            }`}
+            style={{
+              left: `${50 + (normalizedScore / 2)}%`, // Center (50%) + offset based on score
+              transform: 'translate(-50%, -50%)', // Center the bubble on its position
+            }}
+          />
         )}
       </div>
     </div>

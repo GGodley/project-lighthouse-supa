@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { MoreHorizontal, Loader2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
 import { useThreadSync } from '@/hooks/useThreadSync'
+import HealthScoreBar from '@/components/ui/HealthScoreBar'
 
 
 // Company type based on exact database schema
@@ -76,26 +77,6 @@ const CustomerThreadsPage: React.FC = () => {
   }, [providerToken, userEmail, syncStatus, startSync, supabase])
 
   // Helper functions
-  const convertScoreToPercentage = (score: number | null): number => {
-    if (score === null || score === undefined) return 0;
-    const baselinePercent = 70;
-    const maxScore = 10;
-    const minScore = -10;
-
-    if (score >= maxScore) return 100;
-    if (score <= minScore) return 0;
-
-    if (score > 0) {
-      const percentPerPoint = (100 - baselinePercent) / maxScore;
-      return Math.round(baselinePercent + (score * percentPerPoint));
-    }
-    if (score < 0) {
-      const percentPerPoint = (baselinePercent - 0) / Math.abs(minScore);
-      return Math.round(baselinePercent + (score * percentPerPoint));
-    }
-    return baselinePercent;
-  };
-
   const formatMRR = (mrr: number | null) => {
     if (mrr === null || mrr === undefined) return 'Not set';
     return new Intl.NumberFormat('en-US', {
@@ -110,12 +91,6 @@ const CustomerThreadsPage: React.FC = () => {
     'Healthy': 'bg-green-100 text-green-800',
     'At Risk': 'bg-red-100 text-red-800',
     'Needs Attention': 'bg-yellow-100 text-yellow-800',
-  };
-
-  const scoreTextStyles = (percent: number): string => {
-    if (percent >= 70) return 'text-green-600';
-    if (percent >= 40) return 'text-orange-500';
-    return 'text-red-600';
   };
 
   useEffect(() => {
@@ -454,7 +429,6 @@ const CustomerThreadsPage: React.FC = () => {
                   <tr><td colSpan={8} className="text-center p-8 text-gray-500">No companies found. Companies will appear here after thread sync.</td></tr>
                 ) : (
                   companies.map((company, index) => {
-                    const displayPercent = convertScoreToPercentage(company.health_score);
                     const isSelected = selectedCompanies.includes(company.company_id);
                     return (
                       <tr key={index} className="bg-white border-b hover:bg-gray-50">
@@ -475,17 +449,7 @@ const CustomerThreadsPage: React.FC = () => {
                           </Link>
                         </td>
                         <td className="px-6 py-3">
-                          <div className="flex items-center">
-                            <span className={`w-12 font-medium ${scoreTextStyles(displayPercent)}`}>
-                              {displayPercent}%
-                            </span>
-                            <div className="w-full bg-gray-200 rounded-full h-1.5 ml-2">
-                              <div
-                                className={`h-1.5 rounded-full ${displayPercent >= 70 ? 'bg-green-500' : displayPercent >= 40 ? 'bg-orange-500' : 'bg-red-500'}`}
-                                style={{ width: `${displayPercent}%` }}
-                              ></div>
-                            </div>
-                          </div>
+                          <HealthScoreBar score={company.health_score} showLabel={true} />
                         </td>
                         <td className="px-6 py-3">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -642,7 +606,6 @@ const CustomerThreadsPage: React.FC = () => {
                   </thead>
                   <tbody>
                     {archivedCompanies.map((company, index) => {
-                      const displayPercent = convertScoreToPercentage(company.health_score);
                       const isSelected = selectedArchivedCompanies.includes(company.company_id);
                       return (
                         <tr key={index} className="bg-white border-b hover:bg-gray-50">
@@ -670,15 +633,7 @@ const CustomerThreadsPage: React.FC = () => {
                           </td>
                           <td className="px-6 py-3">
                             <div className="flex items-center">
-                              <span className={`w-12 font-medium ${scoreTextStyles(displayPercent)}`}>
-                                {displayPercent}%
-                              </span>
-                              <div className="w-full bg-gray-200 rounded-full h-1.5 ml-2">
-                                <div
-                                  className={`h-1.5 rounded-full ${displayPercent >= 70 ? 'bg-green-500' : displayPercent >= 40 ? 'bg-orange-500' : 'bg-red-500'}`}
-                                  style={{ width: `${displayPercent}%` }}
-                                ></div>
-                              </div>
+                              <HealthScoreBar score={company.health_score} showLabel={true} />
                             </div>
                           </td>
                           <td className="px-6 py-3">
