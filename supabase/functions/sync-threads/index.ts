@@ -839,7 +839,7 @@ serve(async (req: Request) => {
                           company_id: companyId,
                         },
                         {
-                          onConflict: 'email, company_id', // Fixed: matches database constraint
+                          onConflict: 'email', // Fixed: matches database constraint (customers_email_key)
                           ignoreDuplicates: false,
                         }
                       )
