@@ -4,6 +4,9 @@ import { redirect } from 'next/navigation'
 export const dynamic = 'force-dynamic'
 
 export default async function Home() {
+  // Note: Middleware handles redirects for root path, but we keep this as a fallback
+  // The middleware will redirect / to /dashboard if user is authenticated,
+  // or to /login if not. This server component acts as a backup.
   const supabase = await createClient()
   
   try {

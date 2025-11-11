@@ -11,6 +11,12 @@ export default function AuthForm() {
   const supabase = useSupabase()
 
   const handleGoogleAuth = async () => {
+    // Prevent double-clicking or multiple simultaneous requests
+    if (loading) {
+      console.log("⚠️ OAuth request already in progress, ignoring duplicate click");
+      return;
+    }
+    
     setLoading(true)
     try {
       const options = {
@@ -40,18 +46,26 @@ export default function AuthForm() {
       
       if (error) {
         console.error("❌ Google OAuth Error:", error);
+        setLoading(false); // Reset loading on error
         throw error;
       }
       
       console.log("✅ Google OAuth request sent successfully");
+      // Don't set loading to false here - let the redirect happen
+      // The loading state will reset when the component unmounts or page reloads
     } catch (error) {
       console.error('❌ Error signing in with Google:', error)
-    } finally {
-      setLoading(false)
+      setLoading(false); // Reset loading on error
     }
   }
 
   const handleMicrosoftAuth = async () => {
+    // Prevent double-clicking or multiple simultaneous requests
+    if (loading) {
+      console.log("⚠️ OAuth request already in progress, ignoring duplicate click");
+      return;
+    }
+    
     setLoading(true)
     try {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -61,11 +75,14 @@ export default function AuthForm() {
           scopes: 'email profile openid https://graph.microsoft.com/Mail.Read'
         }
       })
-      if (error) throw error
+      if (error) {
+        setLoading(false); // Reset loading on error
+        throw error;
+      }
+      // Don't set loading to false here - let the redirect happen
     } catch (error) {
       console.error('Error signing in with Microsoft:', error)
-    } finally {
-      setLoading(false)
+      setLoading(false); // Reset loading on error
     }
   }
 

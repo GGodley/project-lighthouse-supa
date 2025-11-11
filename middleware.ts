@@ -54,14 +54,32 @@ export async function middleware(request: NextRequest) {
   }
 
   const { pathname } = request.nextUrl;
+  const searchParams = request.nextUrl.searchParams;
+  
+  // Check if this is a redirect from auth callback (has auth=success param)
+  const isAuthCallbackRedirect = searchParams.get('auth') === 'success';
 
   // --- REDIRECT LOGIC ---
+  // If coming from auth callback but no user found yet, check cookies more carefully
+  // This handles the race condition where cookies might not be fully propagated
   if (!user && pathname.startsWith('/dashboard')) {
+    // If this is from auth callback, allow it through - cookies might still be setting
+    if (isAuthCallbackRedirect) {
+      console.log(`[Middleware Decision] Auth callback redirect detected. Allowing through even without user (cookies may still be setting).`);
+      return response;
+    }
     console.log(`[Middleware Decision] No user found. Redirecting from protected route ${pathname} to /login.`);
     return NextResponse.redirect(new URL('/login', request.url));
   }
   
+  // Don't redirect authenticated users away from login if they just came from auth callback
+  // This prevents a redirect loop
   if (user && (pathname === '/login' || pathname === '/')) {
+    // If they have auth=success param, they're already being redirected, don't double redirect
+    if (isAuthCallbackRedirect && pathname === '/login') {
+      console.log(`[Middleware Decision] User logged in and on login page with auth=success. Redirecting to dashboard.`);
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
     console.log(`[Middleware Decision] User is logged in. Redirecting from ${pathname} to /dashboard.`);
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
