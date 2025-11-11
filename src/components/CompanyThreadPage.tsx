@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { AlertCircle, List, ArrowUpRight, Clock, Users, Sparkles, Mail, ArrowLeft } from 'lucide-react';
+import { AlertCircle, List, ArrowUpRight, Clock, Users, Sparkles, Mail, ArrowLeft, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { useSupabase } from '@/components/SupabaseProvider';
 import { useCompanyThreads } from '@/hooks/useCompanyThreads';
 import ThreadListView from './ThreadListView';
@@ -34,10 +34,20 @@ interface ProductFeedback {
   updated_at: string;
 }
 
+interface NextStep {
+  id: string;
+  text: string;
+  completed: boolean;
+  owner: string | null;
+  due_date: string | null;
+  source_type: 'thread' | 'meeting';
+  created_at: string;
+}
+
 interface CompanyData {
   company_details: CompanyDetails;
   product_feedback: ProductFeedback[];
-  all_next_steps: string[];
+  next_steps: NextStep[];
 }
 
 const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
@@ -55,15 +65,45 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
   const selectedThread = threads.find(t => t.thread_id === selectedThreadId);
 
   // Next Steps state management
-  const [nextSteps, setNextSteps] = useState<Array<{id: number, text: string, completed: boolean}>>([]);
+  const [nextSteps, setNextSteps] = useState<NextStep[]>([]);
+  const [completedExpanded, setCompletedExpanded] = useState<boolean>(false);
+  const [updatingStepId, setUpdatingStepId] = useState<string | null>(null);
 
-  // Toggle function for next steps
-  const toggleNextStep = (id: number) => {
-    setNextSteps(
-      nextSteps.map(step => 
-        step.id === id ? { ...step, completed: !step.completed } : step
-      )
-    );
+  // Toggle function for next steps - calls API
+  const toggleNextStep = async (step: NextStep) => {
+    setUpdatingStepId(step.id);
+    try {
+      const response = await fetch(`/api/companies/${companyId}/next-steps/${step.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ completed: !step.completed }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update next step');
+      }
+
+      const updated = await response.json();
+      
+      // Update local state
+      setNextSteps(
+        nextSteps.map(s => 
+          s.id === step.id ? updated : s
+        )
+      );
+    } catch (err) {
+      console.error('Error updating next step:', err);
+      // Revert on error
+      setNextSteps(
+        nextSteps.map(s => 
+          s.id === step.id ? { ...s, completed: step.completed } : s
+        )
+      );
+    } finally {
+      setUpdatingStepId(null);
+    }
   };
 
   useEffect(() => {
@@ -86,14 +126,8 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
         setCompanyData(data);
         
         // Initialize next steps state
-        if (data && data.all_next_steps) {
-          setNextSteps(
-            data.all_next_steps.map((step: string, index: number) => ({
-              id: index,
-              text: step,
-              completed: false
-            }))
-          );
+        if (data && data.next_steps) {
+          setNextSteps(data.next_steps);
         }
       } catch (err) {
         console.error('Error fetching company data:', err);
@@ -352,82 +386,113 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
               </div>
             )}
 
-            {/* Next Steps */}
+            {/* Next Steps - Enhanced Design */}
             {nextSteps && nextSteps.length > 0 && (
               <div className="bg-white rounded-lg shadow-sm p-6">
+                {/* Main Section Header */}
                 <div className="flex items-center gap-2 mb-4">
                   <Clock className="h-6 w-6 text-gray-500" />
                   <h3 className="text-xl font-semibold text-gray-900">Next Steps</h3>
                 </div>
                 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  <div>
+                {/* Active Next Steps */}
+                {nextSteps.filter(s => !s.completed).length > 0 && (
+                  <div className="mb-6">
                     <div className="flex items-center gap-2 mb-3">
                       <Users className="h-5 w-5 text-gray-500" />
-                      <h4 className="font-semibold">Discussed with Customer</h4>
+                      <h4 className="font-semibold">Next Steps</h4>
                     </div>
                     
                     <ul className="space-y-3">
-                      {nextSteps.map((step) => (
-                        <li key={step.id} className="flex justify-between items-center">
-                          <div className="flex items-center gap-3">
-                            <button
-                              onClick={() => toggleNextStep(step.id)}
-                              className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                                step.completed
-                                  ? 'bg-indigo-600 border-indigo-600'
-                                  : 'border-gray-300 hover:border-indigo-600'
-                              }`}
-                            >
-                              {step.completed && <div className="w-2 h-2 bg-white rounded-full"></div>}
-                            </button>
-                            <span className={`text-gray-700 ${step.completed ? 'line-through text-gray-400' : ''}`}>
-                              {step.text}
-                            </span>
-                          </div>
-                          
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      {nextSteps.filter(s => !s.completed).map((step) => (
+                        <li key={step.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                          <button
+                            onClick={() => toggleNextStep(step)}
+                            disabled={updatingStepId === step.id}
+                            className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 ${
                               step.completed
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-gray-100 text-gray-800'
-                            }`}
+                                ? 'bg-indigo-600 border-indigo-600'
+                                : 'border-gray-300 hover:border-indigo-600'
+                            } ${updatingStepId === step.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                           >
-                            {step.completed ? 'Done' : 'To Do'}
-                          </span>
+                            {step.completed && <CheckCircle className="w-3 h-3 text-white" />}
+                          </button>
+                          
+                          <div className="flex-1 min-w-0">
+                            <p className="text-gray-700">{step.text}</p>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              {step.owner && (
+                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  Owner: {step.owner}
+                                </span>
+                              )}
+                              {step.due_date && (
+                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                  Due: {new Date(step.due_date).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </li>
                       ))}
                     </ul>
                   </div>
-                  
+                )}
+
+                {/* Completed Next Steps - Collapsible */}
+                {nextSteps.filter(s => s.completed).length > 0 && (
                   <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <Sparkles className="h-5 w-5 text-gray-500" />
-                      <h4 className="font-semibold">Suggested Best Practices</h4>
-                    </div>
+                    <button
+                      onClick={() => setCompletedExpanded(!completedExpanded)}
+                      className="flex items-center gap-2 mb-3 w-full text-left"
+                    >
+                      <Users className="h-5 w-5 text-gray-500" />
+                      <h4 className="font-semibold">Completed Next Steps</h4>
+                      <span className="ml-auto text-sm text-gray-500">
+                        ({nextSteps.filter(s => s.completed).length})
+                        {completedExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      </span>
+                    </button>
                     
-                    <ul className="space-y-3">
-                      <li className="p-3 bg-pink-50 border border-pink-100 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <span className="w-1.5 h-1.5 bg-pink-700 rounded-full flex-shrink-0"></span>
-                          <span className="text-gray-700">Proactive outreach before renewal date (90 days prior)</span>
-                        </div>
-                      </li>
-                      <li className="p-3 bg-pink-50 border border-pink-100 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <span className="w-1.5 h-1.5 bg-pink-700 rounded-full flex-shrink-0"></span>
-                          <span className="text-gray-700">Introduce customer to success manager for better support</span>
-                        </div>
-                      </li>
-                      <li className="p-3 bg-pink-50 border border-pink-100 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <span className="w-1.5 h-1.5 bg-pink-700 rounded-full flex-shrink-0"></span>
-                          <span className="text-gray-700">Schedule executive-level relationship building meeting</span>
-                        </div>
-                      </li>
-                    </ul>
+                    {completedExpanded && (
+                      <div className="max-h-96 overflow-y-auto">
+                        <ul className="space-y-3">
+                          {nextSteps.filter(s => s.completed).map((step) => (
+                            <li key={step.id} className="flex items-start gap-3 p-3 bg-green-50 rounded-lg">
+                              <button
+                                onClick={() => toggleNextStep(step)}
+                                disabled={updatingStepId === step.id}
+                                className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 ${
+                                  step.completed
+                                    ? 'bg-green-600 border-green-600'
+                                    : 'border-gray-300 hover:border-indigo-600'
+                                } ${updatingStepId === step.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                              >
+                                {step.completed && <CheckCircle className="w-3 h-3 text-white" />}
+                              </button>
+                              
+                              <div className="flex-1 min-w-0">
+                                <p className="text-gray-700 line-through">{step.text}</p>
+                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                  {step.owner && (
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                      Owner: {step.owner}
+                                    </span>
+                                  )}
+                                  {step.due_date && (
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                      Due: {new Date(step.due_date).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
               </div>
             )}
           </div>
