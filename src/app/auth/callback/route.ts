@@ -11,6 +11,21 @@ export async function GET(request: NextRequest) {
   console.log("Full Request URL:", request.url);
   console.log("Authorization Code received:", code ? "YES" : "NO");
 
+  // Log all cookies to debug PKCE code verifier issue
+  const allCookies = request.cookies.getAll();
+  console.log("--- COOKIE DIAGNOSTIC ---");
+  console.log("Total cookies received:", allCookies.length);
+  const codeVerifierCookie = allCookies.find(c => c.name.includes('code-verifier') || c.name.includes('verifier'));
+  console.log("Code verifier cookie found:", !!codeVerifierCookie);
+  if (codeVerifierCookie) {
+    console.log("Code verifier cookie name:", codeVerifierCookie.name);
+  }
+  // Log all Supabase-related cookies
+  const supabaseCookies = allCookies.filter(c => c.name.startsWith('sb-'));
+  console.log("Supabase cookies found:", supabaseCookies.length);
+  supabaseCookies.forEach(c => console.log(`  - ${c.name}: ${c.value.substring(0, 20)}...`));
+  console.log("--- END COOKIE DIAGNOSTIC ---");
+
   // Create response for redirect
   const redirectUrl = new URL(`${requestUrl.origin}/dashboard`);
   redirectUrl.searchParams.set('auth', 'success');
@@ -36,42 +51,44 @@ export async function GET(request: NextRequest) {
     }
   );
 
-  // Check if user is already authenticated (prevents processing callback twice)
-  const { data: { user: existingUser } } = await supabase.auth.getUser();
-  if (existingUser) {
-    console.log("--- USER ALREADY AUTHENTICATED ---");
-    console.log("User ID:", existingUser.id);
-    console.log("Redirecting to dashboard without processing code (already authenticated)");
-    // User is already authenticated, just redirect to dashboard
-    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    response.headers.set('Pragma', 'no-cache');
-    response.headers.set('Expires', '0');
-    return response;
-  }
+  // IMPORTANT: Don't check for existing user BEFORE exchanging code
+  // This can interfere with PKCE code verifier retrieval
+  // The code verifier is needed for exchangeCodeForSession to work
 
   if (code) {
     try {
+      // Exchange code for session - this requires the code verifier cookie
+      // which should have been set when signInWithOAuth was called
+      console.log("Attempting to exchange code for session...");
       const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
       if (error) {
         console.error("Supabase exchangeCodeForSession ERROR:", error.message);
+        console.error("Error details:", JSON.stringify(error, null, 2));
         
-        // Check if error is due to code already being used (idempotency)
-        // If user is now authenticated (code was used successfully), just redirect to dashboard
-        const { data: { user: checkUser } } = await supabase.auth.getUser();
+        // ALWAYS check if user is authenticated after error - the code might have been used successfully
+        // even if exchangeCodeForSession returned an error (race condition, double call, etc.)
+        const { data: { user: checkUser }, error: getUserError } = await supabase.auth.getUser();
+        
         if (checkUser) {
-          console.log("Code was already used, but user is authenticated. Redirecting to dashboard.");
+          console.log("⚠️ Exchange failed but user IS authenticated. This suggests code was already used.");
+          console.log("User ID:", checkUser.id);
+          console.log("Redirecting to dashboard (code was likely already processed).");
           response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
           response.headers.set('Pragma', 'no-cache');
           response.headers.set('Expires', '0');
           return response;
         }
         
-        // If it's a PKCE error about code verifier, check if user is authenticated
-        if (error.message.includes('code verifier') || error.message.includes('code_verifier')) {
-          const { data: { user: pkceCheckUser } } = await supabase.auth.getUser();
-          if (pkceCheckUser) {
-            console.log("PKCE error but user is authenticated. Redirecting to dashboard.");
+        // If it's a PKCE error, log more details
+        if (error.message.includes('code verifier') || error.message.includes('code_verifier') || error.message.includes('non-empty')) {
+          console.error("❌ PKCE CODE VERIFIER ERROR DETECTED");
+          console.error("This usually means the code verifier cookie is missing or not accessible.");
+          console.error("Check cookie settings (SameSite, Secure, Domain, Path)");
+          
+          // Check if user is authenticated despite PKCE error
+          if (checkUser) {
+            console.log("User is authenticated despite PKCE error. Redirecting to dashboard.");
             response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
             response.headers.set('Pragma', 'no-cache');
             response.headers.set('Expires', '0');
@@ -79,7 +96,8 @@ export async function GET(request: NextRequest) {
           }
         }
         
-        // Redirect to an error page with the error message
+        // If we get here, the exchange truly failed and user is not authenticated
+        console.error("❌ Authentication failed. User is not authenticated.");
         return NextResponse.redirect(`${requestUrl.origin}/login?error=Could not exchange code for session: ${error.message}`);
       }
       
