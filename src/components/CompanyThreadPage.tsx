@@ -5,6 +5,7 @@ import { useSupabase } from '@/components/SupabaseProvider';
 import { useCompanyThreads } from '@/hooks/useCompanyThreads';
 import ThreadListView from './ThreadListView';
 import ThreadConversationView from './ThreadConversationView';
+import HealthScoreBar from '@/components/ui/HealthScoreBar';
 
 interface CompanyThreadPageProps {
   companyId: string;
@@ -157,6 +158,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
   const sentimentStyles: Record<string, string> = {
     'Healthy': 'bg-green-100 text-green-800',
     'At Risk': 'bg-red-100 text-red-800',
+    'Neutral': 'bg-yellow-100 text-yellow-800',
   };
 
   // Convert raw health score to display percentage
@@ -222,9 +224,12 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                 )}
 
                 {/* Health score */}
-                <span className="text-slate-600">
-                  Health Score: {convertScoreToPercentage(company_details.health_score)}%
-                </span>
+                {company_details.health_score !== null && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-600 text-sm">Health Score:</span>
+                    <HealthScoreBar score={company_details.health_score} showLabel={true} />
+                  </div>
+                )}
 
                 {/* MRR */}
                 <span className="text-slate-600">

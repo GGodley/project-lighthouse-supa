@@ -90,6 +90,7 @@ const CustomerThreadsPage: React.FC = () => {
   const statusPillStyles: { [key: string]: string } = {
     'Healthy': 'bg-green-100 text-green-800',
     'At Risk': 'bg-red-100 text-red-800',
+    'Neutral': 'bg-yellow-100 text-yellow-800',
     'Needs Attention': 'bg-yellow-100 text-yellow-800',
   };
 
