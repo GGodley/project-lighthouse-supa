@@ -11,37 +11,74 @@ export async function GET(request: NextRequest) {
   console.log("Full Request URL:", request.url);
   console.log("Authorization Code received:", code ? "YES" : "NO");
 
+  // Create response for redirect
+  const redirectUrl = new URL(`${requestUrl.origin}/dashboard`);
+  redirectUrl.searchParams.set('auth', 'success');
+  redirectUrl.searchParams.set('t', Date.now().toString());
+  const response = NextResponse.redirect(redirectUrl);
+
+  // Create Supabase client with proper cookie handling for route handlers
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            request.cookies.set(name, value);
+            response.cookies.set(name, value, options);
+          });
+        },
+      },
+    }
+  );
+
+  // Check if user is already authenticated (prevents processing callback twice)
+  const { data: { user: existingUser } } = await supabase.auth.getUser();
+  if (existingUser) {
+    console.log("--- USER ALREADY AUTHENTICATED ---");
+    console.log("User ID:", existingUser.id);
+    console.log("Redirecting to dashboard without processing code (already authenticated)");
+    // User is already authenticated, just redirect to dashboard
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+    return response;
+  }
+
   if (code) {
     try {
-      // Create redirect response first - we'll update the URL later
-      const redirectUrl = new URL(`${requestUrl.origin}/dashboard`);
-      redirectUrl.searchParams.set('auth', 'success');
-      redirectUrl.searchParams.set('t', Date.now().toString());
-      const response = NextResponse.redirect(redirectUrl);
-
-      // Create Supabase client with proper cookie handling for route handlers
-      const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          cookies: {
-            getAll() {
-              return request.cookies.getAll();
-            },
-            setAll(cookiesToSet) {
-              cookiesToSet.forEach(({ name, value, options }) => {
-                request.cookies.set(name, value);
-                response.cookies.set(name, value, options);
-              });
-            },
-          },
-        }
-      );
-
       const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
       if (error) {
         console.error("Supabase exchangeCodeForSession ERROR:", error.message);
+        
+        // Check if error is due to code already being used (idempotency)
+        // If user is now authenticated (code was used successfully), just redirect to dashboard
+        const { data: { user: checkUser } } = await supabase.auth.getUser();
+        if (checkUser) {
+          console.log("Code was already used, but user is authenticated. Redirecting to dashboard.");
+          response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+          response.headers.set('Pragma', 'no-cache');
+          response.headers.set('Expires', '0');
+          return response;
+        }
+        
+        // If it's a PKCE error about code verifier, check if user is authenticated
+        if (error.message.includes('code verifier') || error.message.includes('code_verifier')) {
+          const { data: { user: pkceCheckUser } } = await supabase.auth.getUser();
+          if (pkceCheckUser) {
+            console.log("PKCE error but user is authenticated. Redirecting to dashboard.");
+            response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+            response.headers.set('Pragma', 'no-cache');
+            response.headers.set('Expires', '0');
+            return response;
+          }
+        }
+        
         // Redirect to an error page with the error message
         return NextResponse.redirect(`${requestUrl.origin}/login?error=Could not exchange code for session: ${error.message}`);
       }
@@ -97,6 +134,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${requestUrl.origin}/login?error=An unexpected error occurred during authentication.`);
     }
   } else {
+    // No code provided - check if user is already authenticated
+    const { data: { user: noCodeUser } } = await supabase.auth.getUser();
+    if (noCodeUser) {
+      console.log("No code provided but user is authenticated. Redirecting to dashboard.");
+      response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      response.headers.set('Pragma', 'no-cache');
+      response.headers.set('Expires', '0');
+      return response;
+    }
+    
     console.warn("WARNING: Auth callback was called without an authorization code.");
     console.log("Redirecting to login page due to missing authorization code.");
     return NextResponse.redirect(`${requestUrl.origin}/login?error=No authorization code provided`);
