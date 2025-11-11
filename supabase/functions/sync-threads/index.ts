@@ -575,14 +575,49 @@ serve(async (req: Request) => {
     }
     
     // Get user email and last sync time from profiles table
-    const { data: profileData, error: profileError } = await supabaseAdmin
+    let { data: profileData, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('email, threads_last_synced_at')
       .eq('id', userId)
       .single();
     
+    // If profile doesn't exist, try to create it from auth.users data
     if (profileError || !profileData) {
-      throw new Error(`Could not fetch profile for user ID: ${userId}`);
+      console.warn(`⚠️ Profile not found for user ${userId}. Attempting to create profile from auth.users...`);
+      
+      // Fetch user data from auth.users
+      const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.getUserById(userId);
+      
+      if (authError || !authUser?.user) {
+        throw new Error(`Could not fetch profile or auth user for user ID: ${userId}. Profile error: ${profileError?.message || 'Profile not found'}, Auth error: ${authError?.message || 'Auth user not found'}`);
+      }
+      
+      const user = authUser.user;
+      const provider = user.app_metadata?.provider || 'google';
+      const providerId = user.app_metadata?.provider_id || user.user_metadata?.provider_id || user.email || '';
+      const fullName = user.user_metadata?.full_name || user.user_metadata?.name || null;
+      
+      // Create profile
+      const { data: newProfile, error: createError } = await supabaseAdmin
+        .from('profiles')
+        .insert({
+          id: userId,
+          email: user.email || '',
+          full_name: fullName,
+          provider: provider,
+          provider_id: providerId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select('email, threads_last_synced_at')
+        .single();
+      
+      if (createError || !newProfile) {
+        throw new Error(`Could not create profile for user ID: ${userId}. Error: ${createError?.message || 'Unknown error'}`);
+      }
+      
+      console.log(`✅ Created profile for user ${userId}`);
+      profileData = newProfile;
     }
     
     const userEmail = profileData.email || ""; // Get user's email for CSM role
