@@ -843,7 +843,7 @@ serve(async (req: Request) => {
                           ignoreDuplicates: false,
                         }
                       )
-                      .select('customer_id')
+                      .select('customer_id, id')
                       .single();
 
                     // --- CRITICAL CHECK ---
@@ -860,7 +860,11 @@ serve(async (req: Request) => {
                     }
                     // --- END CRITICAL CHECK ---
 
-                    const customerId = customer.customer_id; // UUID
+                    // Use customer_id if available, otherwise fall back to id
+                    const customerId = customer.customer_id || customer.id;
+                    if (!customerId) {
+                      throw new Error(`Customer ID not found in returned data for ${email}. Customer data: ${JSON.stringify(customer)}`);
+                    }
                     discoveredCustomerIds.set(email, customerId);
                     
                     if (fromHeader.includes(email)) {
