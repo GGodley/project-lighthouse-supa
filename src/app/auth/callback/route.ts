@@ -51,15 +51,31 @@ export async function GET(request: NextRequest) {
     }
   );
 
-  // IMPORTANT: Don't check for existing user BEFORE exchanging code
-  // This can interfere with PKCE code verifier retrieval
-  // The code verifier is needed for exchangeCodeForSession to work
+  // Check if there's already a session established (Supabase might have done this automatically)
+  // This handles the case where the session was created via refresh token or other mechanism
+  const { data: existingSession } = await supabase.auth.getSession();
+  const { data: { user: existingUser } } = await supabase.auth.getUser();
+  
+  if (existingSession?.session || existingUser) {
+    console.log("✅ Session already exists - Supabase may have auto-created it");
+    if (existingSession?.session) {
+      console.log("Session found. User ID:", existingSession.session.user.id);
+    }
+    if (existingUser) {
+      console.log("User found. User ID:", existingUser.id);
+    }
+    console.log("Redirecting to dashboard without code exchange.");
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+    return response;
+  }
 
   if (code) {
     try {
       // Exchange code for session - this requires the code verifier cookie
       // which should have been set when signInWithOAuth was called
-      console.log("Attempting to exchange code for session...");
+      console.log("No existing session found. Attempting to exchange code for session...");
       const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
       if (error) {
@@ -67,11 +83,24 @@ export async function GET(request: NextRequest) {
         console.error("Error details:", JSON.stringify(error, null, 2));
         
         // If it's a PKCE error, Supabase might have still created a session through refresh token
-        // Wait a moment for any async session creation to complete
+        // Wait longer for any async session creation to complete
         if (error.message.includes('code verifier') || error.message.includes('code_verifier') || error.message.includes('non-empty')) {
           console.error("❌ PKCE CODE VERIFIER ERROR DETECTED");
-          console.error("Waiting briefly to check if session was created via refresh token...");
-          await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms for async operations
+          console.error("This usually means the code verifier cookie is missing or not accessible.");
+          console.error("Waiting to check if Supabase created session via refresh token...");
+          // Wait longer - Supabase might be creating session asynchronously
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second for async operations
+          
+          // Re-check for session after waiting
+          const { data: retrySession } = await supabase.auth.getSession();
+          const { data: { user: retryUser } } = await supabase.auth.getUser();
+          if (retrySession?.session || retryUser) {
+            console.log("✅ Session found after waiting! Redirecting to dashboard.");
+            response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+            response.headers.set('Pragma', 'no-cache');
+            response.headers.set('Expires', '0');
+            return response;
+          }
         }
         
         // ALWAYS check if user is authenticated after error - the code might have been used successfully
