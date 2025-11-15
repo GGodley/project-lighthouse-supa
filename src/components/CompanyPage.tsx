@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Phone, Mail, AlertCircle, CheckCircle, List, ArrowUpRight, Clock, Users, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
+import { Phone, Mail, AlertCircle, CheckCircle, List, ArrowUpRight, Clock, Users, ChevronDown, ChevronRight } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import ThreadConversationView from './ThreadConversationView';
 import { getThreadById } from '@/lib/threads/queries';
@@ -255,36 +255,6 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
     'Healthy': 'bg-green-100 text-green-800',
     'At Risk': 'bg-red-100 text-red-800',
     'Neutral': 'bg-yellow-100 text-yellow-800',
-  };
-
-  // Convert raw health score to display percentage
-  const convertScoreToPercentage = (score: number): number => {
-    const baselinePercent = 70;
-    const maxScore = 10;  // Score at which we hit 100%
-    const minScore = -10; // Score at which we hit 0%
-
-    // Handle the ceiling
-    if (score >= maxScore) { return 100; }
-
-    // Handle the floor
-    if (score <= minScore) { return 0; }
-
-    // Handle positive scores
-    if (score > 0) {
-      // Calculate how much % to add per point
-      const percentPerPoint = (100 - baselinePercent) / maxScore; // (100 - 70) / 10 = 3
-      return Math.round(baselinePercent + (score * percentPerPoint));
-    }
-
-    // Handle negative scores
-    if (score < 0) {
-      // Calculate how much % to lose per point
-      const percentPerPoint = (baselinePercent - 0) / Math.abs(minScore); // (70 - 0) / 10 = 7
-      return Math.round(baselinePercent + (score * percentPerPoint)); // e.g., 70 + (-5 * 7) = 35
-    }
-
-    // Default case (score is 0)
-    return baselinePercent;
   };
 
   return (

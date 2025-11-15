@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
         // even if exchangeCodeForSession returned an error (race condition, double call, etc.)
         // Try getSession first as it might be more reliable than getUser
         const { data: sessionData } = await supabase.auth.getSession();
-        const { data: { user: checkUser }, error: getUserError } = await supabase.auth.getUser();
+        const { data: { user: checkUser } } = await supabase.auth.getUser();
         
         if (sessionData?.session || checkUser) {
           console.log("⚠️ Exchange failed but session/user IS authenticated.");

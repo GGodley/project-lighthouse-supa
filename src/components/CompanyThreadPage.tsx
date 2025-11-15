@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { AlertCircle, List, ArrowUpRight, Clock, Users, Sparkles, Mail, ArrowLeft, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertCircle, List, ArrowUpRight, Clock, Users, Mail, ArrowLeft, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { useSupabase } from '@/components/SupabaseProvider';
 import { useCompanyThreads } from '@/hooks/useCompanyThreads';
 import ThreadListView from './ThreadListView';
@@ -193,29 +193,6 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
     'Healthy': 'bg-green-100 text-green-800',
     'At Risk': 'bg-red-100 text-red-800',
     'Neutral': 'bg-yellow-100 text-yellow-800',
-  };
-
-  // Convert raw health score to display percentage
-  const convertScoreToPercentage = (score: number | null): number => {
-    if (score === null || score === undefined) return 70;
-    const baselinePercent = 70;
-    const maxScore = 10;
-    const minScore = -10;
-
-    if (score >= maxScore) { return 100; }
-    if (score <= minScore) { return 0; }
-
-    if (score > 0) {
-      const percentPerPoint = (100 - baselinePercent) / maxScore;
-      return Math.round(baselinePercent + (score * percentPerPoint));
-    }
-
-    if (score < 0) {
-      const percentPerPoint = (baselinePercent - 0) / Math.abs(minScore);
-      return Math.round(baselinePercent + (score * percentPerPoint));
-    }
-
-    return baselinePercent;
   };
 
   return (
