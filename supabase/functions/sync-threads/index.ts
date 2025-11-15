@@ -1108,9 +1108,31 @@ serve(async (req: Request) => {
             newMessages = messages;
           }
           
+          // --- REORDERED ---
+          // First, prepare and add thread data BEFORE messages
+          // This ensures thread is in threadsToStore even if an error occurs during message processing
+          const firstMessage = messages[0];
+          const subject = firstMessage.payload?.headers?.find((h: any) => h.name.toLowerCase() === 'subject')?.value || 'No Subject';
+          
+          // Prepare thread data structure (summary will be added after summarization)
+          const threadData = {
+            thread_id: threadId,
+            user_id: userId,
+            subject: subject,
+            snippet: threadJson.snippet,
+            last_message_date: new Date(Number(lastMessage.internalDate)).toISOString(),
+            llm_summary: null as any, // Will be set after summarization
+            llm_summary_updated_at: null as string | null // Will be set after summarization
+          };
+          
+          // Add thread to store FIRST - this ensures it's included even if summarization fails
+          threadsToStore.push(threadData);
+
           // --- NEW ---
           // (Task 2.11) Prep Messages Loop: Create all message data objects
           // Only add messages that don't already exist (for existing threads)
+          // Store messages in a local array first, then add to messagesToStore only if thread processing succeeds
+          const threadMessages: any[] = [];
           for (const msg of messages) {
             // Skip if message already exists (for existing threads)
             if (existingThread && existingMessageIds.has(msg.id)) {
@@ -1136,7 +1158,7 @@ serve(async (req: Request) => {
               body_text: bodies.text,
               body_html: bodies.html
             };
-            messagesToStore.push(msgData);
+            threadMessages.push(msgData);
           }
 
           // --- NEW ---
@@ -1201,22 +1223,9 @@ serve(async (req: Request) => {
             console.log(`📊 Extracted sentiment_score: ${sentimentScore} for thread ${threadId}`);
           }
 
-          // Update sentiment_score for all customer messages in this thread
+          // Also update existing customer messages in the thread with the new sentiment_score
+          // This ensures all messages in the thread have the same sentiment_score
           if (sentimentScore !== null) {
-            // Update new messages that will be inserted
-            for (let i = 0; i < messagesToStore.length; i++) {
-              const msg = messagesToStore[i];
-              // Only set sentiment_score for messages from customers (where customer_id is not null)
-              if (msg.customer_id) {
-                messagesToStore[i] = {
-                  ...msg,
-                  sentiment_score: sentimentScore
-                };
-              }
-            }
-            
-            // Also update existing customer messages in the thread with the new sentiment_score
-            // This ensures all messages in the thread have the same sentiment_score
             const { error: updateError } = await supabaseAdmin
               .from('thread_messages')
               .update({ sentiment_score: sentimentScore })
@@ -1231,23 +1240,32 @@ serve(async (req: Request) => {
             }
           }
 
-          // --- NEW ---
-          // (Task 2.8 & 2.10) Prep Thread & Links
-          const firstMessage = messages[0];
-          // lastMessage was already declared earlier at line 562, reuse it
-          const subject = firstMessage.payload?.headers?.find((h: any) => h.name.toLowerCase() === 'subject')?.value || 'No Subject';
-          
-          const threadData = {
-            thread_id: threadId,
-            user_id: userId,
-            subject: subject,
-            snippet: threadJson.snippet,
-            last_message_date: new Date(Number(lastMessage.internalDate)).toISOString(),
-            llm_summary: summaryJson,
-            llm_summary_updated_at: new Date().toISOString()
-          };
-          threadsToStore.push(threadData);
+          // --- UPDATED ---
+          // Update thread data with summary (thread was already added to threadsToStore)
+          const threadIndex = threadsToStore.findIndex(t => t.thread_id === threadId);
+          if (threadIndex !== -1) {
+            threadsToStore[threadIndex].llm_summary = summaryJson;
+            threadsToStore[threadIndex].llm_summary_updated_at = new Date().toISOString();
+          }
 
+          // Update sentiment_score for messages in local array
+          if (sentimentScore !== null) {
+            for (let i = 0; i < threadMessages.length; i++) {
+              const msg = threadMessages[i];
+              // Only set sentiment_score for messages from customers (where customer_id is not null)
+              if (msg.customer_id) {
+                threadMessages[i] = {
+                  ...msg,
+                  sentiment_score: sentimentScore
+                };
+              }
+            }
+          }
+          
+          // Now add messages to messagesToStore (only after thread is successfully prepared)
+          messagesToStore.push(...threadMessages);
+
+          // Add links for this thread
           for (const companyId of discoveredCompanyIds.keys()) {
             linksToStore.push({
               thread_id: threadId,
@@ -1260,6 +1278,34 @@ serve(async (req: Request) => {
 
         } catch (error) {
           console.error(`Failed to process thread ${threadId}. Skipping. Error:`, error);
+          
+          // Remove thread from threadsToStore if it was added (to prevent foreign key violations)
+          const threadIndex = threadsToStore.findIndex(t => t.thread_id === threadId);
+          if (threadIndex !== -1) {
+            threadsToStore.splice(threadIndex, 1);
+            console.log(`🗑️ Removed thread ${threadId} from batch due to processing error`);
+          }
+          
+          // Remove messages for this thread from messagesToStore
+          const initialMessageCount = messagesToStore.length;
+          const filteredMessages = messagesToStore.filter(msg => msg.thread_id !== threadId);
+          const removedMessageCount = initialMessageCount - filteredMessages.length;
+          if (removedMessageCount > 0) {
+            messagesToStore.length = 0;
+            messagesToStore.push(...filteredMessages);
+            console.log(`🗑️ Removed ${removedMessageCount} messages for thread ${threadId} from batch`);
+          }
+          
+          // Remove links for this thread from linksToStore
+          const initialLinkCount = linksToStore.length;
+          const filteredLinks = linksToStore.filter(link => link.thread_id !== threadId);
+          const removedLinkCount = initialLinkCount - filteredLinks.length;
+          if (removedLinkCount > 0) {
+            linksToStore.length = 0;
+            linksToStore.push(...filteredLinks);
+            console.log(`🗑️ Removed ${removedLinkCount} links for thread ${threadId} from batch`);
+          }
+          
           // Re-throw customer upsert errors to fail the entire job
           if (error instanceof Error && error.message.includes('Customer upsert failed')) {
             throw error;
@@ -1276,36 +1322,10 @@ serve(async (req: Request) => {
       console.log(`🧵 Saving ${threadsToStore.length} threads, ${messagesToStore.length} messages, and ${linksToStore.length} links to database...`);
       
       // Insert threads
-      const { error: threadsError } = await supabaseAdmin.from('threads').upsert(threadsToStore, {
+      const { error: threadsError, data: insertedThreads } = await supabaseAdmin.from('threads').upsert(threadsToStore, {
         onConflict: 'thread_id',
         ignoreDuplicates: false
-      });
-      
-      // Process next steps for each thread that has a summary with next steps
-      if (!threadsError) {
-        for (const threadData of threadsToStore) {
-          if (threadData.llm_summary && typeof threadData.llm_summary === 'object') {
-            const summary = threadData.llm_summary as any;
-            const hasNextSteps = (
-              (summary.next_steps && Array.isArray(summary.next_steps) && summary.next_steps.length > 0) ||
-              (summary.csm_next_step && typeof summary.csm_next_step === 'string' && summary.csm_next_step.trim() !== '')
-            );
-            
-            if (hasNextSteps) {
-              // Call process-next-steps edge function asynchronously (don't wait)
-              supabaseAdmin.functions.invoke('process-next-steps', {
-                body: {
-                  source_type: 'thread',
-                  source_id: threadData.thread_id
-                }
-              }).catch(err => {
-                console.error(`Failed to invoke process-next-steps for thread ${threadData.thread_id}:`, err);
-                // Don't throw - this is not critical for the sync to continue
-              });
-            }
-          }
-        }
-      }
+      }).select('thread_id');
       
       if (threadsError) {
         console.error("Database error saving threads:", threadsError);
@@ -1313,9 +1333,52 @@ serve(async (req: Request) => {
         throw threadsError;
       }
       
-      // Insert messages
-      if (messagesToStore.length > 0) {
-        const { error: messagesError } = await supabaseAdmin.from('thread_messages').upsert(messagesToStore, {
+      // Track which threads were successfully inserted
+      const successfullyInsertedThreadIds = new Set<string>();
+      if (insertedThreads && Array.isArray(insertedThreads)) {
+        insertedThreads.forEach((t: any) => successfullyInsertedThreadIds.add(t.thread_id));
+      } else {
+        // Fallback: if select doesn't return data, assume all were inserted (upsert behavior)
+        threadsToStore.forEach(t => successfullyInsertedThreadIds.add(t.thread_id));
+      }
+      
+      console.log(`✅ Successfully inserted ${successfullyInsertedThreadIds.size} threads`);
+      
+      // Filter messages to only include those for successfully inserted threads
+      const validMessages = messagesToStore.filter(msg => successfullyInsertedThreadIds.has(msg.thread_id));
+      const invalidMessagesCount = messagesToStore.length - validMessages.length;
+      
+      if (invalidMessagesCount > 0) {
+        console.warn(`⚠️ Filtered out ${invalidMessagesCount} messages for threads that were not successfully inserted`);
+      }
+      
+      // Process next steps for each thread that has a summary with next steps
+      for (const threadData of threadsToStore) {
+        if (successfullyInsertedThreadIds.has(threadData.thread_id) && threadData.llm_summary && typeof threadData.llm_summary === 'object') {
+          const summary = threadData.llm_summary as any;
+          const hasNextSteps = (
+            (summary.next_steps && Array.isArray(summary.next_steps) && summary.next_steps.length > 0) ||
+            (summary.csm_next_step && typeof summary.csm_next_step === 'string' && summary.csm_next_step.trim() !== '')
+          );
+          
+          if (hasNextSteps) {
+            // Call process-next-steps edge function asynchronously (don't wait)
+            supabaseAdmin.functions.invoke('process-next-steps', {
+              body: {
+                source_type: 'thread',
+                source_id: threadData.thread_id
+              }
+            }).catch(err => {
+              console.error(`Failed to invoke process-next-steps for thread ${threadData.thread_id}:`, err);
+              // Don't throw - this is not critical for the sync to continue
+            });
+          }
+        }
+      }
+      
+      // Insert messages (only for successfully inserted threads)
+      if (validMessages.length > 0) {
+        const { error: messagesError } = await supabaseAdmin.from('thread_messages').upsert(validMessages, {
           onConflict: 'message_id',
           ignoreDuplicates: false
         });
@@ -1325,11 +1388,15 @@ serve(async (req: Request) => {
           await updateJobStatus(jobId, 'failed', `Database error saving messages: ${messagesError.message}`);
           throw messagesError;
         }
+        console.log(`✅ Successfully inserted ${validMessages.length} messages`);
+      } else if (messagesToStore.length > 0) {
+        console.warn(`⚠️ No valid messages to insert (all filtered out due to failed thread insertions)`);
       }
       
-      // Insert links
-      if (linksToStore.length > 0) {
-        const { error: linksError } = await supabaseAdmin.from('thread_company_link').upsert(linksToStore, {
+      // Insert links (only for successfully inserted threads)
+      const validLinks = linksToStore.filter(link => successfullyInsertedThreadIds.has(link.thread_id));
+      if (validLinks.length > 0) {
+        const { error: linksError } = await supabaseAdmin.from('thread_company_link').upsert(validLinks, {
           onConflict: 'thread_id, company_id',
           ignoreDuplicates: true // Allow duplicates for links
         });
@@ -1339,6 +1406,7 @@ serve(async (req: Request) => {
           await updateJobStatus(jobId, 'failed', `Database error saving links: ${linksError.message}`);
           throw linksError;
         }
+        console.log(`✅ Successfully inserted ${validLinks.length} thread-company links`);
       }
       
       console.log(`✅ Successfully saved batch data to database`);
@@ -1350,32 +1418,54 @@ serve(async (req: Request) => {
     // Fire-and-forget recursive invocation to avoid timeout issues
     // The recursive call will handle its own errors and update job status independently
     if (listJson.nextPageToken) {
-      // Only log on first page to reduce noise
-      if (!pageToken) {
-        console.log(`📄 Processing multiple pages. Current page has ${listJson.threads?.length || 0} threads. Invoking next page (fire-and-forget)...`);
+      // Check job status before invoking recursive call
+      // If job is already failed, don't invoke next page
+      const { data: jobStatusCheck } = await supabaseAdmin
+        .from('sync_jobs')
+        .select('status')
+        .eq('id', jobId)
+        .single();
+      
+      if (jobStatusCheck?.status === 'failed') {
+        console.warn(`⚠️ Job ${jobId} is already marked as failed. Skipping next page invocation.`);
+        // Don't invoke - job has already failed
       } else {
-        console.log(`📄 Chaining to next page (fire-and-forget)...`);
-      }
-      
-      // Fire-and-forget: Don't await - let it run independently to avoid timeouts
-      // The recursive call will handle its own errors and update job status
-      supabaseAdmin.functions.invoke('sync-threads', {
-        body: {
-          jobId: jobId,
-          provider_token,
-          pageToken: listJson.nextPageToken
+        // Only log on first page to reduce noise
+        if (!pageToken) {
+          console.log(`📄 Processing multiple pages. Current page has ${listJson.threads?.length || 0} threads. Invoking next page (fire-and-forget)...`);
+        } else {
+          console.log(`📄 Chaining to next page (fire-and-forget)...`);
         }
-      }).catch((invokeError) => {
-        // Log the error but don't fail the parent function
-        // The recursive call will handle its own errors
-        console.error(`⚠️ Error invoking next page (non-blocking):`, invokeError);
-        // Don't update job status here - let the recursive call handle it
-        // This prevents race conditions where both parent and child try to update status
-      });
-      
-      // Return immediately - don't wait for the recursive call
-      // This prevents timeout issues with long-running OpenAI calls and rate limit retries
-      console.log(`✅ Current page processed. Next page invoked asynchronously.`);
+        
+        // Fire-and-forget: Don't await - let it run independently to avoid timeouts
+        // The recursive call will handle its own errors and update job status
+        supabaseAdmin.functions.invoke('sync-threads', {
+          body: {
+            jobId: jobId,
+            provider_token,
+            pageToken: listJson.nextPageToken
+          }
+        }).catch((invokeError) => {
+          // Check if the error is expected (job already failed, early exit)
+          const errorMessage = invokeError?.message || String(invokeError);
+          const isExpectedError = errorMessage.includes('already failed') || 
+                                  errorMessage.includes('Job already failed');
+          
+          if (isExpectedError) {
+            console.log(`ℹ️ Recursive call exited early (expected): ${errorMessage}`);
+          } else {
+            // Log actual errors but don't fail the parent function
+            // The recursive call will handle its own errors
+            console.error(`⚠️ Error invoking next page (non-blocking):`, invokeError);
+            // Don't update job status here - let the recursive call handle it
+            // This prevents race conditions where both parent and child try to update status
+          }
+        });
+        
+        // Return immediately - don't wait for the recursive call
+        // This prevents timeout issues with long-running OpenAI calls and rate limit retries
+        console.log(`✅ Current page processed. Next page invoked asynchronously.`);
+      }
     } else {
       // Complete the job and update last sync time in profiles table
       console.log('✅ No more pages. Completing job.');
