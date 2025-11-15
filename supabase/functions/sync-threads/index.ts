@@ -739,6 +739,11 @@ serve(async (req: Request) => {
 
     if (threadIds.length > 0) {
       
+      // --- NEW ---
+      // Customer cache to avoid duplicate upserts within the same batch
+      // Map<email, customer_id> - scoped to this batch processing
+      const customerCache = new Map<string, string>();
+      
       // --- MODIFIED ---
       // This is the new main loop, iterating over THREADS
       for (const threadId of threadIds) {
@@ -830,41 +835,96 @@ serve(async (req: Request) => {
                     
                     const senderName = fromHeader.includes(email) ? (fromHeader.split('<')[0].trim().replace(/"/g, '') || email) : email;
 
-                    const { data: customer, error: customerError } = await supabaseAdmin
-                      .from('customers')
-                      .upsert(
-                        {
-                          email: email,
-                          full_name: senderName,
-                          company_id: companyId,
-                        },
-                        {
-                          onConflict: 'email', // Fixed: matches database constraint (customers_email_key)
-                          ignoreDuplicates: false,
+                    // --- NEW ---
+                    // Check cache first to avoid duplicate upserts
+                    let customerId: string | null = null;
+                    
+                    if (customerCache.has(email)) {
+                      customerId = customerCache.get(email)!;
+                      console.log(`📦 Using cached customer_id for ${email}: ${customerId}`);
+                    } else {
+                      // Attempt upsert with user_id for proper user isolation
+                      const { data: customer, error: customerError } = await supabaseAdmin
+                        .from('customers')
+                        .upsert(
+                          {
+                            email: email,
+                            full_name: senderName,
+                            company_id: companyId,
+                            user_id: userId, // CRITICAL: Add user_id for proper user isolation
+                          },
+                          {
+                            onConflict: 'email', // Constraint is on email alone (customers_email_key)
+                            ignoreDuplicates: false,
+                          }
+                        )
+                        .select('customer_id, id, user_id')
+                        .single();
+
+                      // --- IMPROVED ERROR HANDLING ---
+                      if (customerError) {
+                        // Check if it's a duplicate key error (code 23505)
+                        if (customerError.code === '23505' || customerError.message?.includes('duplicate key')) {
+                          console.warn(`⚠️ Duplicate key error for customer ${email}. Attempting to fetch existing customer...`);
+                          
+                          // Try to fetch existing customer for this user_id and email
+                          const { data: existingCustomer, error: fetchError } = await supabaseAdmin
+                            .from('customers')
+                            .select('customer_id, id')
+                            .eq('email', email)
+                            .eq('user_id', userId)
+                            .single();
+                          
+                          if (fetchError || !existingCustomer) {
+                            // Customer exists but for a different user - this indicates schema issue
+                            console.error(`❌ Customer ${email} exists but not for user ${userId}. This suggests the unique constraint should include user_id. Error:`, fetchError || 'Customer not found for this user');
+                            // Skip this customer but continue processing
+                            continue;
+                          }
+                          
+                          // Use the existing customer
+                          customerId = existingCustomer.customer_id || existingCustomer.id;
+                          if (!customerId) {
+                            console.error(`❌ Customer ID not found in existing customer data for ${email}`);
+                            continue;
+                          }
+                          
+                          console.log(`✅ Found existing customer for ${email}: ${customerId}`);
+                        } else {
+                          // Other error - throw to fail the job
+                          console.error(`!!! FATAL: Failed to upsert customer ${email} for company ${companyId}. Error:`, customerError);
+                          throw new Error(`Customer upsert failed: ${customerError.message}`);
                         }
-                      )
-                      .select('customer_id, id')
-                      .single();
-
-                    // --- CRITICAL CHECK ---
-                    if (customerError) {
-                      console.error(`!!! FATAL: Failed to upsert customer ${email} for company ${companyId}. Error:`, customerError);
-                      // Throw the error to stop this thread from being processed
-                      // This will be caught by the main try/catch and fail the job.
-                      throw new Error(`Customer upsert failed: ${customerError.message}`);
+                      } else if (!customer) {
+                        // This should not happen if the upsert is correct, but it's a good failsafe
+                        throw new Error(`Customer data not returned for ${email} after upsert.`);
+                      } else {
+                        // Upsert succeeded - verify the customer belongs to this user
+                        customerId = customer.customer_id || customer.id;
+                        if (!customerId) {
+                          throw new Error(`Customer ID not found in returned data for ${email}. Customer data: ${JSON.stringify(customer)}`);
+                        }
+                        
+                        // Verify user_id matches (important for data integrity)
+                        if (customer.user_id && customer.user_id !== userId) {
+                          console.error(`⚠️ WARNING: Customer ${email} belongs to user ${customer.user_id}, but we're processing for user ${userId}. This suggests a data integrity issue.`);
+                          // Still use the customer_id, but log the warning
+                        }
+                        
+                        console.log(`✅ Successfully upserted customer ${email} with customer_id: ${customerId}`);
+                      }
+                      
+                      // Add to cache for subsequent lookups in this batch
+                      if (customerId) {
+                        customerCache.set(email, customerId);
+                      }
                     }
-
-                    if (!customer) {
-                      // This should not happen if the upsert is correct, but it's a good failsafe
-                      throw new Error(`Customer data not returned for ${email} after upsert.`);
-                    }
-                    // --- END CRITICAL CHECK ---
-
-                    // Use customer_id if available, otherwise fall back to id
-                    const customerId = customer.customer_id || customer.id;
+                    
                     if (!customerId) {
-                      throw new Error(`Customer ID not found in returned data for ${email}. Customer data: ${JSON.stringify(customer)}`);
+                      console.error(`❌ Could not get customer_id for ${email}. Skipping.`);
+                      continue;
                     }
+                    
                     discoveredCustomerIds.set(email, customerId);
                     
                     if (fromHeader.includes(email)) {
