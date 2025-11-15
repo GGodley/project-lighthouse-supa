@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   console.log('  - Error param:', error);
   console.log('  - Error description:', error_description);
 
-  // Log ALL cookies received - CRITICAL for PKCE debugging
+  // Log ALL cookies received - for debugging authentication flow
   const allCookies = request.cookies.getAll();
   console.log('🍪 Cookie Analysis:');
   console.log('  - Total cookies received:', allCookies.length);
@@ -36,33 +36,6 @@ export async function GET(request: NextRequest) {
   supabaseCookies.forEach(c => {
     console.log(`    * ${c.name}: ${c.value.substring(0, 50)}... (length: ${c.value.length})`);
   });
-
-  // Look for code verifier cookie specifically
-  const codeVerifierCookies = allCookies.filter(c => 
-    c.name.toLowerCase().includes('verifier') || 
-    c.name.toLowerCase().includes('code-verifier')
-  );
-  console.log('  - Code verifier cookies found:', codeVerifierCookies.length);
-  codeVerifierCookies.forEach(c => {
-    console.log(`    * ${c.name}: ${c.value.substring(0, 50)}... (length: ${c.value.length})`);
-  });
-
-  // Check for expected code verifier cookie name pattern
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || '';
-  const expectedVerifierName = `sb-${projectRef}-auth-token-code-verifier`;
-  console.log('  - Expected verifier cookie name:', expectedVerifierName);
-  const hasVerifier = allCookies.some(c => 
-    c.name === expectedVerifierName || 
-    c.name.includes('code-verifier') ||
-    c.name.includes('verifier')
-  );
-  console.log('  - Code verifier cookie found:', hasVerifier);
-  if (!hasVerifier) {
-    console.error('  ❌ CRITICAL: Code verifier cookie NOT FOUND!');
-    console.error('  - This will cause PKCE exchange to fail');
-    console.error('  - Cookie may not be set or may have wrong domain/path');
-  }
 
   // Handle OAuth errors
   if (error) {
@@ -109,7 +82,7 @@ export async function GET(request: NextRequest) {
           if (cookieGetAllCallCount === 1) {
             // Log cookies on first call
             cookies.forEach(c => {
-              if (c.name.startsWith('sb-') || c.name.includes('verifier')) {
+              if (c.name.startsWith('sb-')) {
                 console.log(`    - Cookie: ${c.name} (length: ${c.value.length})`);
               }
             });
@@ -152,7 +125,6 @@ export async function GET(request: NextRequest) {
     console.error('  - Error name:', exchangeError.name);
     console.error('  - Error status:', exchangeError.status);
     console.error('  - Full error:', JSON.stringify(exchangeError, null, 2));
-    console.error('  - This error suggests the code verifier cookie was not found');
     
     // Check if user is already authenticated (code might have been used)
     console.log('🔍 Checking if user is already authenticated...');
