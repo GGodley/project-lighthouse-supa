@@ -1349,8 +1349,23 @@ serve(async (req: Request) => {
         
         if (error) {
           console.error(`❌ Failed to invoke next page (token: ${listJson.nextPageToken.substring(0, 20)}...):`, error);
-          await updateJobStatus(jobId, 'failed', `Failed to process next page: ${error.message}`);
-          throw new Error(`Failed to invoke next page: ${error.message}`);
+          
+          // Check if the error is due to a non-2xx status code from the function
+          const errorMessage = error.message || String(error);
+          const errorDetails = errorMessage.includes('non-2xx') 
+            ? `Next page function returned an error. This may be due to customer conflicts or other processing issues. Original error: ${errorMessage}`
+            : `Failed to process next page: ${errorMessage}`;
+          
+          await updateJobStatus(jobId, 'failed', errorDetails);
+          throw new Error(`Failed to invoke next page: ${errorMessage}`);
+        }
+        
+        // Also check if data contains an error (in case function returned error in response body)
+        if (data && typeof data === 'object' && 'error' in data) {
+          const errorMessage = (data as any).error || 'Unknown error in next page';
+          console.error(`❌ Next page returned error in response:`, errorMessage);
+          await updateJobStatus(jobId, 'failed', `Next page processing failed: ${errorMessage}`);
+          throw new Error(`Next page returned error: ${errorMessage}`);
         }
         
         // Don't log success for every page - too noisy. Only log errors.
