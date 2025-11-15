@@ -843,43 +843,92 @@ serve(async (req: Request) => {
                       customerId = customerCache.get(email)!;
                       console.log(`📦 Using cached customer_id for ${email}: ${customerId}`);
                     } else {
-                      // Attempt upsert with user_id for proper user isolation
-                      const { data: customer, error: customerError } = await supabaseAdmin
+                      // Try to fetch existing customer first to avoid duplicate key errors
+                      const { data: existingCustomerCheck, error: fetchCheckError } = await supabaseAdmin
                         .from('customers')
-                        .upsert(
-                          {
-                            email: email,
-                            full_name: senderName,
-                            company_id: companyId,
-                            user_id: userId, // CRITICAL: Add user_id for proper user isolation
-                          },
-                          {
-                            onConflict: 'email', // Constraint is on email alone (customers_email_key)
-                            ignoreDuplicates: false,
-                          }
-                        )
                         .select('customer_id, id, user_id')
+                        .eq('email', email)
+                        .eq('user_id', userId)
                         .single();
+                      
+                      if (!fetchCheckError && existingCustomerCheck) {
+                        // Customer already exists for this user - use it
+                        customerId = existingCustomerCheck.customer_id || existingCustomerCheck.id;
+                        if (customerId) {
+                          customerCache.set(email, customerId);
+                          console.log(`✅ Found existing customer ${email} in database: ${customerId}`);
+                        }
+                      } else {
+                        // Customer doesn't exist - attempt upsert with user_id for proper user isolation
+                        const { data: customer, error: customerError } = await supabaseAdmin
+                          .from('customers')
+                          .upsert(
+                            {
+                              email: email,
+                              full_name: senderName,
+                              company_id: companyId,
+                              user_id: userId, // CRITICAL: Add user_id for proper user isolation
+                            },
+                            {
+                              onConflict: 'email', // Constraint is on email alone (customers_email_key)
+                              ignoreDuplicates: false,
+                            }
+                          )
+                          .select('customer_id, id, user_id')
+                          .single();
 
                       // --- IMPROVED ERROR HANDLING ---
                       if (customerError) {
                         // Check if it's a duplicate key error (code 23505)
-                        if (customerError.code === '23505' || customerError.message?.includes('duplicate key')) {
-                          console.warn(`⚠️ Duplicate key error for customer ${email}. Attempting to fetch existing customer...`);
+                        // Check multiple ways the error might be structured
+                        const errorCode = customerError.code || customerError?.code || String(customerError.code);
+                        const errorMessage = customerError.message || String(customerError);
+                        const errorString = JSON.stringify(customerError);
+                        
+                        const isDuplicateKeyError = 
+                          errorCode === '23505' || 
+                          errorCode === 23505 ||
+                          errorMessage?.includes('duplicate key') ||
+                          errorMessage?.includes('already exists') ||
+                          errorString?.includes('23505') ||
+                          errorString?.includes('duplicate key') ||
+                          errorString?.includes('customers_email_key');
+                        
+                        if (isDuplicateKeyError) {
+                          console.warn(`⚠️ Duplicate key error detected for customer ${email}. Error details:`, {
+                            code: errorCode,
+                            message: errorMessage,
+                            fullError: customerError
+                          });
+                          console.warn(`⚠️ Attempting to fetch existing customer for user ${userId}...`);
                           
                           // Try to fetch existing customer for this user_id and email
                           const { data: existingCustomer, error: fetchError } = await supabaseAdmin
                             .from('customers')
-                            .select('customer_id, id')
+                            .select('customer_id, id, user_id')
                             .eq('email', email)
                             .eq('user_id', userId)
                             .single();
                           
                           if (fetchError || !existingCustomer) {
-                            // Customer exists but for a different user - this indicates schema issue
-                            console.error(`❌ Customer ${email} exists but not for user ${userId}. This suggests the unique constraint should include user_id. Error:`, fetchError || 'Customer not found for this user');
-                            // Skip this customer but continue processing
-                            continue;
+                            // Customer exists but for a different user - try to fetch without user_id filter
+                            console.warn(`⚠️ Customer ${email} not found for user ${userId}. Checking if it exists for another user...`);
+                            
+                            const { data: anyCustomer, error: anyFetchError } = await supabaseAdmin
+                              .from('customers')
+                              .select('customer_id, id, user_id')
+                              .eq('email', email)
+                              .single();
+                            
+                            if (anyCustomer) {
+                              console.error(`❌ Customer ${email} exists but belongs to user ${anyCustomer.user_id}, not ${userId}. This indicates the unique constraint should include user_id. Skipping this customer.`);
+                              // Skip this customer but continue processing
+                              continue;
+                            } else {
+                              // This shouldn't happen - duplicate key error but customer doesn't exist?
+                              console.error(`❌ Duplicate key error for ${email} but customer not found in database. This is unexpected. Skipping.`);
+                              continue;
+                            }
                           }
                           
                           // Use the existing customer
@@ -889,11 +938,19 @@ serve(async (req: Request) => {
                             continue;
                           }
                           
+                          // Verify it belongs to the correct user
+                          if (existingCustomer.user_id && existingCustomer.user_id !== userId) {
+                            console.error(`❌ Customer ${email} belongs to user ${existingCustomer.user_id}, not ${userId}. Skipping.`);
+                            continue;
+                          }
+                          
+                          // Add to cache for subsequent lookups
+                          customerCache.set(email, customerId);
                           console.log(`✅ Found existing customer for ${email}: ${customerId}`);
                         } else {
                           // Other error - throw to fail the job
                           console.error(`!!! FATAL: Failed to upsert customer ${email} for company ${companyId}. Error:`, customerError);
-                          throw new Error(`Customer upsert failed: ${customerError.message}`);
+                          throw new Error(`Customer upsert failed: ${customerError.message || String(customerError)}`);
                         }
                       } else if (!customer) {
                         // This should not happen if the upsert is correct, but it's a good failsafe
