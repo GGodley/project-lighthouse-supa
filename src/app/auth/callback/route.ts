@@ -8,9 +8,65 @@ export async function GET(request: NextRequest) {
   const error = requestUrl.searchParams.get('error');
   const error_description = requestUrl.searchParams.get('error_description');
 
+  // ============================================
+  // COMPREHENSIVE LOGGING - START
+  // ============================================
+  console.log('========================================');
+  console.log('🔐 AUTH CALLBACK ROUTE - START');
+  console.log('========================================');
+  console.log('📋 Request Details:');
+  console.log('  - Full URL:', request.url);
+  console.log('  - Origin:', requestUrl.origin);
+  console.log('  - Pathname:', requestUrl.pathname);
+  console.log('  - Code present:', !!code);
+  console.log('  - Code value:', code ? `${code.substring(0, 30)}...` : 'NULL');
+  console.log('  - Code length:', code?.length || 0);
+  console.log('  - Error param:', error);
+  console.log('  - Error description:', error_description);
+
+  // Log ALL cookies received - CRITICAL for PKCE debugging
+  const allCookies = request.cookies.getAll();
+  console.log('🍪 Cookie Analysis:');
+  console.log('  - Total cookies received:', allCookies.length);
+  console.log('  - All cookie names:', allCookies.map(c => c.name).join(', '));
+  
+  // Check for Supabase cookies specifically
+  const supabaseCookies = allCookies.filter(c => c.name.startsWith('sb-'));
+  console.log('  - Supabase cookies (sb-*):', supabaseCookies.length);
+  supabaseCookies.forEach(c => {
+    console.log(`    * ${c.name}: ${c.value.substring(0, 50)}... (length: ${c.value.length})`);
+  });
+
+  // Look for code verifier cookie specifically
+  const codeVerifierCookies = allCookies.filter(c => 
+    c.name.toLowerCase().includes('verifier') || 
+    c.name.toLowerCase().includes('code-verifier')
+  );
+  console.log('  - Code verifier cookies found:', codeVerifierCookies.length);
+  codeVerifierCookies.forEach(c => {
+    console.log(`    * ${c.name}: ${c.value.substring(0, 50)}... (length: ${c.value.length})`);
+  });
+
+  // Check for expected code verifier cookie name pattern
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || '';
+  const expectedVerifierName = `sb-${projectRef}-auth-token-code-verifier`;
+  console.log('  - Expected verifier cookie name:', expectedVerifierName);
+  const hasVerifier = allCookies.some(c => 
+    c.name === expectedVerifierName || 
+    c.name.includes('code-verifier') ||
+    c.name.includes('verifier')
+  );
+  console.log('  - Code verifier cookie found:', hasVerifier);
+  if (!hasVerifier) {
+    console.error('  ❌ CRITICAL: Code verifier cookie NOT FOUND!');
+    console.error('  - This will cause PKCE exchange to fail');
+    console.error('  - Cookie may not be set or may have wrong domain/path');
+  }
+
   // Handle OAuth errors
   if (error) {
-    console.error('OAuth error:', error, error_description);
+    console.error('❌ OAuth error in callback:', error, error_description);
     return NextResponse.redirect(
       `${requestUrl.origin}/login?error=${encodeURIComponent(error_description || error)}`
     );
@@ -18,27 +74,54 @@ export async function GET(request: NextRequest) {
 
   // Handle missing code
   if (!code) {
-    console.error('No authorization code in callback');
+    console.error('❌ No authorization code in callback URL');
     return NextResponse.redirect(
       `${requestUrl.origin}/login?error=No authorization code provided`
     );
   }
 
-  // Create redirect response - standard Supabase SSR pattern
+  // ============================================
+  // CREATE RESPONSE AND SUPABASE CLIENT
+  // ============================================
+  console.log('📤 Creating redirect response to dashboard...');
   const redirectUrl = `${requestUrl.origin}/dashboard`;
   const response = NextResponse.redirect(redirectUrl);
+  console.log('  - Redirect URL:', redirectUrl);
 
-  // Create Supabase client with cookie handlers - standard SSR pattern
+  console.log('🔧 Creating Supabase server client...');
+  console.log('  - Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
+  console.log('  - Anon Key present:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+
+  // Track cookie operations
+  let cookieGetAllCallCount = 0;
+  let cookieSetAllCallCount = 0;
+  let cookiesSet: string[] = [];
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {
-          return request.cookies.getAll();
+          cookieGetAllCallCount++;
+          const cookies = request.cookies.getAll();
+          console.log(`  📥 Cookie getAll() called (${cookieGetAllCallCount}x) - returning ${cookies.length} cookies`);
+          if (cookieGetAllCallCount === 1) {
+            // Log cookies on first call
+            cookies.forEach(c => {
+              if (c.name.startsWith('sb-') || c.name.includes('verifier')) {
+                console.log(`    - Cookie: ${c.name} (length: ${c.value.length})`);
+              }
+            });
+          }
+          return cookies;
         },
         setAll(cookiesToSet) {
+          cookieSetAllCallCount++;
+          console.log(`  📤 Cookie setAll() called (${cookieSetAllCallCount}x) - setting ${cookiesToSet.length} cookies`);
           cookiesToSet.forEach(({ name, value, options }) => {
+            cookiesSet.push(name);
+            console.log(`    - Setting cookie: ${name} (value length: ${value.length}, path: ${options?.path || 'default'}, domain: ${options?.domain || 'default'})`);
             request.cookies.set(name, value);
             response.cookies.set(name, value, options);
           });
@@ -47,34 +130,66 @@ export async function GET(request: NextRequest) {
     }
   );
 
-  // Exchange code for session - standard Supabase SSR pattern
+  // ============================================
+  // EXCHANGE CODE FOR SESSION
+  // ============================================
+  console.log('🔄 Attempting to exchange code for session...');
+  console.log('  - Code to exchange:', code.substring(0, 30) + '...');
+  console.log('  - Code length:', code.length);
+  
+  const exchangeStartTime = Date.now();
   const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+  const exchangeDuration = Date.now() - exchangeStartTime;
+  
+  console.log('  - Exchange completed in', exchangeDuration, 'ms');
+  console.log('  - Cookie getAll() was called', cookieGetAllCallCount, 'times');
+  console.log('  - Cookie setAll() was called', cookieSetAllCallCount, 'times');
+  console.log('  - Cookies set:', cookiesSet.join(', '));
 
   if (exchangeError) {
-    console.error('Error exchanging code for session:', exchangeError);
+    console.error('❌ EXCHANGE ERROR:');
+    console.error('  - Error message:', exchangeError.message);
+    console.error('  - Error name:', exchangeError.name);
+    console.error('  - Error status:', exchangeError.status);
+    console.error('  - Full error:', JSON.stringify(exchangeError, null, 2));
+    console.error('  - This error suggests the code verifier cookie was not found');
     
     // Check if user is already authenticated (code might have been used)
+    console.log('🔍 Checking if user is already authenticated...');
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      // User is authenticated, redirect to dashboard
+      console.log('✅ User is authenticated despite exchange error - redirecting to dashboard');
       return response;
     }
     
+    console.error('❌ User not authenticated - redirecting to login with error');
     return NextResponse.redirect(
       `${requestUrl.origin}/login?error=${encodeURIComponent(exchangeError.message)}`
     );
   }
 
-  // Verify session was created
+  // ============================================
+  // VERIFY SESSION WAS CREATED
+  // ============================================
+  console.log('✅ Code exchange successful!');
+  console.log('📊 Session Data:');
+  console.log('  - Session exists:', !!data.session);
+  console.log('  - User ID:', data.user?.id);
+  console.log('  - User email:', data.user?.email);
+  console.log('  - Provider:', data.user?.app_metadata?.provider);
+
   if (!data.session) {
-    console.error('No session in exchange response');
+    console.error('❌ No session in exchange response');
     return NextResponse.redirect(
       `${requestUrl.origin}/login?error=Session not created`
     );
   }
 
-  // Create profile if it doesn't exist
+  // ============================================
+  // CREATE PROFILE IF NEEDED
+  // ============================================
   if (data.user) {
+    console.log('👤 Creating/checking profile for user:', data.user.id);
     try {
       const { data: existingProfile } = await supabase
         .from('profiles')
@@ -83,6 +198,7 @@ export async function GET(request: NextRequest) {
         .maybeSingle();
       
       if (!existingProfile) {
+        console.log('  - Profile not found, creating...');
         const provider = data.user.app_metadata?.provider || 'google';
         const providerId = data.user.app_metadata?.provider_id || 
                           data.user.user_metadata?.provider_id || 
@@ -100,13 +216,24 @@ export async function GET(request: NextRequest) {
             provider: provider,
             provider_id: providerId,
           });
+        console.log('  - Profile created successfully');
+      } else {
+        console.log('  - Profile already exists');
       }
     } catch (profileError) {
-      console.error('Profile creation error:', profileError);
+      console.error('  - Profile creation error:', profileError);
       // Don't fail auth if profile creation fails
     }
   }
 
-  // Redirect to dashboard - response already has cookies set
+  // ============================================
+  // FINAL REDIRECT
+  // ============================================
+  console.log('✅ Redirecting to dashboard');
+  console.log('  - Response cookies:', response.cookies.getAll().length);
+  console.log('========================================');
+  console.log('🔐 AUTH CALLBACK ROUTE - COMPLETE');
+  console.log('========================================');
+  
   return response;
 }
