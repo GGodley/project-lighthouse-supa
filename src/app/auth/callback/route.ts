@@ -119,6 +119,59 @@ export async function GET(request: NextRequest) {
         console.log("User exists in session:", !!sessionData.session?.user);
         console.log("--- END SESSION VERIFICATION ---");
         
+        // Create profile if it doesn't exist
+        try {
+          const { data: existingProfile, error: profileCheckError } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('id', data.user.id)
+            .maybeSingle();
+          
+          if (profileCheckError && profileCheckError.code !== 'PGRST116') {
+            // PGRST116 is "not found" which is expected, other errors are real issues
+            console.error("Error checking profile:", profileCheckError);
+          }
+          
+          if (!existingProfile) {
+            console.log("📝 Profile not found. Creating profile for user:", data.user.id);
+            
+            const provider = data.user.app_metadata?.provider || 'google';
+            const providerId = data.user.app_metadata?.provider_id || 
+                              data.user.user_metadata?.provider_id || 
+                              data.user.email || '';
+            const fullName = data.user.user_metadata?.full_name || 
+                           data.user.user_metadata?.name || 
+                           null;
+            
+            const { data: newProfile, error: createError } = await supabase
+              .from('profiles')
+              .insert({
+                id: data.user.id,
+                email: data.user.email || '',
+                full_name: fullName,
+                provider: provider,
+                provider_id: providerId,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .select()
+              .single();
+            
+            if (createError) {
+              console.error("❌ Failed to create profile:", createError);
+              // Don't fail the auth flow if profile creation fails
+              // The database trigger or sync-threads fallback will handle it
+            } else {
+              console.log("✅ Profile created successfully:", newProfile.id);
+            }
+          } else {
+            console.log("✅ Profile already exists for user:", data.user.id);
+          }
+        } catch (profileError) {
+          console.error("❌ Error in profile creation logic:", profileError);
+          // Don't fail the auth flow - continue to dashboard
+        }
+        
         // Add a small delay to ensure session is fully established
         console.log("Waiting for session to be fully established...");
         await new Promise(resolve => setTimeout(resolve, 100));
