@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { cookies } from 'next/headers';
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
@@ -88,39 +89,21 @@ export async function GET(request: NextRequest) {
   console.log('  - Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
   console.log('  - Anon Key present:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
-  // Track cookie operations
-  let cookieGetAllCallCount = 0;
-  let cookieSetAllCallCount = 0;
-  const cookiesSet: string[] = [];
+  const cookieStore = cookies();
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          cookieGetAllCallCount++;
-          const cookies = request.cookies.getAll();
-          console.log(`  📥 Cookie getAll() called (${cookieGetAllCallCount}x) - returning ${cookies.length} cookies`);
-          if (cookieGetAllCallCount === 1) {
-            // Log cookies on first call
-            cookies.forEach(c => {
-              if (c.name.startsWith('sb-')) {
-                console.log(`    - Cookie: ${c.name} (length: ${c.value.length})`);
-              }
-            });
-          }
-          return cookies;
+        get(name: string) {
+          return cookieStore.get(name)?.value;
         },
-        setAll(cookiesToSet) {
-          cookieSetAllCallCount++;
-          console.log(`  📤 Cookie setAll() called (${cookieSetAllCallCount}x) - setting ${cookiesToSet.length} cookies`);
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookiesSet.push(name);
-            console.log(`    - Setting cookie: ${name} (value length: ${value.length}, path: ${options?.path || 'default'}, domain: ${options?.domain || 'default'})`);
-            request.cookies.set(name, value);
-            response.cookies.set(name, value, options);
-          });
+        set(name: string, value: string, options) {
+          cookieStore.set({ name, value, ...options });
+        },
+        remove(name: string, options) {
+          cookieStore.set({ name, value: '', ...options });
         },
       },
     }
@@ -138,9 +121,6 @@ export async function GET(request: NextRequest) {
   const exchangeDuration = Date.now() - exchangeStartTime;
   
   console.log('  - Exchange completed in', exchangeDuration, 'ms');
-  console.log('  - Cookie getAll() was called', cookieGetAllCallCount, 'times');
-  console.log('  - Cookie setAll() was called', cookieSetAllCallCount, 'times');
-  console.log('  - Cookies set:', cookiesSet.join(', '));
 
   if (exchangeError) {
     console.error('❌ EXCHANGE ERROR:');
