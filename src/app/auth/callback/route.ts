@@ -10,6 +10,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${requestUrl.origin}/login?error=No authorization code provided`);
   }
 
+  // Force read all cookies first - this is critical for PKCE code verifier
+  // Next.js cookies are lazily evaluated, so we must read them before exchange
+  const allCookies = request.cookies.getAll();
+  
   // Create redirect response - cookies will be set on this
   const redirectUrl = `${requestUrl.origin}/dashboard`;
   const response = NextResponse.redirect(redirectUrl);
@@ -21,7 +25,8 @@ export async function GET(request: NextRequest) {
     {
       cookies: {
         getAll() {
-          return request.cookies.getAll();
+          // Return the cookies we already read
+          return allCookies;
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
