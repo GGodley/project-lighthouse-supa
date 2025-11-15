@@ -10,8 +10,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${requestUrl.origin}/login?error=No authorization code provided`);
   }
 
-  // Create a response that we'll update with cookies
-  const response = NextResponse.next();
+  // Create redirect response - cookies will be set on this
+  const redirectUrl = `${requestUrl.origin}/dashboard`;
+  const response = NextResponse.redirect(redirectUrl);
 
   // Create Supabase client - standard Supabase SSR pattern
   const supabase = createServerClient(
@@ -71,6 +72,6 @@ export async function GET(request: NextRequest) {
     // Don't fail auth if profile creation fails
   }
 
-  // Redirect to dashboard - response already has cookies set
-  return NextResponse.redirect(`${requestUrl.origin}/dashboard`);
+  // Return redirect response with cookies set
+  return response;
 }
