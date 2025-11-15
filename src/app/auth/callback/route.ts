@@ -105,9 +105,68 @@ export async function GET(request: NextRequest) {
   );
 
   // ============================================
-  // EXCHANGE CODE FOR SESSION
+  // CHECK IF USER IS ALREADY AUTHENTICATED FIRST
+  // Supabase may have already processed the callback
   // ============================================
-  console.log('🔄 Attempting to exchange code for session...');
+  console.log('🔍 Checking if user is already authenticated...');
+  const { data: { user: existingUser }, error: getUserError } = await supabase.auth.getUser();
+  const { data: { session: existingSession } } = await supabase.auth.getSession();
+  
+  console.log('  - Existing user found:', !!existingUser);
+  console.log('  - Existing session found:', !!existingSession);
+  
+  if (existingUser && existingSession) {
+    console.log('✅ User already authenticated - Supabase processed callback successfully');
+    console.log('  - User ID:', existingUser.id);
+    console.log('  - User email:', existingUser.email);
+    
+    // Still create profile if needed
+    if (existingUser) {
+      console.log('👤 Creating/checking profile for user:', existingUser.id);
+      try {
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', existingUser.id)
+          .maybeSingle();
+        
+        if (!existingProfile) {
+          console.log('  - Profile not found, creating...');
+          const provider = existingUser.app_metadata?.provider || 'google';
+          const providerId = existingUser.app_metadata?.provider_id || 
+                            existingUser.user_metadata?.provider_id || 
+                            existingUser.email || '';
+          const fullName = existingUser.user_metadata?.full_name || 
+                          existingUser.user_metadata?.name || 
+                          null;
+          
+          await supabase
+            .from('profiles')
+            .insert({
+              id: existingUser.id,
+              email: existingUser.email || '',
+              full_name: fullName,
+              provider: provider,
+              provider_id: providerId,
+            });
+          console.log('  - Profile created successfully');
+        } else {
+          console.log('  - Profile already exists');
+        }
+      } catch (profileError) {
+        console.error('  - Profile creation exception:', profileError);
+      }
+    }
+    
+    console.log('✅ Redirecting to dashboard (user already authenticated)');
+    return response;
+  }
+
+  // ============================================
+  // EXCHANGE CODE FOR SESSION
+  // Only if user is not already authenticated
+  // ============================================
+  console.log('🔄 User not authenticated yet - attempting to exchange code for session...');
   console.log('  - Code length:', code.length);
   console.log('  - Code first 20 chars:', code.substring(0, 20));
   
