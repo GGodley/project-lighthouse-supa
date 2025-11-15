@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
   console.log('  - Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
   console.log('  - Anon Key present:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
