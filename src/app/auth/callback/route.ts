@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
   // Track cookie operations
   let cookieGetAllCallCount = 0;
   let cookieSetAllCallCount = 0;
-  let cookiesSet: string[] = [];
+  const cookiesSet: string[] = [];
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
