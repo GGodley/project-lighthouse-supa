@@ -1,9 +1,5 @@
-//
-// ⚠️ PROMPT FOR CURSOR: Add this to the top of src/app/dashboard/page.tsx ⚠️
-//
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation'; // Import redirect
+import { createClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
 import { Users, Calendar, Mail, TrendingUp } from 'lucide-react'
 import SyncEmailsButton from '@/components/SyncEmailsButton'
 
@@ -17,8 +13,7 @@ interface DashboardStats {
 }
 
 export default async function DashboardPage() {
-  const cookieStore = cookies();
-  const supabase = createServerComponentClient({ cookies: () => cookieStore });
+  const supabase = await createClient();
 
   // --- START DIAGNOSTIC LOGS ---
   console.log("--- [Dashboard Page] Server-Side Auth Check ---");
