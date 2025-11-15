@@ -548,6 +548,23 @@ serve(async (req: Request) => {
       auth: { autoRefreshToken: false, persistSession: false }
     });
 
+    // Check if job is already failed - if so, exit early to prevent continued processing
+    const { data: existingJob, error: jobCheckError } = await supabaseAdmin
+      .from('sync_jobs')
+      .select('status')
+      .eq('id', jobId)
+      .single();
+    
+    if (!jobCheckError && existingJob?.status === 'failed') {
+      console.warn(`⚠️ Job ${jobId} is already marked as failed. Exiting to prevent continued processing.`);
+      return new Response(JSON.stringify({
+        message: "Job already failed, exiting."
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200
+      });
+    }
+    
     // Update job status to 'running' if this is the first page
     if (!pageToken) {
       await updateJobStatus(jobId, 'running', 'Starting thread sync...');
@@ -1372,8 +1389,26 @@ serve(async (req: Request) => {
       } catch (invokeError) {
         console.error('❌ Error invoking next page:', invokeError);
         const errorMessage = invokeError instanceof Error ? invokeError.message : String(invokeError);
-        await updateJobStatus(jobId, 'failed', `Error processing next page: ${errorMessage}`);
-        throw invokeError;
+        
+        // Check if job was already marked as failed by the recursive call
+        // If so, don't update it again - just return the error
+        const { data: jobStatus } = await supabaseAdmin
+          .from('sync_jobs')
+          .select('status')
+          .eq('id', jobId)
+          .single();
+        
+        if (jobStatus?.status !== 'failed') {
+          await updateJobStatus(jobId, 'failed', `Error processing next page: ${errorMessage}`);
+        }
+        
+        // Return error response immediately - don't continue processing
+        return new Response(JSON.stringify({
+          error: `Failed to process next page: ${errorMessage}`
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 500
+        });
       }
     } else {
       // Complete the job and update last sync time in profiles table
