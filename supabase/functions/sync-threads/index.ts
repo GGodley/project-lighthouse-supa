@@ -844,38 +844,38 @@ serve(async (req: Request) => {
                       console.log(`📦 Using cached customer_id for ${email}: ${customerId}`);
                     } else {
                       // Try to fetch existing customer first to avoid duplicate key errors
-                      // First check if customer exists for this user
+                      // First check if customer exists for this company
                       const { data: existingCustomerCheck, error: fetchCheckError } = await supabaseAdmin
                         .from('customers')
-                        .select('customer_id, id, user_id')
+                        .select('customer_id, id, company_id')
                         .eq('email', email)
-                        .eq('user_id', userId)
+                        .eq('company_id', companyId)
                         .single();
                       
                       if (!fetchCheckError && existingCustomerCheck) {
-                        // Customer already exists for this user - use it
+                        // Customer already exists for this company - use it
                         customerId = existingCustomerCheck.customer_id || existingCustomerCheck.id;
                         if (customerId) {
                           customerCache.set(email, customerId);
                           console.log(`✅ Found existing customer ${email} in database: ${customerId}`);
                         }
                       } else {
-                        // Customer doesn't exist for this user - check if it exists for ANY user
-                        // (because unique constraint is only on email, not user_id+email)
-                        const { data: anyUserCustomer, error: anyUserError } = await supabaseAdmin
+                        // Customer doesn't exist for this company - check if it exists for ANY company
+                        // (because unique constraint is only on email, not company_id+email)
+                        const { data: anyCompanyCustomer, error: anyCompanyError } = await supabaseAdmin
                           .from('customers')
-                          .select('customer_id, id, user_id')
+                          .select('customer_id, id, company_id')
                           .eq('email', email)
                           .single();
                         
-                        if (!anyUserError && anyUserCustomer) {
-                          // Customer exists but for a different user
-                          console.warn(`⚠️ Customer ${email} already exists for user ${anyUserCustomer.user_id}, but we're processing for user ${userId}. Skipping to avoid duplicate key error.`);
+                        if (!anyCompanyError && anyCompanyCustomer) {
+                          // Customer exists but for a different company
+                          console.warn(`⚠️ Customer ${email} already exists for company ${anyCompanyCustomer.company_id}, but we're processing for company ${companyId}. Skipping to avoid duplicate key error.`);
                           // Skip this customer - can't create it due to unique constraint on email
                           continue;
                         }
                         
-                        // Customer doesn't exist at all - attempt upsert with user_id for proper user isolation
+                        // Customer doesn't exist at all - attempt upsert with company_id for proper isolation
                         const { data: customer, error: customerError } = await supabaseAdmin
                           .from('customers')
                           .upsert(
@@ -883,14 +883,13 @@ serve(async (req: Request) => {
                               email: email,
                               full_name: senderName,
                               company_id: companyId,
-                              user_id: userId, // CRITICAL: Add user_id for proper user isolation
                             },
                             {
-                              onConflict: 'email', // Constraint is on email alone (customers_email_key)
+                              onConflict: 'company_id, email', // Updated to match new constraint
                               ignoreDuplicates: false,
                             }
                           )
-                          .select('customer_id, id, user_id')
+                          .select('customer_id, id, company_id')
                           .single();
 
                       // --- IMPROVED ERROR HANDLING ---
@@ -920,28 +919,28 @@ serve(async (req: Request) => {
                             message: errorMessage,
                             fullError: customerError
                           });
-                          console.warn(`⚠️ Attempting to fetch existing customer for user ${userId}...`);
+                          console.warn(`⚠️ Attempting to fetch existing customer for company ${companyId}...`);
                           
-                          // Try to fetch existing customer for this user_id and email
+                          // Try to fetch existing customer for this company_id and email
                           const { data: existingCustomer, error: fetchError } = await supabaseAdmin
                             .from('customers')
-                            .select('customer_id, id, user_id')
+                            .select('customer_id, id, company_id')
                             .eq('email', email)
-                            .eq('user_id', userId)
+                            .eq('company_id', companyId)
                             .single();
                           
                           if (fetchError || !existingCustomer) {
-                            // Customer exists but for a different user - try to fetch without user_id filter
-                            console.warn(`⚠️ Customer ${email} not found for user ${userId}. Checking if it exists for another user...`);
+                            // Customer exists but for a different company - try to fetch without company_id filter
+                            console.warn(`⚠️ Customer ${email} not found for company ${companyId}. Checking if it exists for another company...`);
                             
                             const { data: anyCustomer, error: anyFetchError } = await supabaseAdmin
                               .from('customers')
-                              .select('customer_id, id, user_id')
+                              .select('customer_id, id, company_id')
                               .eq('email', email)
                               .single();
                             
                             if (anyCustomer) {
-                              console.error(`❌ Customer ${email} exists but belongs to user ${anyCustomer.user_id}, not ${userId}. This indicates the unique constraint should include user_id. Skipping this customer.`);
+                              console.error(`❌ Customer ${email} exists but belongs to company ${anyCustomer.company_id}, not ${companyId}. This indicates the unique constraint should include company_id. Skipping this customer.`);
                               // Skip this customer but continue processing
                               continue;
                             } else {
@@ -958,9 +957,9 @@ serve(async (req: Request) => {
                             continue;
                           }
                           
-                          // Verify it belongs to the correct user
-                          if (existingCustomer.user_id && existingCustomer.user_id !== userId) {
-                            console.error(`❌ Customer ${email} belongs to user ${existingCustomer.user_id}, not ${userId}. Skipping.`);
+                          // Verify it belongs to the correct company
+                          if (existingCustomer.company_id && existingCustomer.company_id !== companyId) {
+                            console.error(`❌ Customer ${email} belongs to company ${existingCustomer.company_id}, not ${companyId}. Skipping.`);
                             continue;
                           }
                           
@@ -972,9 +971,9 @@ serve(async (req: Request) => {
                           console.warn(`⚠️ Upsert failed with non-duplicate-key error. Attempting to fetch customer as fallback...`);
                           const { data: fallbackCustomer, error: fallbackError } = await supabaseAdmin
                             .from('customers')
-                            .select('customer_id, id, user_id')
+                            .select('customer_id, id, company_id')
                             .eq('email', email)
-                            .eq('user_id', userId)
+                            .eq('company_id', companyId)
                             .single();
                           
                           if (!fallbackError && fallbackCustomer) {
@@ -997,15 +996,15 @@ serve(async (req: Request) => {
                         // This should not happen if the upsert is correct, but it's a good failsafe
                         throw new Error(`Customer data not returned for ${email} after upsert.`);
                       } else {
-                        // Upsert succeeded - verify the customer belongs to this user
+                        // Upsert succeeded - verify the customer belongs to this company
                         customerId = customer.customer_id || customer.id;
                         if (!customerId) {
                           throw new Error(`Customer ID not found in returned data for ${email}. Customer data: ${JSON.stringify(customer)}`);
                         }
                         
-                        // Verify user_id matches (important for data integrity)
-                        if (customer.user_id && customer.user_id !== userId) {
-                          console.error(`⚠️ WARNING: Customer ${email} belongs to user ${customer.user_id}, but we're processing for user ${userId}. This suggests a data integrity issue.`);
+                        // Verify company_id matches (important for data integrity)
+                        if (customer.company_id && customer.company_id !== companyId) {
+                          console.error(`⚠️ WARNING: Customer ${email} belongs to company ${customer.company_id}, but we're processing for company ${companyId}. This suggests a data integrity issue.`);
                           // Still use the customer_id, but log the warning
                         }
                         
