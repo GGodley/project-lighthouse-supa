@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
   const allCookies = request.cookies.getAll();
   console.log('🍪 Cookie Analysis:');
   console.log('  - Total cookies received:', allCookies.length);
-  console.log('  - All cookie names:', allCookies.map(c => c.name).join(', '));
+  console.log('  - All cookie names:', allCookies.map(c => c.name).join(', ') || 'NONE');
   
   // Check for Supabase cookies specifically
   const supabaseCookies = allCookies.filter(c => c.name.startsWith('sb-'));
@@ -36,6 +36,29 @@ export async function GET(request: NextRequest) {
   supabaseCookies.forEach(c => {
     console.log(`    * ${c.name}: ${c.value.substring(0, 50)}... (length: ${c.value.length})`);
   });
+  
+  // CRITICAL: Check for code verifier cookie - this is what Supabase needs
+  const codeVerifierCookies = allCookies.filter(c => 
+    c.name.includes('code-verifier') || 
+    c.name.includes('verifier') ||
+    c.name.includes('auth-token')
+  );
+  console.log('  - Code verifier related cookies:', codeVerifierCookies.length);
+  if (codeVerifierCookies.length === 0) {
+    console.error('  ❌ CRITICAL: No code verifier cookie found!');
+    console.error('  - This means the cookie was not set by signInWithOAuth');
+    console.error('  - Or the cookie is not being sent with the request');
+    console.error('  - Cookie domain/path might be incorrect');
+  } else {
+    codeVerifierCookies.forEach(c => {
+      console.log(`    * ${c.name}: ${c.value.substring(0, 50)}... (length: ${c.value.length})`);
+    });
+  }
+  
+  // Log request headers to see if cookies are being sent
+  const cookieHeader = request.headers.get('cookie');
+  console.log('  - Cookie header present:', !!cookieHeader);
+  console.log('  - Cookie header length:', cookieHeader?.length || 0);
 
   // Handle OAuth errors
   if (error) {
