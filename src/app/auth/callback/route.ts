@@ -24,13 +24,13 @@ export async function GET(request: NextRequest) {
   console.log('  - Error param:', error);
   console.log('  - Error description:', error_description);
 
-  // Log ALL cookies received
+  // Log ALL cookies received - CRITICAL for debugging PKCE
   const allCookies = request.cookies.getAll();
-  console.log('🍪 Cookie Analysis:');
+  console.log('🍪 Cookie Analysis (CRITICAL FOR PKCE):');
   console.log('  - Total cookies:', allCookies.length);
   console.log('  - All cookie names:', allCookies.map(c => c.name).join(', '));
   
-  // Look for code verifier specifically
+  // Look for code verifier specifically - this is what we need for PKCE
   const codeVerifierCookies = allCookies.filter(c => 
     c.name.toLowerCase().includes('verifier') || 
     c.name.toLowerCase().includes('code') ||
@@ -38,15 +38,29 @@ export async function GET(request: NextRequest) {
   );
   console.log('  - Code verifier related cookies:', codeVerifierCookies.length);
   codeVerifierCookies.forEach(c => {
-    console.log(`    * ${c.name}: ${c.value.substring(0, 30)}... (length: ${c.value.length})`);
+    console.log(`    * ${c.name}: ${c.value.substring(0, 50)}... (length: ${c.value.length})`);
   });
 
   // Check for Supabase auth cookies
   const supabaseCookies = allCookies.filter(c => c.name.startsWith('sb-'));
   console.log('  - Supabase cookies (sb-*):', supabaseCookies.length);
   supabaseCookies.forEach(c => {
-    console.log(`    * ${c.name}: ${c.value.substring(0, 30)}...`);
+    console.log(`    * ${c.name}: ${c.value.substring(0, 50)}...`);
   });
+  
+  // CRITICAL: Check if we have the code verifier cookie
+  // Supabase stores it as sb-{project-ref}-auth-token-code-verifier
+  const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL?.split('//')[1]?.split('.')[0] || '';
+  const expectedVerifierName = `sb-${projectRef}-auth-token-code-verifier`;
+  const hasVerifier = allCookies.some(c => c.name === expectedVerifierName || c.name.includes('code-verifier'));
+  console.log('  - Expected verifier cookie name:', expectedVerifierName);
+  console.log('  - Code verifier cookie found:', hasVerifier);
+  if (!hasVerifier) {
+    console.error('  ❌ CRITICAL: Code verifier cookie NOT FOUND - PKCE will fail!');
+    console.error('  - This means the cookie was not set or is not accessible');
+    console.error('  - Cookie domain/path might be incorrect');
+    console.error('  - Or cookie was consumed by Supabase already');
+  }
 
   // ============================================
   // ERROR HANDLING - Check for OAuth errors first
@@ -68,7 +82,8 @@ export async function GET(request: NextRequest) {
   }
 
   // ============================================
-  // CREATE RESPONSE - Must be created before Supabase client
+  // CREATE RESPONSE - Standard Supabase SSR Pattern
+  // Create redirect response first, then update with cookies
   // ============================================
   console.log('📤 Creating redirect response...');
   const redirectUrl = `${requestUrl.origin}/dashboard`;
@@ -105,68 +120,10 @@ export async function GET(request: NextRequest) {
   );
 
   // ============================================
-  // CHECK IF USER IS ALREADY AUTHENTICATED FIRST
-  // Supabase may have already processed the callback
+  // EXCHANGE CODE FOR SESSION - Standard Pattern
+  // This is the core of the Supabase SSR callback
   // ============================================
-  console.log('🔍 Checking if user is already authenticated...');
-  const { data: { user: existingUser }, error: getUserError } = await supabase.auth.getUser();
-  const { data: { session: existingSession } } = await supabase.auth.getSession();
-  
-  console.log('  - Existing user found:', !!existingUser);
-  console.log('  - Existing session found:', !!existingSession);
-  
-  if (existingUser && existingSession) {
-    console.log('✅ User already authenticated - Supabase processed callback successfully');
-    console.log('  - User ID:', existingUser.id);
-    console.log('  - User email:', existingUser.email);
-    
-    // Still create profile if needed
-    if (existingUser) {
-      console.log('👤 Creating/checking profile for user:', existingUser.id);
-      try {
-        const { data: existingProfile } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('id', existingUser.id)
-          .maybeSingle();
-        
-        if (!existingProfile) {
-          console.log('  - Profile not found, creating...');
-          const provider = existingUser.app_metadata?.provider || 'google';
-          const providerId = existingUser.app_metadata?.provider_id || 
-                            existingUser.user_metadata?.provider_id || 
-                            existingUser.email || '';
-          const fullName = existingUser.user_metadata?.full_name || 
-                          existingUser.user_metadata?.name || 
-                          null;
-          
-          await supabase
-            .from('profiles')
-            .insert({
-              id: existingUser.id,
-              email: existingUser.email || '',
-              full_name: fullName,
-              provider: provider,
-              provider_id: providerId,
-            });
-          console.log('  - Profile created successfully');
-        } else {
-          console.log('  - Profile already exists');
-        }
-      } catch (profileError) {
-        console.error('  - Profile creation exception:', profileError);
-      }
-    }
-    
-    console.log('✅ Redirecting to dashboard (user already authenticated)');
-    return response;
-  }
-
-  // ============================================
-  // EXCHANGE CODE FOR SESSION
-  // Only if user is not already authenticated
-  // ============================================
-  console.log('🔄 User not authenticated yet - attempting to exchange code for session...');
+  console.log('🔄 Exchanging code for session...');
   console.log('  - Code length:', code.length);
   console.log('  - Code first 20 chars:', code.substring(0, 20));
   
@@ -193,7 +150,7 @@ export async function GET(request: NextRequest) {
     
     if (sessionCheck?.session || userCheck) {
       console.log('✅ Session/user found despite exchange error - redirecting to dashboard');
-      return response;
+      return NextResponse.redirect(redirectUrl);
     }
     
     return NextResponse.redirect(
@@ -298,6 +255,10 @@ export async function GET(request: NextRequest) {
   });
   console.log('  - Redirect location:', response.headers.get('location'));
   
+  // ============================================
+  // REDIRECT TO DASHBOARD
+  // Response already has cookies set and redirect location
+  // ============================================
   console.log('✅ Redirecting to dashboard');
   console.log('========================================');
   console.log('🔐 AUTH CALLBACK COMPLETE');
