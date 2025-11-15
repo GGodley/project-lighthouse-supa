@@ -844,6 +844,7 @@ serve(async (req: Request) => {
                       console.log(`📦 Using cached customer_id for ${email}: ${customerId}`);
                     } else {
                       // Try to fetch existing customer first to avoid duplicate key errors
+                      // First check if customer exists for this user
                       const { data: existingCustomerCheck, error: fetchCheckError } = await supabaseAdmin
                         .from('customers')
                         .select('customer_id, id, user_id')
@@ -859,7 +860,22 @@ serve(async (req: Request) => {
                           console.log(`✅ Found existing customer ${email} in database: ${customerId}`);
                         }
                       } else {
-                        // Customer doesn't exist - attempt upsert with user_id for proper user isolation
+                        // Customer doesn't exist for this user - check if it exists for ANY user
+                        // (because unique constraint is only on email, not user_id+email)
+                        const { data: anyUserCustomer, error: anyUserError } = await supabaseAdmin
+                          .from('customers')
+                          .select('customer_id, id, user_id')
+                          .eq('email', email)
+                          .single();
+                        
+                        if (!anyUserError && anyUserCustomer) {
+                          // Customer exists but for a different user
+                          console.warn(`⚠️ Customer ${email} already exists for user ${anyUserCustomer.user_id}, but we're processing for user ${userId}. Skipping to avoid duplicate key error.`);
+                          // Skip this customer - can't create it due to unique constraint on email
+                          continue;
+                        }
+                        
+                        // Customer doesn't exist at all - attempt upsert with user_id for proper user isolation
                         const { data: customer, error: customerError } = await supabaseAdmin
                           .from('customers')
                           .upsert(
@@ -888,11 +904,15 @@ serve(async (req: Request) => {
                         const isDuplicateKeyError = 
                           errorCode === '23505' || 
                           errorCode === 23505 ||
+                          errorCode === '23505' ||
+                          String(errorCode) === '23505' ||
                           errorMessage?.includes('duplicate key') ||
                           errorMessage?.includes('already exists') ||
+                          errorMessage?.includes('violates unique constraint') ||
                           errorString?.includes('23505') ||
                           errorString?.includes('duplicate key') ||
-                          errorString?.includes('customers_email_key');
+                          errorString?.includes('customers_email_key') ||
+                          errorString?.includes('violates unique constraint');
                         
                         if (isDuplicateKeyError) {
                           console.warn(`⚠️ Duplicate key error detected for customer ${email}. Error details:`, {
@@ -948,9 +968,30 @@ serve(async (req: Request) => {
                           customerCache.set(email, customerId);
                           console.log(`✅ Found existing customer for ${email}: ${customerId}`);
                         } else {
-                          // Other error - throw to fail the job
-                          console.error(`!!! FATAL: Failed to upsert customer ${email} for company ${companyId}. Error:`, customerError);
-                          throw new Error(`Customer upsert failed: ${customerError.message || String(customerError)}`);
+                          // Other error - try one more time to fetch the customer before failing
+                          console.warn(`⚠️ Upsert failed with non-duplicate-key error. Attempting to fetch customer as fallback...`);
+                          const { data: fallbackCustomer, error: fallbackError } = await supabaseAdmin
+                            .from('customers')
+                            .select('customer_id, id, user_id')
+                            .eq('email', email)
+                            .eq('user_id', userId)
+                            .single();
+                          
+                          if (!fallbackError && fallbackCustomer) {
+                            // Found it - use it
+                            customerId = fallbackCustomer.customer_id || fallbackCustomer.id;
+                            if (customerId) {
+                              customerCache.set(email, customerId);
+                              console.log(`✅ Fallback fetch succeeded for ${email}: ${customerId}`);
+                            } else {
+                              console.error(`!!! FATAL: Failed to upsert customer ${email} for company ${companyId}. Error:`, customerError);
+                              throw new Error(`Customer upsert failed: ${customerError.message || String(customerError)}`);
+                            }
+                          } else {
+                            // Still not found - throw to fail the job
+                            console.error(`!!! FATAL: Failed to upsert customer ${email} for company ${companyId}. Error:`, customerError);
+                            throw new Error(`Customer upsert failed: ${customerError.message || String(customerError)}`);
+                          }
                         }
                       } else if (!customer) {
                         // This should not happen if the upsert is correct, but it's a good failsafe
@@ -990,7 +1031,26 @@ serve(async (req: Request) => {
                   }
                 } catch (error) {
                   console.error(`Error in company/customer creation for ${email}:`, error);
-                  // Re-throw customer upsert errors to fail the job
+                  
+                  // Check if it's a duplicate key error - handle gracefully
+                  const errorMessage = error instanceof Error ? error.message : String(error);
+                  const errorString = JSON.stringify(error);
+                  const isDuplicateKeyError = 
+                    errorMessage?.includes('duplicate key') ||
+                    errorMessage?.includes('already exists') ||
+                    errorMessage?.includes('violates unique constraint') ||
+                    errorMessage?.includes('customers_email_key') ||
+                    errorString?.includes('23505') ||
+                    errorString?.includes('duplicate key') ||
+                    errorString?.includes('customers_email_key');
+                  
+                  if (isDuplicateKeyError) {
+                    console.warn(`⚠️ Duplicate key error caught in outer catch for ${email}. This should have been handled earlier. Skipping this customer.`);
+                    // Skip this customer but continue processing
+                    continue;
+                  }
+                  
+                  // Re-throw other customer upsert errors to fail the job
                   if (error instanceof Error && error.message.includes('Customer upsert failed')) {
                     throw error;
                   }
