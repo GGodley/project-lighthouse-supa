@@ -1347,69 +1347,35 @@ serve(async (req: Request) => {
     }
 
     // --- MODIFIED ---
-    // This logic is the same, but we invoke 'sync-threads' and update the text
+    // Fire-and-forget recursive invocation to avoid timeout issues
+    // The recursive call will handle its own errors and update job status independently
     if (listJson.nextPageToken) {
-      // Chain to the next page with proper error handling
-      try {
-        // Only log on first page to reduce noise
-        if (!pageToken) {
-          console.log(`📄 Processing multiple pages. Current page has ${listJson.threads?.length || 0} threads. Chaining to next page...`);
-        }
-        
-        const { data, error } = await supabaseAdmin.functions.invoke('sync-threads', {
-          body: {
-            jobId: jobId,
-            provider_token,
-            pageToken: listJson.nextPageToken
-          }
-        });
-        
-        if (error) {
-          console.error(`❌ Failed to invoke next page (token: ${listJson.nextPageToken.substring(0, 20)}...):`, error);
-          
-          // Check if the error is due to a non-2xx status code from the function
-          const errorMessage = error.message || String(error);
-          const errorDetails = errorMessage.includes('non-2xx') 
-            ? `Next page function returned an error. This may be due to customer conflicts or other processing issues. Original error: ${errorMessage}`
-            : `Failed to process next page: ${errorMessage}`;
-          
-          await updateJobStatus(jobId, 'failed', errorDetails);
-          throw new Error(`Failed to invoke next page: ${errorMessage}`);
-        }
-        
-        // Also check if data contains an error (in case function returned error in response body)
-        if (data && typeof data === 'object' && 'error' in data) {
-          const errorMessage = (data as any).error || 'Unknown error in next page';
-          console.error(`❌ Next page returned error in response:`, errorMessage);
-          await updateJobStatus(jobId, 'failed', `Next page processing failed: ${errorMessage}`);
-          throw new Error(`Next page returned error: ${errorMessage}`);
-        }
-        
-        // Don't log success for every page - too noisy. Only log errors.
-      } catch (invokeError) {
-        console.error('❌ Error invoking next page:', invokeError);
-        const errorMessage = invokeError instanceof Error ? invokeError.message : String(invokeError);
-        
-        // Check if job was already marked as failed by the recursive call
-        // If so, don't update it again - just return the error
-        const { data: jobStatus } = await supabaseAdmin
-          .from('sync_jobs')
-          .select('status')
-          .eq('id', jobId)
-          .single();
-        
-        if (jobStatus?.status !== 'failed') {
-          await updateJobStatus(jobId, 'failed', `Error processing next page: ${errorMessage}`);
-        }
-        
-        // Return error response immediately - don't continue processing
-        return new Response(JSON.stringify({
-          error: `Failed to process next page: ${errorMessage}`
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 500
-        });
+      // Only log on first page to reduce noise
+      if (!pageToken) {
+        console.log(`📄 Processing multiple pages. Current page has ${listJson.threads?.length || 0} threads. Invoking next page (fire-and-forget)...`);
+      } else {
+        console.log(`📄 Chaining to next page (fire-and-forget)...`);
       }
+      
+      // Fire-and-forget: Don't await - let it run independently to avoid timeouts
+      // The recursive call will handle its own errors and update job status
+      supabaseAdmin.functions.invoke('sync-threads', {
+        body: {
+          jobId: jobId,
+          provider_token,
+          pageToken: listJson.nextPageToken
+        }
+      }).catch((invokeError) => {
+        // Log the error but don't fail the parent function
+        // The recursive call will handle its own errors
+        console.error(`⚠️ Error invoking next page (non-blocking):`, invokeError);
+        // Don't update job status here - let the recursive call handle it
+        // This prevents race conditions where both parent and child try to update status
+      });
+      
+      // Return immediately - don't wait for the recursive call
+      // This prevents timeout issues with long-running OpenAI calls and rate limit retries
+      console.log(`✅ Current page processed. Next page invoked asynchronously.`);
     } else {
       // Complete the job and update last sync time in profiles table
       console.log('✅ No more pages. Completing job.');
