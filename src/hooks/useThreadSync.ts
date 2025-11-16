@@ -118,7 +118,7 @@ export function useThreadSync(provider_token: string | null | undefined, user_em
           return;
         }
 
-        const status = job.status;
+        const status = job.status as string;
 
         // Calculate progress percentage
         if (job.total_pages !== null && job.total_pages !== undefined && job.pages_completed !== null && job.pages_completed !== undefined) {
