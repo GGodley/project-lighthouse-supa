@@ -473,7 +473,13 @@ const summarizeThread = async (
 
 
 // --- Helper function to safely update job status ---
-async function updateJobStatus(jobId: string | null | undefined, status: 'pending' | 'running' | 'completed' | 'failed', details: string): Promise<void> {
+async function updateJobStatus(
+  jobId: string | null | undefined, 
+  status: 'pending' | 'running' | 'completed' | 'failed', 
+  details: string,
+  totalPages?: number | null,
+  pagesCompleted?: number
+): Promise<void> {
   if (!jobId) {
     console.warn('Cannot update job status: jobId is missing');
     return;
@@ -492,15 +498,23 @@ async function updateJobStatus(jobId: string | null | undefined, status: 'pendin
       auth: { autoRefreshToken: false, persistSession: false }
     });
 
+    const updateData: any = { status, details };
+    if (totalPages !== undefined) {
+      updateData.total_pages = totalPages;
+    }
+    if (pagesCompleted !== undefined) {
+      updateData.pages_completed = pagesCompleted;
+    }
+
     const { error } = await supabaseAdmin
       .from('sync_jobs')
-      .update({ status, details })
+      .update(updateData)
       .eq('id', jobId);
 
     if (error) {
       console.error(`Failed to update job status for job ${jobId}:`, error);
     } else {
-      console.log(`✅ Job ${jobId} status updated to: ${status}`);
+      console.log(`✅ Job ${jobId} status updated to: ${status}${totalPages !== undefined ? `, total_pages: ${totalPages}` : ''}${pagesCompleted !== undefined ? `, pages_completed: ${pagesCompleted}` : ''}`);
     }
   } catch (error) {
     console.error(`Error updating job status for job ${jobId}:`, error);
@@ -721,14 +735,52 @@ serve(async (req: Request) => {
     const threadIds = listJson.threads?.map((t: any) => t.id).filter(Boolean) || [];
 
     // --- NEW ---
+    // Progress tracking: Get current job progress and update
+    const { data: currentJob } = await supabaseAdmin
+      .from('sync_jobs')
+      .select('total_pages, pages_completed')
+      .eq('id', jobId)
+      .single();
+    
+    let currentPagesCompleted = currentJob?.pages_completed || 0;
+    let estimatedTotalPages = currentJob?.total_pages || null;
+    
+    // If this is the first page, estimate total pages
+    if (!pageToken) {
+      // Estimate total pages based on first page results
+      // Gmail API returns maxResults=10 per page, so if we have results and a nextPageToken,
+      // we can estimate there are at least 2 pages. We'll update this as we go.
+      if (listJson.nextPageToken) {
+        // We have more pages, estimate conservatively (will update as we progress)
+        estimatedTotalPages = 2; // Start with 2, will increase if needed
+      } else {
+        // Only one page
+        estimatedTotalPages = 1;
+      }
+      currentPagesCompleted = 0; // Reset for new sync
+    }
+    
+    // Increment pages_completed for this page
+    currentPagesCompleted += 1;
+    
+    // If we have a nextPageToken and our estimate is too low, increase it
+    if (listJson.nextPageToken && estimatedTotalPages !== null && currentPagesCompleted >= estimatedTotalPages) {
+      estimatedTotalPages = currentPagesCompleted + 1; // Estimate at least one more page
+    }
+
+    // --- NEW ---
     // Early exit if no threads and no next page
     if (threadIds.length === 0 && !listJson.nextPageToken) {
-      await updateJobStatus(jobId, 'completed', 'No threads found to sync.');
+      // Mark as completed with final progress
+      await updateJobStatus(jobId, 'completed', 'No threads found to sync.', estimatedTotalPages || 1, currentPagesCompleted);
       return new Response(JSON.stringify({ message: "No threads to process." }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200
       });
     }
+    
+    // Update progress (but don't update status if it's already running)
+    await updateJobStatus(jobId, 'running', `Processing page ${currentPagesCompleted}${estimatedTotalPages ? ` of ${estimatedTotalPages}` : ''}...`, estimatedTotalPages, currentPagesCompleted);
 
     // --- NEW ---
     // Batch check for existing threads - we need last_message_date to determine if thread needs update
@@ -1009,23 +1061,26 @@ serve(async (req: Request) => {
                             throw new Error(`Customer upsert failed: ${customerError.message || String(customerError)}`);
                           }
                         }
-                      } else if (!customer) {
-                        // This should not happen if the upsert is correct, but it's a good failsafe
-                        throw new Error(`Customer data not returned for ${email} after upsert.`);
                       } else {
-                        // Upsert succeeded - verify the customer belongs to this company
-                        customerId = customer.customer_id || customer.id;
-                        if (!customerId) {
-                          throw new Error(`Customer ID not found in returned data for ${email}. Customer data: ${JSON.stringify(customer)}`);
+                        // No error - check if customer data was returned
+                        if (!customer) {
+                          // This should not happen if the upsert is correct, but it's a good failsafe
+                          throw new Error(`Customer data not returned for ${email} after upsert.`);
+                        } else {
+                          // Upsert succeeded - verify the customer belongs to this company
+                          customerId = customer.customer_id || customer.id;
+                          if (!customerId) {
+                            throw new Error(`Customer ID not found in returned data for ${email}. Customer data: ${JSON.stringify(customer)}`);
+                          }
+                          
+                          // Verify company_id matches (important for data integrity)
+                          if (customer.company_id && customer.company_id !== companyId) {
+                            console.error(`⚠️ WARNING: Customer ${email} belongs to company ${customer.company_id}, but we're processing for company ${companyId}. This suggests a data integrity issue.`);
+                            // Still use the customer_id, but log the warning
+                          }
+                          
+                          console.log(`✅ Successfully upserted customer ${email} with customer_id: ${customerId}`);
                         }
-                        
-                        // Verify company_id matches (important for data integrity)
-                        if (customer.company_id && customer.company_id !== companyId) {
-                          console.error(`⚠️ WARNING: Customer ${email} belongs to company ${customer.company_id}, but we're processing for company ${companyId}. This suggests a data integrity issue.`);
-                          // Still use the customer_id, but log the warning
-                        }
-                        
-                        console.log(`✅ Successfully upserted customer ${email} with customer_id: ${customerId}`);
                       }
                       
                       // Add to cache for subsequent lookups in this batch
@@ -1045,6 +1100,7 @@ serve(async (req: Request) => {
                       msgCustomerMap.set(msg.id, customerId); // Map this message to its sender
                     }
                   }
+                }
                 } catch (error) {
                   console.error(`Error in company/customer creation for ${email}:`, error);
                   
@@ -1445,14 +1501,31 @@ serve(async (req: Request) => {
             provider_token,
             pageToken: listJson.nextPageToken
           }
-        }).catch((invokeError) => {
-          // Check if the error is expected (job already failed, early exit)
+        }).catch((invokeError: any) => {
+          // Check if the error is expected (job already failed, early exit, or timeout)
           const errorMessage = invokeError?.message || String(invokeError);
+          const errorContext = invokeError?.context || {};
+          const errorStatus = errorContext?.status;
+          const errorStatusText = errorContext?.statusText;
+          
+          // 504 Gateway Timeout is expected for fire-and-forget long-running operations
+          // The recursive call will continue processing even if the invoke times out
+          const isTimeout = errorStatus === 504 || 
+                           errorStatusText === 'Gateway Timeout' ||
+                           errorMessage.includes('504') ||
+                           errorMessage.includes('Gateway Timeout') ||
+                           errorMessage.includes('timeout');
+          
           const isExpectedError = errorMessage.includes('already failed') || 
-                                  errorMessage.includes('Job already failed');
+                                  errorMessage.includes('Job already failed') ||
+                                  isTimeout;
           
           if (isExpectedError) {
-            console.log(`ℹ️ Recursive call exited early (expected): ${errorMessage}`);
+            if (isTimeout) {
+              console.log(`ℹ️ Recursive call invoke timed out (expected for fire-and-forget): The function will continue processing independently`);
+            } else {
+              console.log(`ℹ️ Recursive call exited early (expected): ${errorMessage}`);
+            }
           } else {
             // Log actual errors but don't fail the parent function
             // The recursive call will handle its own errors
@@ -1484,7 +1557,16 @@ serve(async (req: Request) => {
         console.log(`✅ Updated threads_last_synced_at to ${currentUTCTime} (UTC) for user ${userId}`);
       }
       
-      await updateJobStatus(jobId, 'completed', 'All threads have been synced.');
+      // Final progress update: fetch latest progress values to ensure accuracy
+      const { data: finalJobData } = await supabaseAdmin
+        .from('sync_jobs')
+        .select('total_pages, pages_completed')
+        .eq('id', jobId)
+        .single();
+      
+      const finalTotalPages = finalJobData?.total_pages || currentPagesCompleted || 1;
+      const finalPagesCompleted = finalJobData?.pages_completed || currentPagesCompleted || 1;
+      await updateJobStatus(jobId, 'completed', 'All threads have been synced.', finalTotalPages, finalPagesCompleted);
     }
 
     // --- UNCHANGED ---
