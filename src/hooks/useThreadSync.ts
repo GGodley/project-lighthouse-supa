@@ -111,6 +111,10 @@ export function useThreadSync(provider_token: string | null | undefined, user_em
 
         if (error) {
           console.error('Error checking job status:', error);
+          // If error is about missing columns, log it specifically
+          if (error.message?.includes('total_pages') || error.message?.includes('pages_completed')) {
+            console.error('⚠️ Migration not applied: total_pages and pages_completed columns are missing. Please apply the migration to the database.');
+          }
           return;
         }
 
@@ -124,9 +128,12 @@ export function useThreadSync(provider_token: string | null | undefined, user_em
         if (job.total_pages !== null && job.total_pages !== undefined && job.pages_completed !== null && job.pages_completed !== undefined) {
           const percentage = Math.min(100, Math.round((job.pages_completed / job.total_pages) * 100));
           setProgressPercentage(percentage);
+          console.log(`📊 Progress: ${job.pages_completed}/${job.total_pages} pages (${percentage}%)`);
         } else {
-          // If we don't have total_pages yet, set to null
-          setProgressPercentage(null);
+          // If we don't have total_pages yet, set to 0 (show empty bar) instead of null
+          // This ensures the progress bar is visible even at the start
+          setProgressPercentage(0);
+          console.log('📊 Progress: Waiting for first page to estimate total pages...');
         }
 
         if (status === 'completed') {

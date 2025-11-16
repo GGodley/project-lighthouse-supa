@@ -141,6 +141,11 @@ const CustomerThreadsPage: React.FC = () => {
               <ProgressBar percentage={progressPercentage ?? 0} />
             </div>
           )}
+          {syncStatus === 'creating_job' && (
+            <div className="w-full max-w-md">
+              <ProgressBar percentage={0} />
+            </div>
+          )}
         </div>
       )
     }
