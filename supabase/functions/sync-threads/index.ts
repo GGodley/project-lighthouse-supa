@@ -473,7 +473,13 @@ const summarizeThread = async (
 
 
 // --- Helper function to safely update job status ---
-async function updateJobStatus(jobId: string | null | undefined, status: 'pending' | 'running' | 'completed' | 'failed', details: string): Promise<void> {
+async function updateJobStatus(
+  jobId: string | null | undefined, 
+  status: 'pending' | 'running' | 'completed' | 'failed', 
+  details: string,
+  totalPages?: number | null,
+  pagesCompleted?: number
+): Promise<void> {
   if (!jobId) {
     console.warn('Cannot update job status: jobId is missing');
     return;
@@ -492,15 +498,47 @@ async function updateJobStatus(jobId: string | null | undefined, status: 'pendin
       auth: { autoRefreshToken: false, persistSession: false }
     });
 
-    const { error } = await supabaseAdmin
+    const updateData: any = { status, details };
+    if (totalPages !== undefined) {
+      updateData.total_pages = totalPages;
+    }
+    if (pagesCompleted !== undefined) {
+      updateData.pages_completed = pagesCompleted;
+    }
+
+    let { error } = await supabaseAdmin
       .from('sync_jobs')
-      .update({ status, details })
+      .update(updateData)
       .eq('id', jobId);
 
+    // If error is about missing columns, retry without progress tracking columns
     if (error) {
-      console.error(`Failed to update job status for job ${jobId}:`, error);
+      const errorMessage = error.message || String(error);
+      const isMissingColumnError = 
+        errorMessage.includes('pages_completed') || 
+        errorMessage.includes('total_pages') ||
+        errorMessage.includes('PGRST204') ||
+        errorMessage.includes('schema cache');
+      
+      if (isMissingColumnError && (totalPages !== undefined || pagesCompleted !== undefined)) {
+        // Retry update without progress tracking columns
+        console.warn(`⚠️ Progress tracking columns not found in sync_jobs table. Retrying update without them.`);
+        const basicUpdateData = { status, details };
+        const { error: retryError } = await supabaseAdmin
+          .from('sync_jobs')
+          .update(basicUpdateData)
+          .eq('id', jobId);
+        
+        if (retryError) {
+          console.error(`Failed to update job status for job ${jobId} (retry without progress columns):`, retryError);
+        } else {
+          console.log(`✅ Job ${jobId} status updated to: ${status} (progress tracking columns not available)`);
+        }
+      } else {
+        console.error(`Failed to update job status for job ${jobId}:`, error);
+      }
     } else {
-      console.log(`✅ Job ${jobId} status updated to: ${status}`);
+      console.log(`✅ Job ${jobId} status updated to: ${status}${totalPages !== undefined ? `, total_pages: ${totalPages}` : ''}${pagesCompleted !== undefined ? `, pages_completed: ${pagesCompleted}` : ''}`);
     }
   } catch (error) {
     console.error(`Error updating job status for job ${jobId}:`, error);
@@ -721,14 +759,69 @@ serve(async (req: Request) => {
     const threadIds = listJson.threads?.map((t: any) => t.id).filter(Boolean) || [];
 
     // --- NEW ---
+    // Progress tracking: Get current job progress and update
+    // Handle gracefully if progress columns don't exist
+    let currentPagesCompleted = 0;
+    let estimatedTotalPages: number | null = null;
+    try {
+      const { data: currentJob, error: progressError } = await supabaseAdmin
+        .from('sync_jobs')
+        .select('total_pages, pages_completed')
+        .eq('id', jobId)
+        .single();
+      
+      if (!progressError && currentJob) {
+        currentPagesCompleted = currentJob?.pages_completed || 0;
+        estimatedTotalPages = currentJob?.total_pages || null;
+      } else if (progressError) {
+        // If columns don't exist, that's okay - just use default value
+        const errorMessage = progressError.message || String(progressError);
+        if (!errorMessage.includes('pages_completed') && !errorMessage.includes('PGRST204')) {
+          // Only log if it's not a missing column error
+          console.warn(`⚠️ Could not fetch job progress (columns may not exist):`, progressError);
+        }
+      }
+    } catch (err) {
+      // Progress tracking columns may not exist - that's okay
+      console.warn(`⚠️ Progress tracking not available (columns may not exist)`);
+    }
+    
+    // If this is the first page, estimate total pages
+    if (!pageToken) {
+      // Estimate total pages based on first page results
+      // Gmail API returns maxResults=10 per page, so if we have results and a nextPageToken,
+      // we can estimate there are at least 2 pages. We'll update this as we go.
+      if (listJson.nextPageToken) {
+        // We have more pages, estimate conservatively (will update as we progress)
+        estimatedTotalPages = 2; // Start with 2, will increase if needed
+      } else {
+        // Only one page
+        estimatedTotalPages = 1;
+      }
+      currentPagesCompleted = 0; // Reset for new sync
+    }
+    
+    // Increment pages_completed for this page
+    currentPagesCompleted += 1;
+    
+    // If we have a nextPageToken and our estimate is too low, increase it
+    if (listJson.nextPageToken && estimatedTotalPages !== null && currentPagesCompleted >= estimatedTotalPages) {
+      estimatedTotalPages = currentPagesCompleted + 1; // Estimate at least one more page
+    }
+
+    // --- NEW ---
     // Early exit if no threads and no next page
     if (threadIds.length === 0 && !listJson.nextPageToken) {
-      await updateJobStatus(jobId, 'completed', 'No threads found to sync.');
+      // Mark as completed with final progress
+      await updateJobStatus(jobId, 'completed', 'No threads found to sync.', estimatedTotalPages || 1, currentPagesCompleted);
       return new Response(JSON.stringify({ message: "No threads to process." }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200
       });
     }
+    
+    // Update progress (but don't update status if it's already running)
+    await updateJobStatus(jobId, 'running', `Processing page ${currentPagesCompleted}${estimatedTotalPages ? ` of ${estimatedTotalPages}` : ''}...`, estimatedTotalPages, currentPagesCompleted);
 
     // --- NEW ---
     // Batch check for existing threads - we need last_message_date to determine if thread needs update
@@ -864,14 +957,14 @@ serve(async (req: Request) => {
                       // First check if customer exists for this company
                       const { data: existingCustomerCheck, error: fetchCheckError } = await supabaseAdmin
                         .from('customers')
-                        .select('customer_id, id, company_id')
+                        .select('customer_id, company_id')
                         .eq('email', email)
                         .eq('company_id', companyId)
                         .single();
                       
                       if (!fetchCheckError && existingCustomerCheck) {
                         // Customer already exists for this company - use it
-                        customerId = existingCustomerCheck.customer_id || existingCustomerCheck.id;
+                        customerId = existingCustomerCheck.customer_id;
                         if (customerId) {
                           customerCache.set(email, customerId);
                           console.log(`✅ Found existing customer ${email} in database: ${customerId}`);
@@ -881,7 +974,7 @@ serve(async (req: Request) => {
                         // (because unique constraint is only on email, not company_id+email)
                         const { data: anyCompanyCustomer, error: anyCompanyError } = await supabaseAdmin
                           .from('customers')
-                          .select('customer_id, id, company_id')
+                          .select('customer_id, company_id')
                           .eq('email', email)
                           .single();
                         
@@ -906,7 +999,7 @@ serve(async (req: Request) => {
                               ignoreDuplicates: false,
                             }
                           )
-                          .select('customer_id, id, company_id')
+                          .select('customer_id, company_id')
                           .single();
 
                       // --- IMPROVED ERROR HANDLING ---
@@ -941,7 +1034,7 @@ serve(async (req: Request) => {
                           // Try to fetch existing customer for this company_id and email
                           const { data: existingCustomer, error: fetchError } = await supabaseAdmin
                             .from('customers')
-                            .select('customer_id, id, company_id')
+                            .select('customer_id, company_id')
                             .eq('email', email)
                             .eq('company_id', companyId)
                             .single();
@@ -952,7 +1045,7 @@ serve(async (req: Request) => {
                             
                             const { data: anyCustomer, error: anyFetchError } = await supabaseAdmin
                               .from('customers')
-                              .select('customer_id, id, company_id')
+                              .select('customer_id, company_id')
                               .eq('email', email)
                               .single();
                             
@@ -968,7 +1061,7 @@ serve(async (req: Request) => {
                           }
                           
                           // Use the existing customer
-                          customerId = existingCustomer.customer_id || existingCustomer.id;
+                          customerId = existingCustomer.customer_id;
                           if (!customerId) {
                             console.error(`❌ Customer ID not found in existing customer data for ${email}`);
                             continue;
@@ -988,14 +1081,14 @@ serve(async (req: Request) => {
                           console.warn(`⚠️ Upsert failed with non-duplicate-key error. Attempting to fetch customer as fallback...`);
                           const { data: fallbackCustomer, error: fallbackError } = await supabaseAdmin
                             .from('customers')
-                            .select('customer_id, id, company_id')
+                            .select('customer_id, company_id')
                             .eq('email', email)
                             .eq('company_id', companyId)
                             .single();
                           
                           if (!fallbackError && fallbackCustomer) {
                             // Found it - use it
-                            customerId = fallbackCustomer.customer_id || fallbackCustomer.id;
+                            customerId = fallbackCustomer.customer_id;
                             if (customerId) {
                               customerCache.set(email, customerId);
                               console.log(`✅ Fallback fetch succeeded for ${email}: ${customerId}`);
@@ -1009,23 +1102,26 @@ serve(async (req: Request) => {
                             throw new Error(`Customer upsert failed: ${customerError.message || String(customerError)}`);
                           }
                         }
-                      } else if (!customer) {
-                        // This should not happen if the upsert is correct, but it's a good failsafe
-                        throw new Error(`Customer data not returned for ${email} after upsert.`);
                       } else {
-                        // Upsert succeeded - verify the customer belongs to this company
-                        customerId = customer.customer_id || customer.id;
-                        if (!customerId) {
-                          throw new Error(`Customer ID not found in returned data for ${email}. Customer data: ${JSON.stringify(customer)}`);
+                        // No error - check if customer data was returned
+                        if (!customer) {
+                          // This should not happen if the upsert is correct, but it's a good failsafe
+                          throw new Error(`Customer data not returned for ${email} after upsert.`);
+                        } else {
+                          // Upsert succeeded - verify the customer belongs to this company
+                          customerId = customer.customer_id;
+                          if (!customerId) {
+                            throw new Error(`Customer ID not found in returned data for ${email}. Customer data: ${JSON.stringify(customer)}`);
+                          }
+                          
+                          // Verify company_id matches (important for data integrity)
+                          if (customer.company_id && customer.company_id !== companyId) {
+                            console.error(`⚠️ WARNING: Customer ${email} belongs to company ${customer.company_id}, but we're processing for company ${companyId}. This suggests a data integrity issue.`);
+                            // Still use the customer_id, but log the warning
+                          }
+                          
+                          console.log(`✅ Successfully upserted customer ${email} with customer_id: ${customerId}`);
                         }
-                        
-                        // Verify company_id matches (important for data integrity)
-                        if (customer.company_id && customer.company_id !== companyId) {
-                          console.error(`⚠️ WARNING: Customer ${email} belongs to company ${customer.company_id}, but we're processing for company ${companyId}. This suggests a data integrity issue.`);
-                          // Still use the customer_id, but log the warning
-                        }
-                        
-                        console.log(`✅ Successfully upserted customer ${email} with customer_id: ${customerId}`);
                       }
                       
                       // Add to cache for subsequent lookups in this batch
@@ -1045,6 +1141,7 @@ serve(async (req: Request) => {
                       msgCustomerMap.set(msg.id, customerId); // Map this message to its sender
                     }
                   }
+                }
                 } catch (error) {
                   console.error(`Error in company/customer creation for ${email}:`, error);
                   
@@ -1445,14 +1542,31 @@ serve(async (req: Request) => {
             provider_token,
             pageToken: listJson.nextPageToken
           }
-        }).catch((invokeError) => {
-          // Check if the error is expected (job already failed, early exit)
+        }).catch((invokeError: any) => {
+          // Check if the error is expected (job already failed, early exit, or timeout)
           const errorMessage = invokeError?.message || String(invokeError);
+          const errorContext = invokeError?.context || {};
+          const errorStatus = errorContext?.status;
+          const errorStatusText = errorContext?.statusText;
+          
+          // 504 Gateway Timeout is expected for fire-and-forget long-running operations
+          // The recursive call will continue processing even if the invoke times out
+          const isTimeout = errorStatus === 504 || 
+                           errorStatusText === 'Gateway Timeout' ||
+                           errorMessage.includes('504') ||
+                           errorMessage.includes('Gateway Timeout') ||
+                           errorMessage.includes('timeout');
+          
           const isExpectedError = errorMessage.includes('already failed') || 
-                                  errorMessage.includes('Job already failed');
+                                  errorMessage.includes('Job already failed') ||
+                                  isTimeout;
           
           if (isExpectedError) {
-            console.log(`ℹ️ Recursive call exited early (expected): ${errorMessage}`);
+            if (isTimeout) {
+              console.log(`ℹ️ Recursive call invoke timed out (expected for fire-and-forget): The function will continue processing independently`);
+            } else {
+              console.log(`ℹ️ Recursive call exited early (expected): ${errorMessage}`);
+            }
           } else {
             // Log actual errors but don't fail the parent function
             // The recursive call will handle its own errors
@@ -1484,7 +1598,31 @@ serve(async (req: Request) => {
         console.log(`✅ Updated threads_last_synced_at to ${currentUTCTime} (UTC) for user ${userId}`);
       }
       
-      await updateJobStatus(jobId, 'completed', 'All threads have been synced.');
+      // Final progress update: fetch latest progress values to ensure accuracy
+      // Handle gracefully if progress columns don't exist
+      let finalTotalPages: number | null = null;
+      let finalPagesCompleted: number | null = null;
+      try {
+        const { data: finalJobData, error: finalProgressError } = await supabaseAdmin
+          .from('sync_jobs')
+          .select('total_pages, pages_completed')
+          .eq('id', jobId)
+          .single();
+        
+        if (!finalProgressError && finalJobData) {
+          finalTotalPages = finalJobData?.total_pages || currentPagesCompleted || 1;
+          finalPagesCompleted = finalJobData?.pages_completed || currentPagesCompleted || 1;
+        } else {
+          // If columns don't exist, use current values or defaults
+          finalTotalPages = currentPagesCompleted || 1;
+          finalPagesCompleted = currentPagesCompleted || 1;
+        }
+      } catch (err) {
+        // Progress tracking columns may not exist - use current values
+        finalTotalPages = currentPagesCompleted || 1;
+        finalPagesCompleted = currentPagesCompleted || 1;
+      }
+      await updateJobStatus(jobId, 'completed', 'All threads have been synced.', finalTotalPages, finalPagesCompleted);
     }
 
     // --- UNCHANGED ---

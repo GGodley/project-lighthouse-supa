@@ -6,6 +6,7 @@ import { useSupabase } from '@/components/SupabaseProvider'
 import { MoreHorizontal, Loader2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
 import { useThreadSync } from '@/hooks/useThreadSync'
 import HealthScoreBar from '@/components/ui/HealthScoreBar'
+import ProgressBar from '@/components/ui/ProgressBar'
 
 
 // Company type based on exact database schema
@@ -49,7 +50,7 @@ const CustomerThreadsPage: React.FC = () => {
   }, [supabase])
 
   // Thread sync hook
-  const { syncStatus, syncDetails, startSync } = useThreadSync(providerToken, userEmail)
+  const { syncStatus, syncDetails, progressPercentage, startSync } = useThreadSync(providerToken, userEmail)
 
   // Trigger sync on page load
   useEffect(() => {
@@ -130,9 +131,21 @@ const CustomerThreadsPage: React.FC = () => {
 
     if (syncStatus === 'creating_job' || syncStatus === 'syncing') {
       return (
-        <div className="flex items-center space-x-2 text-sm text-blue-600">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span>{syncDetails || 'Syncing threads...'}</span>
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2 text-sm text-blue-600">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>{syncDetails || 'Syncing threads...'}</span>
+          </div>
+          {syncStatus === 'syncing' && (
+            <div className="w-full max-w-md">
+              <ProgressBar percentage={progressPercentage ?? 0} />
+            </div>
+          )}
+          {syncStatus === 'creating_job' && (
+            <div className="w-full max-w-md">
+              <ProgressBar percentage={0} />
+            </div>
+          )}
         </div>
       )
     }

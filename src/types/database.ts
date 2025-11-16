@@ -493,7 +493,9 @@ export type Database = {
           created_at: string
           details: string | null
           id: number
+          pages_completed: number | null
           status: string
+          total_pages: number | null
           updated_at: string
           user_id: string
         }
@@ -501,7 +503,9 @@ export type Database = {
           created_at?: string
           details?: string | null
           id?: number
+          pages_completed?: number | null
           status?: string
+          total_pages?: number | null
           updated_at?: string
           user_id: string
         }
@@ -509,7 +513,9 @@ export type Database = {
           created_at?: string
           details?: string | null
           id?: number
+          pages_completed?: number | null
           status?: string
+          total_pages?: number | null
           updated_at?: string
           user_id?: string
         }
