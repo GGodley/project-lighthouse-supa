@@ -916,14 +916,14 @@ serve(async (req: Request) => {
                       // First check if customer exists for this company
                       const { data: existingCustomerCheck, error: fetchCheckError } = await supabaseAdmin
                         .from('customers')
-                        .select('customer_id, id, company_id')
+                        .select('customer_id, company_id')
                         .eq('email', email)
                         .eq('company_id', companyId)
                         .single();
                       
                       if (!fetchCheckError && existingCustomerCheck) {
                         // Customer already exists for this company - use it
-                        customerId = existingCustomerCheck.customer_id || existingCustomerCheck.id;
+                        customerId = existingCustomerCheck.customer_id;
                         if (customerId) {
                           customerCache.set(email, customerId);
                           console.log(`✅ Found existing customer ${email} in database: ${customerId}`);
@@ -933,7 +933,7 @@ serve(async (req: Request) => {
                         // (because unique constraint is only on email, not company_id+email)
                         const { data: anyCompanyCustomer, error: anyCompanyError } = await supabaseAdmin
                           .from('customers')
-                          .select('customer_id, id, company_id')
+                          .select('customer_id, company_id')
                           .eq('email', email)
                           .single();
                         
@@ -958,7 +958,7 @@ serve(async (req: Request) => {
                               ignoreDuplicates: false,
                             }
                           )
-                          .select('customer_id, id, company_id')
+                          .select('customer_id, company_id')
                           .single();
 
                       // --- IMPROVED ERROR HANDLING ---
@@ -993,7 +993,7 @@ serve(async (req: Request) => {
                           // Try to fetch existing customer for this company_id and email
                           const { data: existingCustomer, error: fetchError } = await supabaseAdmin
                             .from('customers')
-                            .select('customer_id, id, company_id')
+                            .select('customer_id, company_id')
                             .eq('email', email)
                             .eq('company_id', companyId)
                             .single();
@@ -1004,7 +1004,7 @@ serve(async (req: Request) => {
                             
                             const { data: anyCustomer, error: anyFetchError } = await supabaseAdmin
                               .from('customers')
-                              .select('customer_id, id, company_id')
+                              .select('customer_id, company_id')
                               .eq('email', email)
                               .single();
                             
@@ -1020,7 +1020,7 @@ serve(async (req: Request) => {
                           }
                           
                           // Use the existing customer
-                          customerId = existingCustomer.customer_id || existingCustomer.id;
+                          customerId = existingCustomer.customer_id;
                           if (!customerId) {
                             console.error(`❌ Customer ID not found in existing customer data for ${email}`);
                             continue;
@@ -1040,14 +1040,14 @@ serve(async (req: Request) => {
                           console.warn(`⚠️ Upsert failed with non-duplicate-key error. Attempting to fetch customer as fallback...`);
                           const { data: fallbackCustomer, error: fallbackError } = await supabaseAdmin
                             .from('customers')
-                            .select('customer_id, id, company_id')
+                            .select('customer_id, company_id')
                             .eq('email', email)
                             .eq('company_id', companyId)
                             .single();
                           
                           if (!fallbackError && fallbackCustomer) {
                             // Found it - use it
-                            customerId = fallbackCustomer.customer_id || fallbackCustomer.id;
+                            customerId = fallbackCustomer.customer_id;
                             if (customerId) {
                               customerCache.set(email, customerId);
                               console.log(`✅ Fallback fetch succeeded for ${email}: ${customerId}`);
@@ -1068,7 +1068,7 @@ serve(async (req: Request) => {
                           throw new Error(`Customer data not returned for ${email} after upsert.`);
                         } else {
                           // Upsert succeeded - verify the customer belongs to this company
-                          customerId = customer.customer_id || customer.id;
+                          customerId = customer.customer_id;
                           if (!customerId) {
                             throw new Error(`Customer ID not found in returned data for ${email}. Customer data: ${JSON.stringify(customer)}`);
                           }
