@@ -18,19 +18,18 @@ export default function ProgressBar({
   
   return (
     <div className={`w-full ${className}`}>
-      <div className="relative h-2 bg-gray-200 rounded-full overflow-hidden">
+      <div className="relative h-2.5 bg-gray-200 rounded-full overflow-hidden border border-gray-300">
         <div
           className="absolute top-0 left-0 bottom-0 bg-green-500 transition-all duration-300 ease-out"
           style={{
             width: `${normalizedPercentage}%`,
+            minWidth: normalizedPercentage > 0 ? '2px' : '0px',
           }}
         />
       </div>
-      {percentage !== null && (
-        <div className="mt-1 text-xs text-gray-600 text-right">
-          {normalizedPercentage}%
-        </div>
-      )}
+      <div className="mt-1.5 text-xs text-gray-600 text-right font-medium">
+        {normalizedPercentage}%
+      </div>
     </div>
   );
 }
