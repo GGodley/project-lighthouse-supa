@@ -506,13 +506,37 @@ async function updateJobStatus(
       updateData.pages_completed = pagesCompleted;
     }
 
-    const { error } = await supabaseAdmin
+    let { error } = await supabaseAdmin
       .from('sync_jobs')
       .update(updateData)
       .eq('id', jobId);
 
+    // If error is about missing columns, retry without progress tracking columns
     if (error) {
-      console.error(`Failed to update job status for job ${jobId}:`, error);
+      const errorMessage = error.message || String(error);
+      const isMissingColumnError = 
+        errorMessage.includes('pages_completed') || 
+        errorMessage.includes('total_pages') ||
+        errorMessage.includes('PGRST204') ||
+        errorMessage.includes('schema cache');
+      
+      if (isMissingColumnError && (totalPages !== undefined || pagesCompleted !== undefined)) {
+        // Retry update without progress tracking columns
+        console.warn(`⚠️ Progress tracking columns not found in sync_jobs table. Retrying update without them.`);
+        const basicUpdateData = { status, details };
+        const { error: retryError } = await supabaseAdmin
+          .from('sync_jobs')
+          .update(basicUpdateData)
+          .eq('id', jobId);
+        
+        if (retryError) {
+          console.error(`Failed to update job status for job ${jobId} (retry without progress columns):`, retryError);
+        } else {
+          console.log(`✅ Job ${jobId} status updated to: ${status} (progress tracking columns not available)`);
+        }
+      } else {
+        console.error(`Failed to update job status for job ${jobId}:`, error);
+      }
     } else {
       console.log(`✅ Job ${jobId} status updated to: ${status}${totalPages !== undefined ? `, total_pages: ${totalPages}` : ''}${pagesCompleted !== undefined ? `, pages_completed: ${pagesCompleted}` : ''}`);
     }
@@ -736,14 +760,31 @@ serve(async (req: Request) => {
 
     // --- NEW ---
     // Progress tracking: Get current job progress and update
-    const { data: currentJob } = await supabaseAdmin
-      .from('sync_jobs')
-      .select('total_pages, pages_completed')
-      .eq('id', jobId)
-      .single();
-    
-    let currentPagesCompleted = currentJob?.pages_completed || 0;
-    let estimatedTotalPages = currentJob?.total_pages || null;
+    // Handle gracefully if progress columns don't exist
+    let currentPagesCompleted = 0;
+    let estimatedTotalPages: number | null = null;
+    try {
+      const { data: currentJob, error: progressError } = await supabaseAdmin
+        .from('sync_jobs')
+        .select('total_pages, pages_completed')
+        .eq('id', jobId)
+        .single();
+      
+      if (!progressError && currentJob) {
+        currentPagesCompleted = currentJob?.pages_completed || 0;
+        estimatedTotalPages = currentJob?.total_pages || null;
+      } else if (progressError) {
+        // If columns don't exist, that's okay - just use default value
+        const errorMessage = progressError.message || String(progressError);
+        if (!errorMessage.includes('pages_completed') && !errorMessage.includes('PGRST204')) {
+          // Only log if it's not a missing column error
+          console.warn(`⚠️ Could not fetch job progress (columns may not exist):`, progressError);
+        }
+      }
+    } catch (err) {
+      // Progress tracking columns may not exist - that's okay
+      console.warn(`⚠️ Progress tracking not available (columns may not exist)`);
+    }
     
     // If this is the first page, estimate total pages
     if (!pageToken) {
@@ -1558,14 +1599,29 @@ serve(async (req: Request) => {
       }
       
       // Final progress update: fetch latest progress values to ensure accuracy
-      const { data: finalJobData } = await supabaseAdmin
-        .from('sync_jobs')
-        .select('total_pages, pages_completed')
-        .eq('id', jobId)
-        .single();
-      
-      const finalTotalPages = finalJobData?.total_pages || currentPagesCompleted || 1;
-      const finalPagesCompleted = finalJobData?.pages_completed || currentPagesCompleted || 1;
+      // Handle gracefully if progress columns don't exist
+      let finalTotalPages: number | null = null;
+      let finalPagesCompleted: number | null = null;
+      try {
+        const { data: finalJobData, error: finalProgressError } = await supabaseAdmin
+          .from('sync_jobs')
+          .select('total_pages, pages_completed')
+          .eq('id', jobId)
+          .single();
+        
+        if (!finalProgressError && finalJobData) {
+          finalTotalPages = finalJobData?.total_pages || currentPagesCompleted || 1;
+          finalPagesCompleted = finalJobData?.pages_completed || currentPagesCompleted || 1;
+        } else {
+          // If columns don't exist, use current values or defaults
+          finalTotalPages = currentPagesCompleted || 1;
+          finalPagesCompleted = currentPagesCompleted || 1;
+        }
+      } catch (err) {
+        // Progress tracking columns may not exist - use current values
+        finalTotalPages = currentPagesCompleted || 1;
+        finalPagesCompleted = currentPagesCompleted || 1;
+      }
       await updateJobStatus(jobId, 'completed', 'All threads have been synced.', finalTotalPages, finalPagesCompleted);
     }
 
