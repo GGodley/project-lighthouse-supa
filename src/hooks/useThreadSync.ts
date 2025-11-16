@@ -8,6 +8,7 @@ interface UseThreadSyncReturn {
   syncStatus: SyncStatus;
   syncDetails: string;
   jobId: number | null;
+  progressPercentage: number | null; // 0-100 or null if not available
   startSync: () => Promise<void>;
 }
 
@@ -15,6 +16,7 @@ export function useThreadSync(provider_token: string | null | undefined, user_em
   const [jobId, setJobId] = useState<number | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [syncDetails, setSyncDetails] = useState<string>('');
+  const [progressPercentage, setProgressPercentage] = useState<number | null>(null);
   const supabase = useSupabase();
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -103,7 +105,7 @@ export function useThreadSync(provider_token: string | null | undefined, user_em
       try {
         const { data: job, error } = await supabase
           .from('sync_jobs')
-          .select('status, details')
+          .select('status, details, total_pages, pages_completed')
           .eq('id', jobId)
           .single();
 
@@ -118,9 +120,20 @@ export function useThreadSync(provider_token: string | null | undefined, user_em
 
         const status = job.status;
 
+        // Calculate progress percentage
+        if (job.total_pages !== null && job.total_pages !== undefined && job.pages_completed !== null && job.pages_completed !== undefined) {
+          const percentage = Math.min(100, Math.round((job.pages_completed / job.total_pages) * 100));
+          setProgressPercentage(percentage);
+        } else {
+          // If we don't have total_pages yet, set to null
+          setProgressPercentage(null);
+        }
+
         if (status === 'completed') {
           setSyncStatus('completed');
           setSyncDetails(job.details || 'Sync completed successfully');
+          // Set progress to 100% on completion
+          setProgressPercentage(100);
           if (pollingIntervalRef.current) {
             clearInterval(pollingIntervalRef.current);
             pollingIntervalRef.current = null;
@@ -159,6 +172,7 @@ export function useThreadSync(provider_token: string | null | undefined, user_em
     syncStatus,
     syncDetails,
     jobId,
+    progressPercentage,
     startSync
   };
 }
