@@ -720,6 +720,17 @@ serve(async (req: Request) => {
       // Subtract 1 day from last sync time to ensure we catch threads that were updated
       // right at the boundary (Gmail's after: query is inclusive)
       lastSyncTime = new Date(lastSyncTime.getTime() - (24 * 60 * 60 * 1000)); // Subtract 1 day
+      
+      // Cap at 90 days ago maximum to prevent querying threads older than 90 days
+      // This handles cases where users haven't synced in a long time
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setUTCDate(ninetyDaysAgo.getUTCDate() - 90);
+      
+      if (lastSyncTime < ninetyDaysAgo) {
+        console.log(`⚠️ Last sync time (${lastSyncTime.toISOString()}) is older than 90 days. Capping at 90 days ago: ${ninetyDaysAgo.toISOString()}`);
+        lastSyncTime = ninetyDaysAgo;
+      }
+      
       console.log(`📅 Last sync time (UTC): ${lastSyncTime.toISOString()}. Querying threads modified after this date.`);
     } else {
       // If no last sync time, default to 90 days ago (in UTC)
