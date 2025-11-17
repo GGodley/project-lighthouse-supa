@@ -6,6 +6,7 @@ import { useCompanyThreads } from '@/hooks/useCompanyThreads';
 import ThreadListView from './ThreadListView';
 import ThreadConversationView from './ThreadConversationView';
 import HealthScoreBar from '@/components/ui/HealthScoreBar';
+import { getSentimentFromHealthScore } from '@/lib/utils';
 
 interface CompanyThreadPageProps {
   companyId: string;
@@ -326,15 +327,31 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                 {/* Right Column - Overall Sentiment */}
                 <div className="w-full md:w-1/3 p-4">
                   <h3 className="font-semibold mb-3">Overall Sentiment</h3>
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <div className="flex items-center mb-2">
-                      <ArrowUpRight className="h-5 w-5 text-green-600" />
-                      <strong className="ml-2 text-green-800">Positive</strong>
-                    </div>
-                    <p className="text-sm text-gray-700">
-                      Customer shows high satisfaction with current services. Recent interactions indicate strong engagement and interest in expanding usage. No major concerns raised in recent communications.
-                    </p>
-                  </div>
+                  {(() => {
+                    const sentimentData = getSentimentFromHealthScore(company_details.health_score);
+                    if (sentimentData) {
+                      const IconComponent = sentimentData.icon;
+                      return (
+                        <div className={`border rounded-lg p-4 ${sentimentData.colors.bg} ${sentimentData.colors.border}`}>
+                          <div className="flex items-center mb-2">
+                            <IconComponent className={`h-5 w-5 ${sentimentData.colors.icon}`} />
+                            <strong className={`ml-2 ${sentimentData.colors.text}`}>
+                              {sentimentData.category}
+                            </strong>
+                          </div>
+                          <p className="text-sm text-gray-700">
+                            {sentimentData.message}
+                          </p>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                          <p className="text-sm text-gray-500">No sentiment data available</p>
+                        </div>
+                      );
+                    }
+                  })()}
                 </div>
               </div>
             </div>
