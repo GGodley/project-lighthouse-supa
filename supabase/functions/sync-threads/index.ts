@@ -749,26 +749,6 @@ serve(async (req: Request) => {
     // Combine base query with exclusion query
     const finalQuery = `${baseQuery}${exclusionQuery}`;
     
-    // --- MODIFIED ---
-    // Swapped 'messages' for 'threads'
-    let listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${encodeURIComponent(finalQuery)}&maxResults=10`; // MODIFIED: maxResults=10 for safety
-    
-    // --- UNCHANGED ---
-    if (pageToken) {
-      listUrl += `&pageToken=${pageToken}`;
-    }
-    const listResp = await fetch(listUrl, {
-      headers: { Authorization: `Bearer ${provider_token}` }
-    });
-    if (!listResp.ok) {
-      throw new Error(`Gmail API list request failed: ${await listResp.text()}`);
-    }
-    const listJson = await listResp.json();
-    
-    // --- MODIFIED ---
-    // Swapped 'messages' for 'threads'
-    const threadIds = listJson.threads?.map((t: any) => t.id).filter(Boolean) || [];
-
     // --- NEW ---
     // Progress tracking: Get current job progress and update
     // Handle gracefully if progress columns don't exist
@@ -797,30 +777,73 @@ serve(async (req: Request) => {
       console.warn(`⚠️ Progress tracking not available (columns may not exist)`);
     }
     
-    // If this is the first page, estimate total pages conservatively
+    // --- NEW ---
+    // On first page, get accurate estimate from Gmail API using messages.list()
+    // messages.list() provides resultSizeEstimate which we can use to calculate total pages
     if (!pageToken) {
-      // Estimate total pages based on first page results
-      // Gmail API returns maxResults=10 per page
-      if (listJson.nextPageToken) {
-        // We have more pages - make a conservative estimate
-        // Since we don't know the total, estimate 10 pages minimum
-        // This gives us a reasonable starting point that won't change too often
-        estimatedTotalPages = 10; // Conservative estimate - will only update if we exceed this
-      } else {
-        // Only one page
-        estimatedTotalPages = 1;
+      try {
+        // Get estimate from messages.list() API (which provides resultSizeEstimate)
+        const estimateUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(finalQuery)}&maxResults=1`;
+        const estimateResp = await fetch(estimateUrl, {
+          headers: { Authorization: `Bearer ${provider_token}` }
+        });
+        
+        if (estimateResp.ok) {
+          const estimateJson = await estimateResp.json();
+          const resultSizeEstimate = estimateJson.resultSizeEstimate || 0;
+          
+          if (resultSizeEstimate > 0) {
+            // Calculate total pages: estimate / threads per page (10)
+            // Note: resultSizeEstimate is for messages, but we're processing threads
+            // Since threads can have multiple messages, this is an approximation
+            // But it's much more accurate than our previous estimate
+            const threadsPerPage = 10;
+            estimatedTotalPages = Math.max(1, Math.ceil(resultSizeEstimate / threadsPerPage));
+            console.log(`📊 Gmail API estimate: ${resultSizeEstimate} messages ≈ ${estimatedTotalPages} pages of threads (${threadsPerPage} threads/page)`);
+          } else {
+            // No results, only 1 page
+            estimatedTotalPages = 1;
+            console.log(`📊 Gmail API estimate: No messages found, 1 page expected`);
+          }
+        } else {
+          // If estimate call fails, fall back to conservative estimate
+          console.warn(`⚠️ Could not get Gmail API estimate, using fallback`);
+          estimatedTotalPages = 10; // Fallback estimate
+        }
+      } catch (estimateError) {
+        // If estimate call fails, fall back to conservative estimate
+        console.warn(`⚠️ Error getting Gmail API estimate:`, estimateError);
+        estimatedTotalPages = 10; // Fallback estimate
       }
       currentPagesCompleted = 0; // Reset for new sync
-    } else {
-      // For subsequent pages, use the existing estimate (don't change it)
-      // Only increment pages_completed
     }
+    // For subsequent pages, use the existing estimate (don't change it)
+    
+    // --- MODIFIED ---
+    // Swapped 'messages' for 'threads'
+    let listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${encodeURIComponent(finalQuery)}&maxResults=10`; // MODIFIED: maxResults=10 for safety
+    
+    // --- UNCHANGED ---
+    if (pageToken) {
+      listUrl += `&pageToken=${pageToken}`;
+    }
+    const listResp = await fetch(listUrl, {
+      headers: { Authorization: `Bearer ${provider_token}` }
+    });
+    if (!listResp.ok) {
+      throw new Error(`Gmail API list request failed: ${await listResp.text()}`);
+    }
+    const listJson = await listResp.json();
+    
+    // --- MODIFIED ---
+    // Swapped 'messages' for 'threads'
+    const threadIds = listJson.threads?.map((t: any) => t.id).filter(Boolean) || [];
     
     // Increment pages_completed for this page
     currentPagesCompleted += 1;
     
     // Only update total_pages if we've exceeded our estimate AND there's still more pages
-    // This prevents constant recalculation of the percentage
+    // This should rarely happen now that we have a better initial estimate
     if (listJson.nextPageToken && estimatedTotalPages !== null && currentPagesCompleted >= estimatedTotalPages) {
       // We've exceeded our estimate - add a conservative buffer (5 more pages)
       // This prevents the percentage from jumping around too much
