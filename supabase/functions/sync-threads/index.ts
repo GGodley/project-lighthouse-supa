@@ -786,27 +786,35 @@ serve(async (req: Request) => {
       console.warn(`⚠️ Progress tracking not available (columns may not exist)`);
     }
     
-    // If this is the first page, estimate total pages
+    // If this is the first page, estimate total pages conservatively
     if (!pageToken) {
       // Estimate total pages based on first page results
-      // Gmail API returns maxResults=10 per page, so if we have results and a nextPageToken,
-      // we can estimate there are at least 2 pages. We'll update this as we go.
+      // Gmail API returns maxResults=10 per page
       if (listJson.nextPageToken) {
-        // We have more pages, estimate conservatively (will update as we progress)
-        estimatedTotalPages = 2; // Start with 2, will increase if needed
+        // We have more pages - make a conservative estimate
+        // Since we don't know the total, estimate 10 pages minimum
+        // This gives us a reasonable starting point that won't change too often
+        estimatedTotalPages = 10; // Conservative estimate - will only update if we exceed this
       } else {
         // Only one page
         estimatedTotalPages = 1;
       }
       currentPagesCompleted = 0; // Reset for new sync
+    } else {
+      // For subsequent pages, use the existing estimate (don't change it)
+      // Only increment pages_completed
     }
     
     // Increment pages_completed for this page
     currentPagesCompleted += 1;
     
-    // If we have a nextPageToken and our estimate is too low, increase it
+    // Only update total_pages if we've exceeded our estimate AND there's still more pages
+    // This prevents constant recalculation of the percentage
     if (listJson.nextPageToken && estimatedTotalPages !== null && currentPagesCompleted >= estimatedTotalPages) {
-      estimatedTotalPages = currentPagesCompleted + 1; // Estimate at least one more page
+      // We've exceeded our estimate - add a conservative buffer (5 more pages)
+      // This prevents the percentage from jumping around too much
+      estimatedTotalPages = currentPagesCompleted + 5;
+      console.log(`📊 Updated total_pages estimate to ${estimatedTotalPages} (completed ${currentPagesCompleted} pages, more pages remaining)`);
     }
 
     // --- NEW ---
