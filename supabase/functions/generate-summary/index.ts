@@ -62,8 +62,14 @@ Deno.serve(async (req) => {
       - "Negative" (Score: -2): Frustrated, confused, mentioned blockers, unhappy with a feature or price.
       - "Frustrated" (Score: -3): Explicitly angry, threatening to churn, multiple major issues.
 
+      Feature Request Urgency:
+      If you find a feature request, assign an urgency:
+      - "Low": A "nice to have" suggestion.
+      - "Medium": A feature that would provide significant value.
+      - "High": A critical request, blocker, or deal-breaker.
+
       Response Format:
-      Return a valid JSON object with exactly four keys:
+      Return a valid JSON object with exactly five keys:
       
       "discussion_points": A string containing a concise summary of the main topics.
       
@@ -80,6 +86,12 @@ Deno.serve(async (req) => {
       "sentiment": A single string phrase chosen from the Sentiment Categories above (e.g., "Positive", "Negative").
       
       "sentiment_score": The numeric score (e.g., 2, -2) that corresponds to the chosen sentiment.
+
+      "feature_requests": An array of objects. Each object must have three keys:
+        - "feature_title": A concise, generic title for the feature (e.g., "API Rate Limiting", "Mobile App Improvements").
+        - "request_details": A string summary of the specific feature being requested.
+        - "urgency": A string chosen from the Urgency levels ('Low', 'Medium', 'High'). 
+      If no feature requests are found, return an empty array [].
     `;
 
     // --- Call OpenAI API ---

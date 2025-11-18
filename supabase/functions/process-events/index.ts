@@ -1,19 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { getMeetingUrl, type GoogleCalendarEvent } from '../_shared/meeting-utils.ts'
 
 type Attendee = {
   email: string
   responseStatus?: 'needsAction' | 'declined' | 'tentative' | 'accepted'
-}
-
-type GoogleCalendarEvent = {
-  id: string
-  summary?: string
-  description?: string
-  start?: { dateTime?: string; date?: string; timeZone?: string }
-  end?: { dateTime?: string; date?: string; timeZone?: string }
-  hangoutLink?: string | null
-  attendees?: Attendee[]
 }
 
 type TempMeetingRow = {
@@ -30,6 +21,8 @@ type MeetingPayload = {
   start_time: string
   end_time: string
   hangout_link: string | null
+  meeting_url: string | null
+  meeting_type: string | null
   attendees: string[]
   meeting_customer: string | null
   customer_id: string | null
@@ -178,6 +171,16 @@ serve(async (req) => {
       const isPastEvent = new Date(endIso).getTime() < Date.now()
       const statusToSet = isPastEvent ? 'passed_event' : 'new'
 
+      // Extract meeting URL and type using utility function
+      const { url: meetingUrl, type: meetingType } = getMeetingUrl(event)
+      
+      // Set hangout_link for backward compatibility:
+      // - For Google Meet: same as meeting_url
+      // - For Zoom: null (since it's not a Google Meet link)
+      const hangoutLink = meetingType === 'google_meet' ? meetingUrl : null
+
+      console.log(`🔗 Meeting URL detected: ${meetingUrl}, Type: ${meetingType}`)
+
       // Step a: Create the Meeting Record with dispatch_status 'pending'
       const meetingPayload: MeetingPayload = {
         user_id: userId,
@@ -185,7 +188,9 @@ serve(async (req) => {
         title: event.summary || 'Untitled Meeting',
         start_time: startIso,
         end_time: endIso,
-        hangout_link: event.hangoutLink ?? null,
+        hangout_link: hangoutLink,
+        meeting_url: meetingUrl,
+        meeting_type: meetingType,
         attendees: externalEmails,
         meeting_customer: externalEmails.length > 0 ? externalEmails[0] : null,
         customer_id: customerId,
