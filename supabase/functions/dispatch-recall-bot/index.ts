@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     // 4. Fetch meeting details after claiming the job
     const { data: meeting, error: meetingError } = await supabaseClient
       .from('meetings')
-      .select('hangout_link, title, start_time')
+      .select('hangout_link, meeting_url, meeting_type, title, start_time')
       .eq('google_event_id', meeting_id)
       .single()
 
@@ -71,24 +71,29 @@ Deno.serve(async (req) => {
       })
     }
 
-    if (!meeting.hangout_link) {
-      console.error('Meeting does not have a hangout link')
+    // Use meeting_url first (preferred), fall back to hangout_link for backward compatibility
+    const meetingUrl = meeting.meeting_url || meeting.hangout_link
+
+    if (!meetingUrl) {
+      console.error('Meeting does not have a meeting URL (meeting_url or hangout_link)')
       // Update status to error before throwing
       await supabaseClient
         .from('meetings')
         .update({ status: 'error' })
         .eq('google_event_id', meeting_id)
-      return new Response(JSON.stringify({ error: 'Meeting does not have a hangout link for recording.' }), {
+      return new Response(JSON.stringify({ error: 'Meeting does not have a meeting URL for recording.' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       })
     }
 
+    console.log(`📞 Using meeting URL: ${meetingUrl} (Type: ${meeting.meeting_type || 'unknown'})`)
+
     // Join 1 minute before the scheduled start_time
     const joinAtIso = new Date(new Date(meeting.start_time).getTime() - 60000).toISOString()
 
     const recallPayload = {
-      meeting_url: meeting.hangout_link,
+      meeting_url: meetingUrl, // Use the detected meeting URL (Google Meet or Zoom)
       join_at: joinAtIso,
       recording_config: {
         transcript: {
@@ -143,7 +148,7 @@ Deno.serve(async (req) => {
       .insert({
         recall_bot_id: recallBotId,
         meeting_id: meeting_id, // CRITICAL: Use the provided ID directly
-        meeting_url: meeting.hangout_link,
+        meeting_url: meetingUrl, // Use the detected meeting URL
         user_id: user_id,
         customer_id: customer_id,
         status: 'recording_scheduled'

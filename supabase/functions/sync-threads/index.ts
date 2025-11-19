@@ -174,8 +174,21 @@ Return a JSON object with the following structure:
       "owner": "Name or email of person responsible (or null if not mentioned)",
       "due_date": "YYYY-MM-DD or null if not mentioned"
     }
+  ],
+  "feature_requests": [
+    {
+      "feature_title": "A concise, generic title for the feature (e.g., 'API Rate Limiting', 'Mobile App Improvements')",
+      "request_details": "A string summary of the specific feature being requested",
+      "urgency": "A string chosen from the Urgency levels ('Low', 'Medium', 'High')"
+    }
   ]
 }
+
+Feature Request Urgency:
+- "Low": A "nice to have" suggestion.
+- "Medium": A feature that would provide significant value.
+- "High": A critical request, blocker, or deal-breaker.
+If no feature requests are found, return an empty array [].
 
 CRITICAL INSTRUCTIONS FOR NEXT STEPS:
 - Only extract next steps that are EXPLICITLY mentioned in the conversation
@@ -291,8 +304,21 @@ Return a JSON object with the following structure:
       "owner": "Name or email of person responsible (or null if not mentioned)",
       "due_date": "YYYY-MM-DD or null if not mentioned"
     }
+  ],
+  "feature_requests": [
+    {
+      "feature_title": "A concise, generic title for the feature (e.g., 'API Rate Limiting', 'Mobile App Improvements')",
+      "request_details": "A string summary of the specific feature being requested",
+      "urgency": "A string chosen from the Urgency levels ('Low', 'Medium', 'High')"
+    }
   ]
 }
+
+Feature Request Urgency:
+- "Low": A "nice to have" suggestion.
+- "Medium": A feature that would provide significant value.
+- "High": A critical request, blocker, or deal-breaker.
+If no feature requests are found, return an empty array [].
 
 CRITICAL INSTRUCTIONS FOR NEXT STEPS:
 - Only extract next steps that are EXPLICITLY mentioned in the conversation
@@ -383,8 +409,21 @@ Return a JSON object with the following structure:
       "owner": "Name or email of person responsible (or null if not mentioned)",
       "due_date": "YYYY-MM-DD or null if not mentioned"
     }
+  ],
+  "feature_requests": [
+    {
+      "feature_title": "A concise, generic title for the feature (e.g., 'API Rate Limiting', 'Mobile App Improvements')",
+      "request_details": "A string summary of the specific feature being requested",
+      "urgency": "A string chosen from the Urgency levels ('Low', 'Medium', 'High')"
+    }
   ]
 }
+
+Feature Request Urgency:
+- "Low": A "nice to have" suggestion.
+- "Medium": A feature that would provide significant value.
+- "High": A critical request, blocker, or deal-breaker.
+If no feature requests are found, return an empty array [].
 
 CRITICAL INSTRUCTIONS FOR NEXT STEPS:
 - Only extract next steps that are EXPLICITLY mentioned in the conversation (including new messages)
@@ -1491,10 +1530,12 @@ serve(async (req: Request) => {
         console.warn(`⚠️ Filtered out ${invalidMessagesCount} messages for threads that were not successfully inserted`);
       }
       
-      // Process next steps for each thread that has a summary with next steps
+      // Process next steps and feature requests for each thread that has a summary
       for (const threadData of threadsToStore) {
         if (successfullyInsertedThreadIds.has(threadData.thread_id) && threadData.llm_summary && typeof threadData.llm_summary === 'object') {
           const summary = threadData.llm_summary as any;
+          
+          // Process next steps
           const hasNextSteps = (
             (summary.next_steps && Array.isArray(summary.next_steps) && summary.next_steps.length > 0) ||
             (summary.csm_next_step && typeof summary.csm_next_step === 'string' && summary.csm_next_step.trim() !== '')
@@ -1511,6 +1552,71 @@ serve(async (req: Request) => {
               console.error(`Failed to invoke process-next-steps for thread ${threadData.thread_id}:`, err);
               // Don't throw - this is not critical for the sync to continue
             });
+          }
+          
+          // Process feature requests
+          if (summary.feature_requests && Array.isArray(summary.feature_requests) && summary.feature_requests.length > 0) {
+            // Extract and validate feature requests
+            const featureRequests = summary.feature_requests.filter((req: any) => 
+              typeof req === 'object' && 
+              req !== null &&
+              typeof req.feature_title === 'string' &&
+              typeof req.request_details === 'string' &&
+              ['Low', 'Medium', 'High'].includes(req.urgency)
+            ).map((req: any) => ({
+              feature_title: req.feature_title.trim(),
+              request_details: req.request_details.trim(),
+              urgency: req.urgency as 'Low' | 'Medium' | 'High'
+            }));
+            
+            if (featureRequests.length > 0) {
+              // Get company_id and customer_id from thread context
+              // Find the first company linked to this thread
+              const threadLink = linksToStore.find(link => link.thread_id === threadData.thread_id);
+              if (threadLink) {
+                // Get customer_id from thread messages (use first customer message)
+                const threadMessage = messagesToStore.find(msg => 
+                  msg.thread_id === threadData.thread_id && msg.customer_id
+                );
+                
+                if (threadMessage && threadMessage.customer_id) {
+                  // Get company_id from customer
+                  const { data: customer, error: customerError } = await supabaseAdmin
+                    .from('customers')
+                    .select('company_id')
+                    .eq('customer_id', threadMessage.customer_id)
+                    .single();
+                  
+                  if (!customerError && customer) {
+                    // Import and use shared utility function
+                    const { saveFeatureRequests } = await import('../_shared/feature-request-utils.ts');
+                    
+                    const result = await saveFeatureRequests(
+                      supabaseAdmin,
+                      featureRequests,
+                      {
+                        company_id: customer.company_id,
+                        customer_id: threadMessage.customer_id,
+                        source: 'thread',
+                        thread_id: threadData.thread_id
+                      }
+                    );
+                    
+                    if (result.success) {
+                      console.log(`✅ Successfully saved ${result.savedCount} feature requests from thread ${threadData.thread_id}`);
+                    } else {
+                      console.warn(`⚠️ Saved ${result.savedCount} feature requests with ${result.errors.length} errors for thread ${threadData.thread_id}`);
+                    }
+                  } else {
+                    console.warn(`⚠️ Could not find customer for thread ${threadData.thread_id}, skipping feature requests`);
+                  }
+                } else {
+                  console.warn(`⚠️ No customer messages found for thread ${threadData.thread_id}, skipping feature requests`);
+                }
+              } else {
+                console.warn(`⚠️ No company link found for thread ${threadData.thread_id}, skipping feature requests`);
+              }
+            }
           }
         }
       }

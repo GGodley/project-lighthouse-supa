@@ -224,6 +224,9 @@ export type Database = {
           request_details: string | null
           requested_at: string
           source: Database["public"]["Enums"]["feature_request_source"] | null
+          status: string | null
+          thread_id: string | null
+          updated_at: string | null
           urgency: Database["public"]["Enums"]["urgency_level"]
         }
         Insert: {
@@ -236,6 +239,9 @@ export type Database = {
           request_details?: string | null
           requested_at?: string
           source?: Database["public"]["Enums"]["feature_request_source"] | null
+          status?: string | null
+          thread_id?: string | null
+          updated_at?: string | null
           urgency?: Database["public"]["Enums"]["urgency_level"]
         }
         Update: {
@@ -248,6 +254,9 @@ export type Database = {
           request_details?: string | null
           requested_at?: string
           source?: Database["public"]["Enums"]["feature_request_source"] | null
+          status?: string | null
+          thread_id?: string | null
+          updated_at?: string | null
           urgency?: Database["public"]["Enums"]["urgency_level"]
         }
         Relationships: [
@@ -343,6 +352,8 @@ export type Database = {
           google_event_id: string
           hangout_link: string | null
           meeting_customer: string | null
+          meeting_type: string | null
+          meeting_url: string | null
           next_steps: string | null
           recall_bot_id: string | null
           sentiment_score: number | null
@@ -364,6 +375,8 @@ export type Database = {
           google_event_id: string
           hangout_link?: string | null
           meeting_customer?: string | null
+          meeting_type?: string | null
+          meeting_url?: string | null
           next_steps?: string | null
           recall_bot_id?: string | null
           sentiment_score?: number | null
@@ -385,6 +398,8 @@ export type Database = {
           google_event_id?: string
           hangout_link?: string | null
           meeting_customer?: string | null
+          meeting_type?: string | null
+          meeting_url?: string | null
           next_steps?: string | null
           recall_bot_id?: string | null
           sentiment_score?: number | null
@@ -666,7 +681,7 @@ export type Database = {
     }
     Enums: {
       customer_status: "Healthy" | "Needs Attention" | "At Risk"
-      feature_request_source: "email" | "meeting" | "manual"
+      feature_request_source: "email" | "meeting" | "manual" | "thread"
       urgency_level: "Low" | "Medium" | "High"
     }
     CompositeTypes: {
@@ -796,7 +811,7 @@ export const Constants = {
   public: {
     Enums: {
       customer_status: ["Healthy", "Needs Attention", "At Risk"],
-      feature_request_source: ["email", "meeting", "manual"],
+      feature_request_source: ["email", "meeting", "manual", "thread"],
       urgency_level: ["Low", "Medium", "High"],
     },
   },

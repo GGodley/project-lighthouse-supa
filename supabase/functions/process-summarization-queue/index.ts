@@ -208,46 +208,29 @@ serve(async (_req) => {
 
         if (updateEmailError) throw updateEmailError;
 
-        // Add Feature Request Saving Logic
+        // Add Feature Request Saving Logic using shared utility
         if (featureRequests.length > 0) {
-          console.log(`Processing ${featureRequests.length} feature requests for email ${job.email_id}`);
+          const { saveFeatureRequests } = await import('../_shared/feature-request-utils.ts');
           
-          for (const req of featureRequests) {
-            try {
-              // Upsert Feature
-              const { data: featureData, error: featureError } = await supabaseAdmin
-                .from('features')
-                .upsert({ title: req.feature_title }, { onConflict: 'title' })
-                .select('id')
-                .single();
-
-              if (featureError || !featureData) {
-                throw new Error(`Failed to upsert feature: ${featureError?.message || 'No data returned'}`);
-              }
-
-              // Insert Feature Request
-              const { error: requestError } = await supabaseAdmin
-                .from('feature_requests')
-                .insert({
+          const result = await saveFeatureRequests(
+            supabaseAdmin,
+            featureRequests.map(req => ({
+              feature_title: req.feature_title,
+              request_details: req.request_details,
+              urgency: req.urgency as 'Low' | 'Medium' | 'High'
+            })),
+            {
                   company_id: company_id,
                   customer_id: customer_id,
-                  feature_id: featureData.id,
-                  request_details: req.request_details,
-                  urgency: req.urgency,
-                  source: 'Email',
+              source: 'email',
                   email_id: job.email_id
-                });
-
-              if (requestError) {
-                throw new Error(`Failed to insert feature request: ${requestError.message}`);
-              }
-
-              console.log(`Successfully created feature request: ${req.feature_title}`);
-
-            } catch (error) {
-              console.error(`Error processing feature request "${req.feature_title}":`, error.message);
-              // Continue processing other requests even if one fails
             }
+          );
+
+          if (result.success) {
+            console.log(`✅ Successfully saved ${result.savedCount} feature requests for email ${job.email_id}`);
+          } else {
+            console.warn(`⚠️ Saved ${result.savedCount} feature requests with ${result.errors.length} errors for email ${job.email_id}`);
           }
         }
 

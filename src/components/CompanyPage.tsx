@@ -34,6 +34,9 @@ interface ProductFeedback {
   description: string;
   urgency: string;
   status: string;
+  source: string | null;
+  source_id: string | null;
+  source_type: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -420,10 +423,64 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <h2 className="text-xl font-semibold text-slate-800 mb-4">Product Feedback</h2>
                 <div className="space-y-4">
-                  {product_feedback.map((feedback, index) => (
-                    <div key={index} className="p-4 bg-slate-50 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
+                  {product_feedback.map((feedback, index) => {
+                    // Determine source link URL
+                    const getSourceLink = () => {
+                      if (!feedback.source_id || !feedback.source_type) return null;
+                      
+                      switch (feedback.source_type) {
+                        case 'email':
+                          // For email, we might want to link to thread view if it's a thread
+                          return `/dashboard/customer-threads?email=${feedback.source_id}`;
+                        case 'meeting':
+                          return `/dashboard/meetings/${feedback.source_id}`;
+                        case 'thread':
+                          return `/dashboard/customer-threads?thread=${feedback.source_id}`;
+                        default:
+                          return null;
+                      }
+                    };
+                    
+                    const sourceLink = getSourceLink();
+                    const sourceLabel = feedback.source 
+                      ? feedback.source.charAt(0).toUpperCase() + feedback.source.slice(1)
+                      : 'Unknown';
+                    
+                    return (
+                      <div key={feedback.id || index} className="p-4 bg-slate-50 rounded-lg">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-medium text-slate-800">{feedback.title}</h3>
+                              {feedback.status && (
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  feedback.status === 'resolved' ? 'bg-green-100 text-green-800' :
+                                  feedback.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                                  feedback.status === 'closed' ? 'bg-gray-100 text-gray-800' :
+                                  'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {feedback.status.replace('_', ' ')}
+                                </span>
+                              )}
+                            </div>
+                            {feedback.source && (
+                              <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
+                                <span>From {sourceLabel}</span>
+                                {sourceLink && (
+                                  <a 
+                                    href={sourceLink}
+                                    className="text-blue-600 hover:text-blue-800 underline"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      window.location.href = sourceLink;
+                                    }}
+                                  >
+                                    View Source →
+                                  </a>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           feedback.urgency === 'High' ? 'bg-red-100 text-red-800' :
                           feedback.urgency === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
@@ -433,8 +490,14 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                         </span>
                       </div>
                       <p className="text-slate-600">{feedback.description}</p>
+                        {feedback.created_at && (
+                          <p className="text-xs text-slate-400 mt-2">
+                            Created {new Date(feedback.created_at).toLocaleDateString()}
+                          </p>
+                        )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
