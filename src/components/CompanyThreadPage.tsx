@@ -374,7 +374,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-medium text-slate-800">{feedback.title}</h3>
+                        <h3 className="font-medium text-slate-800">{feedback.title}</h3>
                               {feedback.status && (
                                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                                   feedback.status === 'resolved' ? 'bg-green-100 text-green-800' :
@@ -404,21 +404,21 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                               </div>
                             )}
                           </div>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            feedback.urgency === 'High' ? 'bg-red-100 text-red-800' :
-                            feedback.urgency === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-green-100 text-green-800'
-                          }`}>
-                            {feedback.urgency}
-                          </span>
-                        </div>
-                        <p className="text-slate-600">{feedback.description}</p>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          feedback.urgency === 'High' ? 'bg-red-100 text-red-800' :
+                          feedback.urgency === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-green-100 text-green-800'
+                        }`}>
+                          {feedback.urgency}
+                        </span>
+                      </div>
+                      <p className="text-slate-600">{feedback.description}</p>
                         {feedback.created_at && (
                           <p className="text-xs text-slate-400 mt-2">
                             Created {new Date(feedback.created_at).toLocaleDateString()}
                           </p>
                         )}
-                      </div>
+                    </div>
                     );
                   })}
                 </div>

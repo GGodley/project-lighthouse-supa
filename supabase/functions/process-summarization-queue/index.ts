@@ -220,13 +220,13 @@ serve(async (_req) => {
               urgency: req.urgency as 'Low' | 'Medium' | 'High'
             })),
             {
-              company_id: company_id,
-              customer_id: customer_id,
+                  company_id: company_id,
+                  customer_id: customer_id,
               source: 'email',
-              email_id: job.email_id
+                  email_id: job.email_id
             }
           );
-          
+
           if (result.success) {
             console.log(`✅ Successfully saved ${result.savedCount} feature requests for email ${job.email_id}`);
           } else {

@@ -180,13 +180,13 @@ serve(async (req)=>{
           urgency: req.urgency as 'Low' | 'Medium' | 'High'
         })),
         {
-          company_id: company_id,
-          customer_id: customer_id,
+              company_id: company_id,
+              customer_id: customer_id,
           source: 'email',
-          email_id: email.id
+              email_id: email.id
         }
       );
-      
+
       if (result.success) {
         console.log(`✅ Successfully saved ${result.savedCount} feature requests for email ${email.id}`);
       } else {
