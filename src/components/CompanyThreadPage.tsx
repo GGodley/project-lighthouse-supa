@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { AlertCircle, List, ArrowUpRight, Clock, Users, Mail, ArrowLeft, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { useSupabase } from '@/components/SupabaseProvider';
 import { useCompanyThreads } from '@/hooks/useCompanyThreads';
@@ -33,6 +34,7 @@ interface ProductFeedback {
   source: string | null;
   source_id: string | null;
   source_type: string | null;
+  company_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -60,6 +62,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
   const [activeView, setActiveView] = useState<'Overview' | 'Threads'>('Overview');
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const supabase = useSupabase();
+  const searchParams = useSearchParams();
 
   // Get threads for this company
   const { threads, loading: threadsLoading } = useCompanyThreads(companyId);
@@ -143,6 +146,25 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
 
     fetchCompanyData();
   }, [companyId, supabase]);
+
+  // Auto-select thread from query parameter
+  useEffect(() => {
+    const threadParam = searchParams.get('thread');
+    
+    if (threadParam && !threadsLoading && threads.length > 0) {
+      // Check if the thread exists in the company's threads
+      const threadExists = threads.some(t => t.thread_id === threadParam);
+      
+      if (threadExists) {
+        // Thread belongs to this company, select it
+        setSelectedThreadId(threadParam);
+        setActiveView('Threads');
+      } else {
+        // Thread doesn't exist or doesn't belong to this company
+        console.warn(`Thread ${threadParam} not found in company ${companyId}'s threads`);
+      }
+    }
+  }, [searchParams, threads, threadsLoading, companyId]);
 
   const formatDate = (dateString: string): string => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -352,16 +374,22 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                     const getSourceLink = () => {
                       if (!feedback.source_id || !feedback.source_type) return null;
                       
-                      switch (feedback.source_type) {
-                        case 'email':
-                          return `/dashboard/customer-threads?email=${feedback.source_id}`;
-                        case 'meeting':
-                          return `/dashboard/meetings/${feedback.source_id}`;
-                        case 'thread':
-                          return `/dashboard/customer-threads?thread=${feedback.source_id}`;
-                        default:
-                          return null;
+                      // For threads, we need company_id in the path
+                      if (feedback.source_type === 'thread' && feedback.company_id) {
+                        return `/dashboard/customer-threads/${feedback.company_id}?thread=${feedback.source_id}`;
                       }
+                      
+                      // For meetings, use the meeting detail route
+                      if (feedback.source_type === 'meeting') {
+                        return `/dashboard/meetings/${feedback.source_id}`;
+                      }
+                      
+                      // For emails (legacy), if we have company_id, link to company page
+                      if (feedback.source_type === 'email' && feedback.company_id) {
+                        return `/dashboard/customer-threads/${feedback.company_id}`;
+                      }
+                      
+                      return null;
                     };
                     
                     const sourceLink = getSourceLink();
@@ -390,16 +418,12 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                               <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
                                 <span>From {sourceLabel}</span>
                                 {sourceLink && (
-                                  <a 
+                                  <Link 
                                     href={sourceLink}
                                     className="text-blue-600 hover:text-blue-800 underline"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      window.location.href = sourceLink;
-                                    }}
                                   >
                                     View Source →
-                                  </a>
+                                  </Link>
                                 )}
                               </div>
                             )}

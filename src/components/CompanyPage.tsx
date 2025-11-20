@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Phone, Mail, AlertCircle, CheckCircle, List, ArrowUpRight, Clock, Users, ChevronDown, ChevronRight } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import ThreadConversationView from './ThreadConversationView';
@@ -37,6 +38,7 @@ interface ProductFeedback {
   source: string | null;
   source_id: string | null;
   source_type: string | null;
+  company_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -428,17 +430,26 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                     const getSourceLink = () => {
                       if (!feedback.source_id || !feedback.source_type) return null;
                       
-                      switch (feedback.source_type) {
-                        case 'email':
-                          // For email, we might want to link to thread view if it's a thread
-                          return `/dashboard/customer-threads?email=${feedback.source_id}`;
-                        case 'meeting':
-                          return `/dashboard/meetings/${feedback.source_id}`;
-                        case 'thread':
-                          return `/dashboard/customer-threads?thread=${feedback.source_id}`;
-                        default:
-                          return null;
+                      // For threads, we need company_id in the path
+                      if (feedback.source_type === 'thread' && feedback.company_id) {
+                        return `/dashboard/customer-threads/${feedback.company_id}?thread=${feedback.source_id}`;
                       }
+                      
+                      // For meetings, use the meeting detail route
+                      if (feedback.source_type === 'meeting') {
+                        return `/dashboard/meetings/${feedback.source_id}`;
+                      }
+                      
+                      // For emails (legacy), try to find if it's a thread or use company page
+                      if (feedback.source_type === 'email') {
+                        // If we have company_id, link to company page
+                        if (feedback.company_id) {
+                          return `/dashboard/customer-threads/${feedback.company_id}`;
+                        }
+                        return null;
+                      }
+                      
+                      return null;
                     };
                     
                     const sourceLink = getSourceLink();
@@ -467,16 +478,12 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                               <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
                                 <span>From {sourceLabel}</span>
                                 {sourceLink && (
-                                  <a 
+                                  <Link 
                                     href={sourceLink}
                                     className="text-blue-600 hover:text-blue-800 underline"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      window.location.href = sourceLink;
-                                    }}
                                   >
                                     View Source →
-                                  </a>
+                                  </Link>
                                 )}
                               </div>
                             )}
