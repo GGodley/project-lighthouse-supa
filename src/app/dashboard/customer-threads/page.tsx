@@ -586,7 +586,7 @@ const CustomerThreadsPage: React.FC = () => {
 
           {!isMainTableCollapsed && (
             <div className="overflow-x-auto">
-              <table className="glass-table w-full text-sm text-left rounded-xl overflow-hidden">
+              <table className="glass-table w-full text-sm text-left rounded-xl">
                 <thead className="glass-table-header">
                   <tr>
                     <th scope="col" className="p-4">
@@ -605,7 +605,7 @@ const CustomerThreadsPage: React.FC = () => {
                     {renderSortableHeader('last_interaction', 'Last Interaction')}
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="space-y-2">
                   {loading ? (
                     <tr><td colSpan={7} className="text-center p-8 text-gray-600">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
@@ -626,44 +626,44 @@ const CustomerThreadsPage: React.FC = () => {
                     sortedCompanies.map((company, index) => {
                       const isSelected = selectedCompanies.includes(company.company_id);
                       return (
-                        <tr key={index} className={`glass-table-row ${isSelected ? 'bg-blue-50/50' : ''}`}>
-                          <td className="p-4">
+                        <tr key={index} className={`glass-bar-row ${isSelected ? 'selected' : ''}`}>
+                          <td className="p-5 pl-6">
                             <input 
                               type="checkbox" 
-                              className="rounded" 
+                              className="rounded w-4 h-4 cursor-pointer" 
                               checked={isSelected}
                               onChange={(e) => handleSelectOne(company.company_id, e.target.checked)}
                             />
                           </td>
-                          <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
+                          <td className="px-6 py-5">
                             <Link 
                               href={`/dashboard/customer-threads/${company.company_id}`} 
-                              className="hover:text-blue-600 transition-colors"
+                              className="font-semibold text-gray-900 hover:text-blue-600 transition-colors text-base"
                             >
                               {company.company_name}
                             </Link>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-5">
                             <HealthScoreBar score={company.health_score} showLabel={true} />
                           </td>
-                          <td className="px-6 py-4">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          <td className="px-6 py-5">
+                            <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
                               statusPillStyles[company.overall_sentiment || ''] || 'bg-gray-100 text-gray-800'
                             }`}>
                               {company.overall_sentiment || 'Not set'}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-gray-600">
+                          <td className="px-6 py-5 text-gray-700 font-medium">
                             <span>{formatMRR(company.mrr)}</span>
                           </td>
-                          <td className="px-6 py-4 text-gray-600">
+                          <td className="px-6 py-5 text-gray-600">
                             {company.renewal_date ? (
                               new Date(company.renewal_date).toLocaleDateString('en-CA')
                             ) : (
                               <span className="text-gray-400">Not set</span>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-gray-600">
+                          <td className="px-6 py-5 text-gray-600">
                             {company.last_interaction_at ? (
                               new Date(company.last_interaction_at).toLocaleDateString('en-CA')
                             ) : (
@@ -768,7 +768,7 @@ const CustomerThreadsPage: React.FC = () => {
 
             {!isArchivedTableCollapsed && (
               <div className="overflow-x-auto">
-                <table className="glass-table w-full text-sm text-left rounded-xl overflow-hidden opacity-90">
+                <table className="glass-table w-full text-sm text-left rounded-xl opacity-90">
                   <thead className="glass-table-header">
                     <tr>
                       <th scope="col" className="p-4">
@@ -797,11 +797,11 @@ const CustomerThreadsPage: React.FC = () => {
                     {sortedArchivedCompanies.map((company, index) => {
                       const isSelected = selectedArchivedCompanies.includes(company.company_id);
                       return (
-                        <tr key={index} className={`glass-table-row ${isSelected ? 'bg-green-50/50' : ''}`}>
-                          <td className="p-4">
+                        <tr key={index} className={`glass-bar-row ${isSelected ? 'selected' : ''}`}>
+                          <td className="p-5 pl-6">
                             <input 
                               type="checkbox" 
-                              className="rounded" 
+                              className="rounded w-4 h-4 cursor-pointer" 
                               checked={isSelected}
                               onChange={(e) => {
                                 if (e.target.checked) {
@@ -812,37 +812,35 @@ const CustomerThreadsPage: React.FC = () => {
                               }}
                             />
                           </td>
-                          <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
+                          <td className="px-6 py-5">
                             <Link 
                               href={`/dashboard/customer-threads/${company.company_id}`} 
-                              className="hover:text-blue-600 transition-colors"
+                              className="font-semibold text-gray-900 hover:text-blue-600 transition-colors text-base"
                             >
                               {company.company_name}
                             </Link>
                           </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center">
-                              <HealthScoreBar score={company.health_score} showLabel={true} />
-                            </div>
+                          <td className="px-6 py-5">
+                            <HealthScoreBar score={company.health_score} showLabel={true} />
                           </td>
-                          <td className="px-6 py-4">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          <td className="px-6 py-5">
+                            <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
                               statusPillStyles[company.overall_sentiment || ''] || 'bg-gray-100 text-gray-800'
                             }`}>
                               {company.overall_sentiment || 'Not set'}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-gray-600">
+                          <td className="px-6 py-5 text-gray-700 font-medium">
                             <span>{formatMRR(company.mrr)}</span>
                           </td>
-                          <td className="px-6 py-4 text-gray-600">
+                          <td className="px-6 py-5 text-gray-600">
                             {company.renewal_date ? (
                               new Date(company.renewal_date).toLocaleDateString('en-CA')
                             ) : (
                               <span className="text-gray-400">Not set</span>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-gray-600">
+                          <td className="px-6 py-5 text-gray-600">
                             {company.last_interaction_at ? (
                               new Date(company.last_interaction_at).toLocaleDateString('en-CA')
                             ) : (

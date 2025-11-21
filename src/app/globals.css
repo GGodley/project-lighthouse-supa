@@ -109,28 +109,71 @@ body {
 
 /* Glass morphism for table elements */
 .glass-table {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08);
-}
-
-.glass-table-row {
-  background: rgba(255, 255, 255, 0.5);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  transition: all 0.2s ease;
-}
-
-.glass-table-row:hover {
-  background: rgba(255, 255, 255, 0.8);
-  box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.05);
+  background: transparent;
+  border-collapse: separate;
+  border-spacing: 0 8px;
+  width: 100%;
 }
 
 .glass-table-header {
   background: rgba(249, 250, 251, 0.8);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+}
+
+.glass-table thead tr {
+  background: rgba(249, 250, 251, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Glass bar row - beautiful bar element for each company */
+.glass-bar-row {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.06), 
+              0 1px 3px 0 rgba(0, 0, 0, 0.04);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-bar-row:hover {
+  background: rgba(255, 255, 255, 0.9);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px 0 rgba(0, 0, 0, 0.1),
+              0 2px 6px 0 rgba(0, 0, 0, 0.06);
+  border-color: rgba(255, 255, 255, 0.8);
+}
+
+.glass-bar-row.selected {
+  background: rgba(239, 246, 255, 0.85);
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 0 6px 20px 0 rgba(59, 130, 246, 0.15),
+              0 2px 6px 0 rgba(59, 130, 246, 0.1);
+}
+
+.glass-bar-row.selected:hover {
+  background: rgba(239, 246, 255, 0.95);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+/* Ensure table cells in bar rows have proper styling */
+.glass-bar-row td {
+  border: none;
+  vertical-align: middle;
+  background: transparent;
+}
+
+.glass-bar-row td:first-child {
+  border-top-left-radius: 12px;
+  border-bottom-left-radius: 12px;
+}
+
+.glass-bar-row td:last-child {
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
 }
 
 /* Smooth transitions for all interactive elements */
