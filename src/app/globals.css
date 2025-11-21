@@ -25,13 +25,13 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* Apple Liquid Glass Design Styles */
+/* Apple Liquid Glass Design Styles - Neutral Theme */
 
-/* Gradient background for glass morphism effect */
+/* Neutral gradient background for glass morphism effect */
 .glass-bg {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%);
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8ebf0 25%, #f0f2f5 50%, #e8ebf0 75%, #f5f7fa 100%);
   background-size: 400% 400%;
-  animation: gradientShift 15s ease infinite;
+  animation: gradientShift 20s ease infinite;
   min-height: 100vh;
 }
 
@@ -41,44 +41,45 @@ body {
   100% { background-position: 0% 50%; }
 }
 
-/* Glass morphism card effect */
+/* Glass morphism card/container effect - neutral */
 .glass-card {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.5);
-  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.12);
+  border-color: rgba(255, 255, 255, 0.7);
 }
 
 /* Glass morphism for header/nav elements */
 .glass-header {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 0 4px 16px 0 rgba(31, 38, 135, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.06);
 }
 
-/* Glass morphism for buttons */
+/* Glass morphism for buttons - neutral with subtle accent */
 .glass-button {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(10px) saturate(180%);
   -webkit-backdrop-filter: blur(10px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: #1f2937;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-button:hover {
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.95);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px 0 rgba(31, 38, 135, 0.3);
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.12);
 }
 
 .glass-button:active {
@@ -87,18 +88,49 @@ body {
 
 /* Glass morphism for input/search */
 .glass-input {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(10px) saturate(180%);
   -webkit-backdrop-filter: blur(10px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: #1f2937;
   transition: all 0.2s ease;
 }
 
+.glass-input::placeholder {
+  color: #6b7280;
+}
+
 .glass-input:focus {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(59, 130, 246, 0.4);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Glass morphism for table elements */
+.glass-table {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08);
+}
+
+.glass-table-row {
+  background: rgba(255, 255, 255, 0.5);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.glass-table-row:hover {
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.05);
+}
+
+.glass-table-header {
+  background: rgba(249, 250, 251, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 /* Smooth transitions for all interactive elements */

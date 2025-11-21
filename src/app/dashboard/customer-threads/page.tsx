@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useSupabase } from '@/components/SupabaseProvider'
-import { Loader2, CheckCircle2, XCircle, RefreshCw, ArrowUp, ArrowDown, Search, Building2, TrendingUp, Calendar, Clock } from 'lucide-react'
+import { Loader2, CheckCircle2, XCircle, RefreshCw, ArrowUp, ArrowDown, Search, Building2 } from 'lucide-react'
 import { useThreadSync } from '@/hooks/useThreadSync'
 import HealthScoreBar from '@/components/ui/HealthScoreBar'
 import ProgressBar from '@/components/ui/ProgressBar'
@@ -92,10 +92,10 @@ const CustomerThreadsPage: React.FC = () => {
   };
 
   const statusPillStyles: { [key: string]: string } = {
-    'Healthy': 'bg-green-500/30 text-green-100 border border-green-400/50',
-    'At Risk': 'bg-red-500/30 text-red-100 border border-red-400/50',
-    'Neutral': 'bg-yellow-500/30 text-yellow-100 border border-yellow-400/50',
-    'Needs Attention': 'bg-yellow-500/30 text-yellow-100 border border-yellow-400/50',
+    'Healthy': 'bg-green-50 text-green-700 border border-green-200',
+    'At Risk': 'bg-red-50 text-red-700 border border-red-200',
+    'Neutral': 'bg-yellow-50 text-yellow-700 border border-yellow-200',
+    'Needs Attention': 'bg-yellow-50 text-yellow-700 border border-yellow-200',
   };
 
   // Sort handler - cycles through: desc → asc → null (default)
@@ -142,14 +142,6 @@ const CustomerThreadsPage: React.FC = () => {
         case 'status':
           aValue = (a.overall_sentiment || '').toLowerCase()
           bValue = (b.overall_sentiment || '').toLowerCase()
-          break
-        case 'mrr':
-          aValue = a.mrr ?? -Infinity
-          bValue = b.mrr ?? -Infinity
-          break
-        case 'renewal_date':
-          aValue = a.renewal_date ? new Date(a.renewal_date).getTime() : -Infinity
-          bValue = b.renewal_date ? new Date(b.renewal_date).getTime() : -Infinity
           break
         case 'last_interaction':
           aValue = a.last_interaction_at ? new Date(a.last_interaction_at).getTime() : -Infinity
@@ -218,7 +210,7 @@ const CustomerThreadsPage: React.FC = () => {
   const renderSyncStatus = () => {
     if (syncStatus === 'idle') {
       return (
-        <div className="flex items-center space-x-2 text-sm text-white/80">
+        <div className="flex items-center space-x-2 text-sm text-gray-600">
           <span>Ready to sync</span>
         </div>
       )
@@ -227,8 +219,8 @@ const CustomerThreadsPage: React.FC = () => {
     if (syncStatus === 'creating_job' || syncStatus === 'syncing') {
       return (
         <div className="space-y-2">
-          <div className="flex items-center space-x-2 text-sm text-white">
-            <Loader2 className="h-4 w-4 animate-spin" />
+          <div className="flex items-center space-x-2 text-sm text-gray-700">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
             <span>{syncDetails || 'Syncing threads...'}</span>
           </div>
           {syncStatus === 'syncing' && (
@@ -247,12 +239,12 @@ const CustomerThreadsPage: React.FC = () => {
 
     if (syncStatus === 'completed') {
       return (
-        <div className="flex items-center space-x-2 text-sm text-white">
-          <CheckCircle2 className="h-4 w-4 text-green-300" />
+        <div className="flex items-center space-x-2 text-sm text-gray-700">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
           <span>{syncDetails || 'Sync completed'}</span>
           <button
             onClick={() => startSync()}
-            className="ml-2 text-white/80 hover:text-white transition-colors"
+            className="ml-2 text-gray-600 hover:text-gray-900 transition-colors"
           >
             <RefreshCw className="h-4 w-4" />
           </button>
@@ -262,12 +254,12 @@ const CustomerThreadsPage: React.FC = () => {
 
     if (syncStatus === 'failed') {
       return (
-        <div className="flex items-center space-x-2 text-sm text-white">
-          <XCircle className="h-4 w-4 text-red-300" />
+        <div className="flex items-center space-x-2 text-sm text-gray-700">
+          <XCircle className="h-4 w-4 text-red-600" />
           <span>{syncDetails || 'Sync failed'}</span>
           <button
             onClick={() => startSync()}
-            className="ml-2 text-white/80 hover:text-white transition-colors"
+            className="ml-2 text-gray-600 hover:text-gray-900 transition-colors"
           >
             <RefreshCw className="h-4 w-4" />
           </button>
@@ -276,6 +268,41 @@ const CustomerThreadsPage: React.FC = () => {
     }
 
     return null
+  }
+
+  // Render sortable column header
+  const renderSortableHeader = (columnKey: string, label: string) => {
+    const isActive = sortColumn === columnKey
+    const isAsc = isActive && sortDirection === 'asc'
+    const isDesc = isActive && sortDirection === 'desc'
+
+    return (
+      <th 
+        scope="col" 
+        className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider"
+      >
+        <button
+          onClick={() => handleSort(columnKey)}
+          className={`flex items-center space-x-1 px-2 py-1 rounded transition-colors hover:bg-gray-100 ${
+            isActive ? 'bg-gray-100' : ''
+          }`}
+        >
+          <span>{label}</span>
+          <div className="flex flex-col items-center">
+            <ArrowUp 
+              className={`h-3 w-3 ${
+                isAsc ? 'text-gray-900' : 'text-gray-400'
+              }`} 
+            />
+            <ArrowDown 
+              className={`h-3 w-3 -mt-1 ${
+                isDesc ? 'text-gray-900' : 'text-gray-400'
+              }`} 
+            />
+          </div>
+        </button>
+      </th>
+    )
   }
 
   // Bulk selection handlers
@@ -449,24 +476,24 @@ const CustomerThreadsPage: React.FC = () => {
         <header className="glass-header rounded-2xl p-6 mb-8">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-white drop-shadow-lg">Customer Threads</h1>
-              <p className="text-sm text-white/80 mt-1">
-                <a href="/dashboard" className="hover:text-white transition-colors">Dashboard</a> / <span className="font-medium">Customer Threads</span>
+              <h1 className="text-3xl font-bold text-gray-900">Customer Threads</h1>
+              <p className="text-sm text-gray-600 mt-1">
+                <a href="/dashboard" className="hover:text-gray-900 transition-colors">Dashboard</a> / <span className="font-medium">Customer Threads</span>
               </p>
               {/* Sync Status Display */}
-              <div className="mt-2 text-white/90">
+              <div className="mt-2">
                 {renderSyncStatus()}
               </div>
             </div>
             <div className="flex items-center space-x-3 flex-wrap">
               <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-white/60" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input 
                   type="text" 
                   placeholder="Search companies..." 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="glass-input w-full pl-10 pr-4 py-2 rounded-xl text-sm text-white placeholder-white/60 focus:placeholder-white/40" 
+                  className="glass-input w-full pl-10 pr-4 py-2 rounded-xl text-sm" 
                 />
               </div>
               <div className="relative">
@@ -481,7 +508,7 @@ const CustomerThreadsPage: React.FC = () => {
                       setSortDirection(null)
                     }
                   }}
-                  className="glass-input appearance-none pl-4 pr-10 py-2 rounded-xl text-sm text-white cursor-pointer focus:outline-none"
+                  className="glass-input appearance-none pl-4 pr-10 py-2 rounded-xl text-sm cursor-pointer focus:outline-none"
                 >
                   <option value="">Sort by...</option>
                   <option value="company_name">Company Name</option>
@@ -501,7 +528,7 @@ const CustomerThreadsPage: React.FC = () => {
                         setSortDirection(null)
                       }
                     }}
-                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-white/80 hover:text-white"
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-600 hover:text-gray-900"
                     title={sortDirection === 'desc' ? 'Sort ascending' : 'Clear sort'}
                   >
                     {sortDirection === 'desc' ? <ArrowDown className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
@@ -511,7 +538,7 @@ const CustomerThreadsPage: React.FC = () => {
               <button 
                 onClick={() => startSync()}
                 disabled={syncStatus === 'creating_job' || syncStatus === 'syncing'}
-                className="glass-button px-5 py-2 text-sm font-semibold text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                className="glass-button px-5 py-2 text-sm font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
               >
                 {syncStatus === 'syncing' ? 'Syncing...' : 'Sync Threads'}
               </button>
@@ -519,28 +546,28 @@ const CustomerThreadsPage: React.FC = () => {
           </div>
         </header>
 
-        {/* Main Company Cards */}
+        {/* Main Company Table */}
         <div className="glass-card rounded-2xl p-6 mb-6">
           <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <button
               onClick={() => setIsMainTableCollapsed(!isMainTableCollapsed)}
-              className="flex items-center space-x-2 text-lg font-semibold text-white hover:text-white/90 transition-colors"
+              className="flex items-center space-x-2 text-lg font-semibold text-gray-800 hover:text-gray-900 transition-colors"
             >
               <span className="text-xl">{isMainTableCollapsed ? '▶' : '▼'}</span>
-              <h2 className="text-white drop-shadow-md">Company Overview</h2>
-              <span className="text-sm font-normal text-white/80">({sortedCompanies.length})</span>
+              <h2 className="text-gray-900">Company Overview</h2>
+              <span className="text-sm font-normal text-gray-600">({sortedCompanies.length})</span>
             </button>
             
             {/* Bulk Actions - Always visible */}
             <div className="flex items-center space-x-3 flex-wrap">
               {selectedCompanies.length > 0 && (
-                <span className="text-sm font-semibold text-white">
+                <span className="text-sm font-semibold text-gray-700">
                   {selectedCompanies.length} selected
                 </span>
               )}
               <button
                 onClick={handleArchiveSelected}
-                className="glass-button px-4 py-2 text-sm font-medium text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                className="glass-button px-4 py-2 text-sm font-medium rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={selectedCompanies.length === 0}
                 title={selectedCompanies.length === 0 ? "Select companies to archive" : `Archive ${selectedCompanies.length} companies`}
               >
@@ -548,7 +575,7 @@ const CustomerThreadsPage: React.FC = () => {
               </button>
               <button
                 onClick={handleDeleteSelected}
-                className="glass-button px-4 py-2 text-sm font-medium text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed bg-red-500/30 hover:bg-red-500/40 border-red-400/50"
+                className="glass-button px-4 py-2 text-sm font-medium rounded-xl disabled:opacity-50 disabled:cursor-not-allowed bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
                 disabled={selectedCompanies.length === 0}
                 title={selectedCompanies.length === 0 ? "Select companies to delete" : `Delete ${selectedCompanies.length} companies`}
               >
@@ -558,126 +585,98 @@ const CustomerThreadsPage: React.FC = () => {
           </div>
 
           {!isMainTableCollapsed && (
-            <>
-              {loading ? (
-                <div className="text-center py-12 text-white/80">
-                  <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-                  <p>Loading companies...</p>
-                </div>
-              ) : error ? (
-                <div className="text-center py-12 text-red-300">
-                  <XCircle className="h-8 w-8 mx-auto mb-2" />
-                  <p>{error}</p>
-                </div>
-              ) : sortedCompanies.length === 0 ? (
-                <div className="text-center py-12 text-white/80">
-                  <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p className="text-lg font-medium">No companies found</p>
-                  <p className="text-sm mt-2">Companies will appear here after thread sync.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="mb-4 flex items-center justify-between">
-                    <label className="flex items-center space-x-2 text-white/90 cursor-pointer">
+            <div className="overflow-x-auto">
+              <table className="glass-table w-full text-sm text-left rounded-xl overflow-hidden">
+                <thead className="glass-table-header">
+                  <tr>
+                    <th scope="col" className="p-4">
                       <input 
                         type="checkbox" 
-                        className="rounded w-4 h-4 cursor-pointer" 
+                        className="rounded" 
                         checked={sortedCompanies.length > 0 && selectedCompanies.length === sortedCompanies.length}
                         onChange={handleSelectAll}
                       />
-                      <span className="text-sm">Select all</span>
-                    </label>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {sortedCompanies.map((company) => {
+                    </th>
+                    {renderSortableHeader('company_name', 'Company Name')}
+                    {renderSortableHeader('health_score', 'Health Score')}
+                    {renderSortableHeader('status', 'Status')}
+                    {renderSortableHeader('mrr', 'MRR')}
+                    {renderSortableHeader('renewal_date', 'Renewal Date')}
+                    {renderSortableHeader('last_interaction', 'Last Interaction')}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan={7} className="text-center p-8 text-gray-600">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+                      <p>Loading companies...</p>
+                    </td></tr>
+                  ) : error ? (
+                    <tr><td colSpan={7} className="text-center p-8 text-red-600">
+                      <XCircle className="h-6 w-6 mx-auto mb-2" />
+                      <p>{error}</p>
+                    </td></tr>
+                  ) : sortedCompanies.length === 0 ? (
+                    <tr><td colSpan={7} className="text-center p-8 text-gray-500">
+                      <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p className="text-lg font-medium">No companies found</p>
+                      <p className="text-sm mt-2">Companies will appear here after thread sync.</p>
+                    </td></tr>
+                  ) : (
+                    sortedCompanies.map((company, index) => {
                       const isSelected = selectedCompanies.includes(company.company_id);
                       return (
-                        <div
-                          key={company.company_id}
-                          className={`glass-card rounded-2xl p-5 relative cursor-pointer transition-all ${
-                            isSelected ? 'ring-2 ring-white/50 ring-offset-2 ring-offset-transparent' : ''
-                          }`}
-                        >
-                          {/* Checkbox in top-right corner */}
-                          <div className="absolute top-3 right-3">
+                        <tr key={index} className={`glass-table-row ${isSelected ? 'bg-blue-50/50' : ''}`}>
+                          <td className="p-4">
                             <input 
                               type="checkbox" 
-                              className="rounded w-5 h-5 cursor-pointer accent-white/80" 
+                              className="rounded" 
                               checked={isSelected}
-                              onChange={(e) => {
-                                e.stopPropagation()
-                                handleSelectOne(company.company_id, e.target.checked)
-                              }}
-                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => handleSelectOne(company.company_id, e.target.checked)}
                             />
-                          </div>
-
-                          {/* Company Name */}
-                          <Link 
-                            href={`/dashboard/customer-threads/${company.company_id}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="block mb-4"
-                          >
-                            <div className="flex items-start gap-3 pr-8">
-                              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                                <Building2 className="h-6 w-6 text-white" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <h3 className="font-bold text-white text-lg truncate drop-shadow-md">
-                                  {company.company_name || 'Unnamed Company'}
-                                </h3>
-                                <p className="text-xs text-white/70 truncate mt-1">{company.domain_name}</p>
-                              </div>
-                            </div>
-                          </Link>
-
-                          {/* Health Score */}
-                          <div className="mb-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs font-medium text-white/80">Health Score</span>
-                            </div>
-                            <div className="bg-white/10 rounded-lg p-2 backdrop-blur-sm">
-                              <HealthScoreBar score={company.health_score} showLabel={true} />
-                            </div>
-                          </div>
-
-                          {/* Status Badge */}
-                          <div className="mb-3">
-                            <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium backdrop-blur-sm ${
-                              statusPillStyles[company.overall_sentiment || ''] || 'bg-white/20 text-white border border-white/30'
+                          </td>
+                          <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
+                            <Link 
+                              href={`/dashboard/customer-threads/${company.company_id}`} 
+                              className="hover:text-blue-600 transition-colors"
+                            >
+                              {company.company_name}
+                            </Link>
+                          </td>
+                          <td className="px-6 py-4">
+                            <HealthScoreBar score={company.health_score} showLabel={true} />
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                              statusPillStyles[company.overall_sentiment || ''] || 'bg-gray-100 text-gray-800'
                             }`}>
                               {company.overall_sentiment || 'Not set'}
                             </span>
-                          </div>
-
-                          {/* Details Grid */}
-                          <div className="space-y-2 text-sm">
-                            {company.mrr !== null && (
-                              <div className="flex items-center gap-2 text-white/90">
-                                <TrendingUp className="h-4 w-4 text-white/70" />
-                                <span className="text-xs">{formatMRR(company.mrr)}</span>
-                              </div>
+                          </td>
+                          <td className="px-6 py-4 text-gray-600">
+                            <span>{formatMRR(company.mrr)}</span>
+                          </td>
+                          <td className="px-6 py-4 text-gray-600">
+                            {company.renewal_date ? (
+                              new Date(company.renewal_date).toLocaleDateString('en-CA')
+                            ) : (
+                              <span className="text-gray-400">Not set</span>
                             )}
-                            {company.renewal_date && (
-                              <div className="flex items-center gap-2 text-white/90">
-                                <Calendar className="h-4 w-4 text-white/70" />
-                                <span className="text-xs">Renewal: {new Date(company.renewal_date).toLocaleDateString('en-CA')}</span>
-                              </div>
+                          </td>
+                          <td className="px-6 py-4 text-gray-600">
+                            {company.last_interaction_at ? (
+                              new Date(company.last_interaction_at).toLocaleDateString('en-CA')
+                            ) : (
+                              <span className="text-gray-400">Not set</span>
                             )}
-                            {company.last_interaction_at && (
-                              <div className="flex items-center gap-2 text-white/90">
-                                <Clock className="h-4 w-4 text-white/70" />
-                                <span className="text-xs">Last: {new Date(company.last_interaction_at).toLocaleDateString('en-CA')}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                          </td>
+                        </tr>
                       );
-                    })}
-                  </div>
-                </>
-              )}
-            </>
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
@@ -687,17 +686,17 @@ const CustomerThreadsPage: React.FC = () => {
             <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <button
                 onClick={() => setIsArchivedTableCollapsed(!isArchivedTableCollapsed)}
-                className="flex items-center space-x-2 text-lg font-semibold text-white hover:text-white/90 transition-colors"
+                className="flex items-center space-x-2 text-lg font-semibold text-gray-800 hover:text-gray-900 transition-colors"
               >
                 <span className="text-xl">{isArchivedTableCollapsed ? '▶' : '▼'}</span>
-                <h2 className="text-white drop-shadow-md">Archives</h2>
-                <span className="text-sm font-normal text-white/80">({sortedArchivedCompanies.length})</span>
+                <h2 className="text-gray-900">Archives</h2>
+                <span className="text-sm font-normal text-gray-600">({sortedArchivedCompanies.length})</span>
               </button>
               
               {/* Bulk Actions for Archived */}
               <div className="flex items-center space-x-3 flex-wrap">
                 {selectedArchivedCompanies.length > 0 && (
-                  <span className="text-sm font-semibold text-white">
+                  <span className="text-sm font-semibold text-gray-700">
                     {selectedArchivedCompanies.length} selected
                   </span>
                 )}
@@ -759,7 +758,7 @@ const CustomerThreadsPage: React.FC = () => {
                       }
                     }
                   }}
-                  className="glass-button px-4 py-2 text-sm font-medium text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed bg-green-500/30 hover:bg-green-500/40 border-green-400/50"
+                  className="glass-button px-4 py-2 text-sm font-medium rounded-xl disabled:opacity-50 disabled:cursor-not-allowed bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
                   disabled={selectedArchivedCompanies.length === 0}
                 >
                   Restore{selectedArchivedCompanies.length > 0 && ` (${selectedArchivedCompanies.length})`}
@@ -768,116 +767,94 @@ const CustomerThreadsPage: React.FC = () => {
             </div>
 
             {!isArchivedTableCollapsed && (
-              <>
-                <div className="mb-4 flex items-center justify-between">
-                  <label className="flex items-center space-x-2 text-white/90 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="rounded w-4 h-4 cursor-pointer" 
-                      checked={sortedArchivedCompanies.length > 0 && selectedArchivedCompanies.length === sortedArchivedCompanies.length}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedArchivedCompanies(sortedArchivedCompanies.map(c => c.company_id))
-                        } else {
-                          setSelectedArchivedCompanies([])
-                        }
-                      }}
-                    />
-                    <span className="text-sm">Select all</span>
-                  </label>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {sortedArchivedCompanies.map((company) => {
-                    const isSelected = selectedArchivedCompanies.includes(company.company_id);
-                    return (
-                      <div
-                        key={company.company_id}
-                        className={`glass-card rounded-2xl p-5 relative cursor-pointer transition-all opacity-75 ${
-                          isSelected ? 'ring-2 ring-white/50 ring-offset-2 ring-offset-transparent opacity-100' : ''
-                        }`}
-                      >
-                        {/* Checkbox in top-right corner */}
-                        <div className="absolute top-3 right-3">
-                          <input 
-                            type="checkbox" 
-                            className="rounded w-5 h-5 cursor-pointer accent-white/80" 
-                            checked={isSelected}
-                            onChange={(e) => {
-                              e.stopPropagation()
-                              if (e.target.checked) {
-                                setSelectedArchivedCompanies([...selectedArchivedCompanies, company.company_id])
-                              } else {
-                                setSelectedArchivedCompanies(selectedArchivedCompanies.filter(id => id !== company.company_id))
-                              }
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </div>
-
-                        {/* Company Name */}
-                        <Link 
-                          href={`/dashboard/customer-threads/${company.company_id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="block mb-4"
-                        >
-                          <div className="flex items-start gap-3 pr-8">
-                            <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                              <Building2 className="h-6 w-6 text-white" />
+              <div className="overflow-x-auto">
+                <table className="glass-table w-full text-sm text-left rounded-xl overflow-hidden opacity-90">
+                  <thead className="glass-table-header">
+                    <tr>
+                      <th scope="col" className="p-4">
+                        <input 
+                          type="checkbox" 
+                          className="rounded" 
+                          checked={sortedArchivedCompanies.length > 0 && selectedArchivedCompanies.length === sortedArchivedCompanies.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedArchivedCompanies(sortedArchivedCompanies.map(c => c.company_id))
+                            } else {
+                              setSelectedArchivedCompanies([])
+                            }
+                          }}
+                        />
+                      </th>
+                      {renderSortableHeader('company_name', 'Company Name')}
+                      {renderSortableHeader('health_score', 'Health Score')}
+                      {renderSortableHeader('status', 'Status')}
+                      {renderSortableHeader('mrr', 'MRR')}
+                      {renderSortableHeader('renewal_date', 'Renewal Date')}
+                      {renderSortableHeader('last_interaction', 'Last Interaction')}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedArchivedCompanies.map((company, index) => {
+                      const isSelected = selectedArchivedCompanies.includes(company.company_id);
+                      return (
+                        <tr key={index} className={`glass-table-row ${isSelected ? 'bg-green-50/50' : ''}`}>
+                          <td className="p-4">
+                            <input 
+                              type="checkbox" 
+                              className="rounded" 
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedArchivedCompanies([...selectedArchivedCompanies, company.company_id])
+                                } else {
+                                  setSelectedArchivedCompanies(selectedArchivedCompanies.filter(id => id !== company.company_id))
+                                }
+                              }}
+                            />
+                          </td>
+                          <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
+                            <Link 
+                              href={`/dashboard/customer-threads/${company.company_id}`} 
+                              className="hover:text-blue-600 transition-colors"
+                            >
+                              {company.company_name}
+                            </Link>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center">
+                              <HealthScoreBar score={company.health_score} showLabel={true} />
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <h3 className="font-bold text-white text-lg truncate drop-shadow-md">
-                                {company.company_name || 'Unnamed Company'}
-                              </h3>
-                              <p className="text-xs text-white/70 truncate mt-1">{company.domain_name}</p>
-                            </div>
-                          </div>
-                        </Link>
-
-                        {/* Health Score */}
-                        <div className="mb-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-medium text-white/80">Health Score</span>
-                          </div>
-                          <div className="bg-white/10 rounded-lg p-2 backdrop-blur-sm">
-                            <HealthScoreBar score={company.health_score} showLabel={true} />
-                          </div>
-                        </div>
-
-                        {/* Status Badge */}
-                        <div className="mb-3">
-                          <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium backdrop-blur-sm ${
-                            statusPillStyles[company.overall_sentiment || ''] || 'bg-white/20 text-white border border-white/30'
-                          }`}>
-                            {company.overall_sentiment || 'Not set'}
-                          </span>
-                        </div>
-
-                        {/* Details Grid */}
-                        <div className="space-y-2 text-sm">
-                          {company.mrr !== null && (
-                            <div className="flex items-center gap-2 text-white/90">
-                              <TrendingUp className="h-4 w-4 text-white/70" />
-                              <span className="text-xs">{formatMRR(company.mrr)}</span>
-                            </div>
-                          )}
-                          {company.renewal_date && (
-                            <div className="flex items-center gap-2 text-white/90">
-                              <Calendar className="h-4 w-4 text-white/70" />
-                              <span className="text-xs">Renewal: {new Date(company.renewal_date).toLocaleDateString('en-CA')}</span>
-                            </div>
-                          )}
-                          {company.last_interaction_at && (
-                            <div className="flex items-center gap-2 text-white/90">
-                              <Clock className="h-4 w-4 text-white/70" />
-                              <span className="text-xs">Last: {new Date(company.last_interaction_at).toLocaleDateString('en-CA')}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                              statusPillStyles[company.overall_sentiment || ''] || 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {company.overall_sentiment || 'Not set'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-gray-600">
+                            <span>{formatMRR(company.mrr)}</span>
+                          </td>
+                          <td className="px-6 py-4 text-gray-600">
+                            {company.renewal_date ? (
+                              new Date(company.renewal_date).toLocaleDateString('en-CA')
+                            ) : (
+                              <span className="text-gray-400">Not set</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-gray-600">
+                            {company.last_interaction_at ? (
+                              new Date(company.last_interaction_at).toLocaleDateString('en-CA')
+                            ) : (
+                              <span className="text-gray-400">Not set</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}
