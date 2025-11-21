@@ -681,120 +681,126 @@ const CustomerThreadsPage: React.FC = () => {
         </div>
 
         {/* Archived Company Cards */}
-        {archivedCompanies.length > 0 && (
-          <div className="glass-card rounded-2xl p-6">
-            <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="glass-card rounded-2xl p-6">
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <button
+              onClick={() => setIsArchivedTableCollapsed(!isArchivedTableCollapsed)}
+              className="flex items-center space-x-2 text-lg font-semibold text-gray-800 hover:text-gray-900 transition-colors"
+            >
+              <span className="text-xl">{isArchivedTableCollapsed ? '▶' : '▼'}</span>
+              <h2 className="text-gray-900">Archives</h2>
+              <span className="text-sm font-normal text-gray-600">({sortedArchivedCompanies.length})</span>
+            </button>
+            
+            {/* Bulk Actions for Archived */}
+            <div className="flex items-center space-x-3 flex-wrap">
+              {selectedArchivedCompanies.length > 0 && (
+                <span className="text-sm font-semibold text-gray-700">
+                  {selectedArchivedCompanies.length} selected
+                </span>
+              )}
               <button
-                onClick={() => setIsArchivedTableCollapsed(!isArchivedTableCollapsed)}
-                className="flex items-center space-x-2 text-lg font-semibold text-gray-800 hover:text-gray-900 transition-colors"
-              >
-                <span className="text-xl">{isArchivedTableCollapsed ? '▶' : '▼'}</span>
-                <h2 className="text-gray-900">Archives</h2>
-                <span className="text-sm font-normal text-gray-600">({sortedArchivedCompanies.length})</span>
-              </button>
-              
-              {/* Bulk Actions for Archived */}
-              <div className="flex items-center space-x-3 flex-wrap">
-                {selectedArchivedCompanies.length > 0 && (
-                  <span className="text-sm font-semibold text-gray-700">
-                    {selectedArchivedCompanies.length} selected
-                  </span>
-                )}
-                <button
-                  onClick={async () => {
-                    if (selectedArchivedCompanies.length === 0) return
-                    if (window.confirm(`Are you sure you want to restore ${selectedArchivedCompanies.length} companies from archives? They will be moved back to the main table and new emails will be imported.`)) {
-                      try {
-                        // Get user ID for blocklist
-                        const { data: { user } } = await supabase.auth.getUser()
-                        if (!user) {
-                          console.error('Not authenticated')
-                          return
-                        }
-
-                        // Get the selected companies with their domain names
-                        const companiesToRestore = archivedCompanies.filter(c => selectedArchivedCompanies.includes(c.company_id))
-                        const domainsToUnblock = companiesToRestore.map(c => c.domain_name).filter(Boolean)
-
-                        // Remove domains from blocklist (only if status is 'archived', not 'deleted')
-                        if (domainsToUnblock.length > 0) {
-                          const { error: blocklistError } = await supabase
-                            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                            // @ts-ignore - domain_blocklist table not yet in TypeScript types
-                            .from('domain_blocklist')
-                            .delete()
-                            .eq('user_id', user.id)
-                            .in('domain', domainsToUnblock.map(d => d.toLowerCase()))
-                            .eq('status', 'archived')
-
-                          if (blocklistError) {
-                            console.error('Error removing domains from blocklist:', blocklistError)
-                            // Continue with restore even if blocklist removal fails
-                          } else {
-                            console.log(`✅ Removed ${domainsToUnblock.length} domain(s) from blocklist`)
-                          }
-                        }
-
-                        // Update companies status to 'active'
-                        const { error } = await supabase
-                          .from('companies')
-                          .update({ status: 'active' })
-                          .in('company_id', selectedArchivedCompanies)
-                        
-                        if (!error) {
-                          setSelectedArchivedCompanies([])
-                          await new Promise(resolve => setTimeout(resolve, 300))
-                          const resp = await fetch('/api/customers', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
-                          if (resp.ok) {
-                            const json = await resp.json()
-                            setCompanies((json.companies as Company[]) || [])
-                            setArchivedCompanies((json.archivedCompanies as Company[]) || [])
-                          }
-                        } else {
-                          console.error('Error restoring companies:', error)
-                        }
-                      } catch (err) {
-                        console.error('Error in restore:', err)
+                onClick={async () => {
+                  if (selectedArchivedCompanies.length === 0) return
+                  if (window.confirm(`Are you sure you want to restore ${selectedArchivedCompanies.length} companies from archives? They will be moved back to the main table and new emails will be imported.`)) {
+                    try {
+                      // Get user ID for blocklist
+                      const { data: { user } } = await supabase.auth.getUser()
+                      if (!user) {
+                        console.error('Not authenticated')
+                        return
                       }
-                    }
-                  }}
-                  className="glass-button px-4 py-2 text-sm font-medium rounded-xl disabled:opacity-50 disabled:cursor-not-allowed bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
-                  disabled={selectedArchivedCompanies.length === 0}
-                >
-                  Restore{selectedArchivedCompanies.length > 0 && ` (${selectedArchivedCompanies.length})`}
-                </button>
-              </div>
-            </div>
 
-            {!isArchivedTableCollapsed && (
-              <div className="overflow-x-auto">
-                <table className="glass-table w-full text-sm text-left rounded-xl opacity-90">
-                  <thead className="glass-table-header">
-                    <tr>
-                      <th scope="col" className="p-4">
-                        <input 
-                          type="checkbox" 
-                          className="rounded" 
-                          checked={sortedArchivedCompanies.length > 0 && selectedArchivedCompanies.length === sortedArchivedCompanies.length}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedArchivedCompanies(sortedArchivedCompanies.map(c => c.company_id))
-                            } else {
-                              setSelectedArchivedCompanies([])
-                            }
-                          }}
-                        />
-                      </th>
-                      {renderSortableHeader('company_name', 'Company Name')}
-                      {renderSortableHeader('health_score', 'Health Score')}
-                      {renderSortableHeader('status', 'Status')}
-                      {renderSortableHeader('mrr', 'MRR')}
-                      {renderSortableHeader('renewal_date', 'Renewal Date')}
-                      {renderSortableHeader('last_interaction', 'Last Interaction')}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedArchivedCompanies.map((company, index) => {
+                      // Get the selected companies with their domain names
+                      const companiesToRestore = archivedCompanies.filter(c => selectedArchivedCompanies.includes(c.company_id))
+                      const domainsToUnblock = companiesToRestore.map(c => c.domain_name).filter(Boolean)
+
+                      // Remove domains from blocklist (only if status is 'archived', not 'deleted')
+                      if (domainsToUnblock.length > 0) {
+                        const { error: blocklistError } = await supabase
+                          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                          // @ts-ignore - domain_blocklist table not yet in TypeScript types
+                          .from('domain_blocklist')
+                          .delete()
+                          .eq('user_id', user.id)
+                          .in('domain', domainsToUnblock.map(d => d.toLowerCase()))
+                          .eq('status', 'archived')
+
+                        if (blocklistError) {
+                          console.error('Error removing domains from blocklist:', blocklistError)
+                          // Continue with restore even if blocklist removal fails
+                        } else {
+                          console.log(`✅ Removed ${domainsToUnblock.length} domain(s) from blocklist`)
+                        }
+                      }
+
+                      // Update companies status to 'active'
+                      const { error } = await supabase
+                        .from('companies')
+                        .update({ status: 'active' })
+                        .in('company_id', selectedArchivedCompanies)
+                      
+                      if (!error) {
+                        setSelectedArchivedCompanies([])
+                        await new Promise(resolve => setTimeout(resolve, 300))
+                        const resp = await fetch('/api/customers', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
+                        if (resp.ok) {
+                          const json = await resp.json()
+                          setCompanies((json.companies as Company[]) || [])
+                          setArchivedCompanies((json.archivedCompanies as Company[]) || [])
+                        }
+                      } else {
+                        console.error('Error restoring companies:', error)
+                      }
+                    } catch (err) {
+                      console.error('Error in restore:', err)
+                    }
+                  }
+                }}
+                className="glass-button px-4 py-2 text-sm font-medium rounded-xl disabled:opacity-50 disabled:cursor-not-allowed bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+                disabled={selectedArchivedCompanies.length === 0}
+              >
+                Restore{selectedArchivedCompanies.length > 0 && ` (${selectedArchivedCompanies.length})`}
+              </button>
+            </div>
+          </div>
+
+          {!isArchivedTableCollapsed && (
+            <div className="overflow-x-auto">
+              <table className="glass-table w-full text-sm text-left rounded-xl opacity-90">
+                <thead className="glass-table-header">
+                  <tr>
+                    <th scope="col" className="p-4">
+                      <input 
+                        type="checkbox" 
+                        className="rounded" 
+                        checked={sortedArchivedCompanies.length > 0 && selectedArchivedCompanies.length === sortedArchivedCompanies.length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedArchivedCompanies(sortedArchivedCompanies.map(c => c.company_id))
+                          } else {
+                            setSelectedArchivedCompanies([])
+                          }
+                        }}
+                      />
+                    </th>
+                    {renderSortableHeader('company_name', 'Company Name')}
+                    {renderSortableHeader('health_score', 'Health Score')}
+                    {renderSortableHeader('status', 'Status')}
+                    {renderSortableHeader('mrr', 'MRR')}
+                    {renderSortableHeader('renewal_date', 'Renewal Date')}
+                    {renderSortableHeader('last_interaction', 'Last Interaction')}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedArchivedCompanies.length === 0 ? (
+                    <tr><td colSpan={7} className="text-center p-8 text-gray-500">
+                      <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p className="text-lg font-medium">No archived companies</p>
+                      <p className="text-sm mt-2">Archived companies will appear here.</p>
+                    </td></tr>
+                  ) : (
+                    sortedArchivedCompanies.map((company, index) => {
                       const isSelected = selectedArchivedCompanies.includes(company.company_id);
                       return (
                         <tr key={index} className={`glass-bar-row ${isSelected ? 'selected' : ''}`}>
@@ -849,13 +855,13 @@ const CustomerThreadsPage: React.FC = () => {
                           </td>
                         </tr>
                       );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
