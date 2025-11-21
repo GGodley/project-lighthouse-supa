@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { AlertCircle, List, ArrowUpRight, Clock, Users, Mail, ArrowLeft, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertCircle, List, Clock, Users, Mail, ArrowLeft, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { useSupabase } from '@/components/SupabaseProvider';
 import { useCompanyThreads } from '@/hooks/useCompanyThreads';
 import ThreadListView from './ThreadListView';
@@ -356,16 +356,16 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                       const IconComponent = sentimentData.icon;
                       return (
                         <div className={`glass-card rounded-xl p-4 ${sentimentData.colors.bg} ${sentimentData.colors.border}`}>
-                    <div className="flex items-center mb-2">
+                          <div className="flex items-center mb-2">
                             <IconComponent className={`h-5 w-5 ${sentimentData.colors.icon}`} />
                             <strong className={`ml-2 ${sentimentData.colors.text}`}>
                               {sentimentData.category}
                             </strong>
-                    </div>
-                    <p className="text-sm text-gray-700">
+                          </div>
+                          <p className="text-sm text-gray-700">
                             {sentimentData.message}
-                    </p>
-                  </div>
+                          </p>
+                        </div>
                       );
                     } else {
                       return (
@@ -447,17 +447,17 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                             feedback.urgency === 'High' ? 'bg-red-50 text-red-700 border border-red-200' :
                             feedback.urgency === 'Medium' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
                             'bg-green-50 text-green-700 border border-green-200'
-                        }`}>
-                          {feedback.urgency}
-                        </span>
-                      </div>
+                          }`}>
+                            {feedback.urgency}
+                          </span>
+                        </div>
                         <p className="text-gray-700 mb-2">{feedback.description}</p>
                         {feedback.created_at && (
                           <p className="text-xs text-gray-500 mt-2">
                             Created {new Date(feedback.created_at).toLocaleDateString()}
                           </p>
                         )}
-                    </div>
+                      </div>
                     );
                   })}
                 </div>
