@@ -126,8 +126,8 @@ const CustomerThreadsPage: React.FC = () => {
     }
 
     return [...companiesToSort].sort((a, b) => {
-      let aValue: any
-      let bValue: any
+      let aValue: string | number
+      let bValue: string | number
 
       switch (sortColumn) {
         case 'company_name':
