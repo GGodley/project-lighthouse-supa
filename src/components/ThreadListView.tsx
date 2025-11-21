@@ -27,18 +27,18 @@ export default function ThreadListView({ threads, onThreadSelect, selectedThread
   };
 
   const getSentimentColor = (sentiment: string | null): string => {
-    if (!sentiment) return 'bg-gray-100 text-gray-800';
+    if (!sentiment) return 'bg-gray-50 text-gray-700 border border-gray-200';
     switch (sentiment.toLowerCase()) {
       case 'positive':
       case 'very positive':
-        return 'bg-green-100 text-green-800';
+        return 'bg-green-50 text-green-700 border border-green-200';
       case 'neutral':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-blue-50 text-blue-700 border border-blue-200';
       case 'frustrated':
       case 'negative':
-        return 'bg-red-100 text-red-800';
+        return 'bg-red-50 text-red-700 border border-red-200';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-50 text-gray-700 border border-gray-200';
     }
   };
 
@@ -61,30 +61,30 @@ export default function ThreadListView({ threads, onThreadSelect, selectedThread
             <div
               key={thread.thread_id}
               onClick={() => onThreadSelect(thread.thread_id)}
-              className={`bg-white border rounded-lg shadow-sm p-4 cursor-pointer transition-all hover:shadow-md ${
-                isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'
+              className={`glass-bar-row p-5 cursor-pointer ${
+                isSelected ? 'selected' : ''
               }`}
             >
               <div className="flex items-start gap-4">
                 {/* Icon */}
-                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                  <Mail className="w-5 h-5 text-purple-600" />
+                <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center">
+                  <Mail className="w-6 h-6 text-blue-600" />
                 </div>
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
                   {/* Header */}
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold text-gray-900 truncate">
+                    <h3 className="font-semibold text-gray-900 truncate text-base">
                       {thread.subject || 'No Subject'}
                     </h3>
-                    <span className="text-sm text-gray-500 flex-shrink-0 ml-2">
+                    <span className="text-sm text-gray-600 flex-shrink-0 ml-2 font-medium">
                       {formatDate(thread.last_message_date)}
                     </span>
                   </div>
 
                   {/* Snippet */}
-                  <p className="text-sm text-gray-600 mb-2 line-clamp-2">
+                  <p className="text-sm text-gray-600 mb-3 line-clamp-2">
                     {thread.snippet || 'No preview available'}
                   </p>
 
@@ -92,13 +92,13 @@ export default function ThreadListView({ threads, onThreadSelect, selectedThread
                   {llmSummary && (
                     <div className="mt-3 space-y-2">
                       <p className="text-sm text-gray-700">
-                        <span className="font-medium">Problem: </span>
+                        <span className="font-semibold">Problem: </span>
                         {problemStatement.length > 150 
                           ? `${problemStatement.substring(0, 150)}...` 
                           : problemStatement}
                       </p>
                       {customerSentiment && (
-                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${getSentimentColor(customerSentiment)}`}>
+                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getSentimentColor(customerSentiment)}`}>
                           {customerSentiment}
                         </span>
                       )}
@@ -108,7 +108,7 @@ export default function ThreadListView({ threads, onThreadSelect, selectedThread
                   {/* Key Participants */}
                   {llmSummary && llmSummary.key_participants && Array.isArray(llmSummary.key_participants) && llmSummary.key_participants.length > 0 && (
                     <div className="mt-2">
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-gray-600">
                         Participants: {llmSummary.key_participants.join(', ')}
                       </span>
                     </div>

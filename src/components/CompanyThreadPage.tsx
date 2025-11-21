@@ -178,10 +178,10 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen glass-bg flex items-center justify-center">
+        <div className="text-center glass-card rounded-2xl p-8">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-slate-600">Loading company details...</p>
+          <p className="mt-4 text-gray-700">Loading company details...</p>
         </div>
       </div>
     );
@@ -189,11 +189,11 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">Error Loading Company</h2>
-          <p className="text-slate-600">{error}</p>
+      <div className="min-h-screen glass-bg flex items-center justify-center">
+        <div className="text-center glass-card rounded-2xl p-8">
+          <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Company</h2>
+          <p className="text-gray-600">{error}</p>
         </div>
       </div>
     );
@@ -201,11 +201,11 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
 
   if (!companyData) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">Company Not Found</h2>
-          <p className="text-slate-600">The requested company could not be found.</p>
+      <div className="min-h-screen glass-bg flex items-center justify-center">
+        <div className="text-center glass-card rounded-2xl p-8">
+          <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Company Not Found</h2>
+          <p className="text-gray-600">The requested company could not be found.</p>
         </div>
       </div>
     );
@@ -221,13 +221,13 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen glass-bg">
       <div className="max-w-6xl mx-auto p-6">
         {/* Back Button */}
         <div className="mb-4">
           <Link 
             href="/dashboard/customer-threads"
-            className="inline-flex items-center text-sm text-slate-600 hover:text-slate-800 transition-colors"
+            className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 transition-colors glass-button rounded-xl px-4 py-2"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Customer Threads
@@ -235,69 +235,67 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
         </div>
 
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
+        <div className="glass-card rounded-2xl p-6 mb-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
             <div>
-              <h1 className="text-3xl font-bold text-slate-800">{company_details.company_name}</h1>
-              <p className="text-slate-600 mt-1">Domain: {company_details.domain_name}</p>
+              <h1 className="text-3xl font-bold text-gray-900">{company_details.company_name}</h1>
+              <p className="text-gray-600 mt-1">Domain: {company_details.domain_name}</p>
             </div>
-            <div className="text-right">
-              <div className="flex items-center space-x-4 text-sm">
-                {/* Status pill */}
-                <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-800">
-                  {company_details.status || 'Active'}
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              {/* Status pill */}
+              <span className="px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-medium">
+                {company_details.status || 'Active'}
+              </span>
+
+              {/* Overall Sentiment pill */}
+              {company_details.overall_sentiment && (
+                <span
+                  className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
+                    sentimentStyles[company_details.overall_sentiment] || 'bg-gray-100 text-gray-800'
+                  }`}
+                >
+                  {company_details.overall_sentiment}
                 </span>
+              )}
 
-                {/* Overall Sentiment pill */}
-                {company_details.overall_sentiment && (
-                  <span
-                    className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      sentimentStyles[company_details.overall_sentiment] || 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
-                    {company_details.overall_sentiment}
-                  </span>
-                )}
+              {/* Health score */}
+              {company_details.health_score !== null && (
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-600 text-sm font-medium">Health Score:</span>
+                  <HealthScoreBar score={company_details.health_score} showLabel={true} />
+                </div>
+              )}
 
-                {/* Health score */}
-                {company_details.health_score !== null && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-600 text-sm">Health Score:</span>
-                    <HealthScoreBar score={company_details.health_score} showLabel={true} />
-                  </div>
-                )}
-
-                {/* MRR */}
-                <span className="text-slate-600">
-                  MRR: ${company_details.mrr ? company_details.mrr.toLocaleString() : 'N/A'}
-                </span>
-              </div>
+              {/* MRR */}
+              <span className="text-gray-700 font-medium">
+                MRR: ${company_details.mrr ? company_details.mrr.toLocaleString() : 'N/A'}
+              </span>
             </div>
           </div>
         </div>
 
         {/* Tab Navigation */}
-        <div className="bg-white rounded-lg shadow-sm p-1 mb-6">
+        <div className="glass-card rounded-2xl p-1 mb-6">
           <div className="flex space-x-1">
             <button
               onClick={() => {
                 setActiveView('Overview');
                 setSelectedThreadId(null);
               }}
-              className={`flex-1 py-3 px-4 rounded-md text-sm font-medium transition-colors ${
+              className={`flex-1 py-3 px-4 rounded-xl text-sm font-medium transition-all ${
                 activeView === 'Overview'
-                  ? 'bg-blue-100 text-blue-800'
-                  : 'text-slate-600 hover:text-slate-800'
+                  ? 'bg-white/90 text-blue-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
               }`}
             >
               Overview
             </button>
             <button
               onClick={() => setActiveView('Threads')}
-              className={`flex-1 py-3 px-4 rounded-md text-sm font-medium transition-colors ${
+              className={`flex-1 py-3 px-4 rounded-xl text-sm font-medium transition-all ${
                 activeView === 'Threads'
-                  ? 'bg-blue-100 text-blue-800'
-                  : 'text-slate-600 hover:text-slate-800'
+                  ? 'bg-white/90 text-blue-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
               }`}
             >
               Threads ({threads.length})
@@ -309,18 +307,16 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
         {activeView === 'Overview' && (
           <div className="space-y-6">
             {/* Overview Card */}
-            <div className="bg-white rounded-lg shadow-md">
-              <div className="bg-gray-100 px-4 py-3 border-b">
-                <div className="flex items-center">
-                  <List className="h-5 w-5 text-gray-500" />
-                  <h3 className="text-lg font-semibold ml-2">Overview</h3>
-                </div>
+            <div className="glass-card rounded-2xl p-6">
+              <div className="flex items-center mb-6">
+                <List className="h-5 w-5 text-gray-600" />
+                <h3 className="text-lg font-semibold ml-2 text-gray-900">Overview</h3>
               </div>
               
-              <div className="flex flex-col md:flex-row">
+              <div className="flex flex-col md:flex-row gap-6">
                 {/* Left Column - Recent Threads */}
-                <div className="w-full md:w-2/3 p-4">
-                  <h3 className="font-semibold mb-3">Recent Threads</h3>
+                <div className="w-full md:w-2/3">
+                  <h3 className="font-semibold mb-4 text-gray-900">Recent Threads</h3>
                   <div className="space-y-3">
                     {threadsLoading ? (
                       <p className="text-sm text-gray-500">Loading threads...</p>
@@ -328,19 +324,21 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                       <p className="text-sm text-gray-500">No threads found. Threads will appear here after syncing.</p>
                     ) : (
                       threads.slice(0, 3).map((thread) => (
-                        <div key={thread.thread_id} className="flex py-3">
-                          <div className="w-1/4">
-                            <div className="flex items-center text-purple-600">
-                              <Mail className="h-4 w-4 mr-1" />
-                              <span className="font-semibold">Thread</span>
+                        <div key={thread.thread_id} className="glass-bar-row p-4">
+                          <div className="flex gap-4">
+                            <div className="w-1/4">
+                              <div className="flex items-center text-blue-600 mb-1">
+                                <Mail className="h-4 w-4 mr-1" />
+                                <span className="font-semibold text-sm">Thread</span>
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {thread.last_message_date ? formatDate(thread.last_message_date) : 'No date'}
+                              </div>
                             </div>
-                            <div className="text-sm text-gray-500">
-                              {thread.last_message_date ? formatDate(thread.last_message_date) : 'No date'}
+                            <div className="w-3/4">
+                              <p className="text-gray-900 font-semibold mb-1">{thread.subject || 'No Subject'}</p>
+                              <p className="text-sm text-gray-600 line-clamp-1">{thread.snippet || 'No preview'}</p>
                             </div>
-                          </div>
-                          <div className="w-3/4">
-                            <p className="text-gray-700 font-medium">{thread.subject || 'No Subject'}</p>
-                            <p className="text-sm text-gray-500 line-clamp-1">{thread.snippet || 'No preview'}</p>
                           </div>
                         </div>
                       ))
@@ -349,9 +347,9 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                 </div>
 
                 {/* Right Column - Overall Sentiment */}
-                <div className="w-full md:w-1/3 p-4">
-                  <h3 className="font-semibold mb-3">Overall Sentiment</h3>
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="w-full md:w-1/3">
+                  <h3 className="font-semibold mb-4 text-gray-900">Overall Sentiment</h3>
+                  <div className="glass-card rounded-xl p-4 bg-green-50/50 border-green-200/50">
                     <div className="flex items-center mb-2">
                       <ArrowUpRight className="h-5 w-5 text-green-600" />
                       <strong className="ml-2 text-green-800">Positive</strong>
@@ -366,8 +364,8 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
 
             {/* Product Feedback */}
             {product_feedback && product_feedback.length > 0 && (
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h2 className="text-xl font-semibold text-slate-800 mb-4">Product Feedback</h2>
+              <div className="glass-card rounded-2xl p-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-6">Product Feedback</h2>
                 <div className="space-y-4">
                   {product_feedback.map((feedback, index) => {
                     // Determine source link URL
@@ -398,29 +396,29 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                       : 'Unknown';
                     
                     return (
-                      <div key={feedback.id || index} className="p-4 bg-slate-50 rounded-lg">
-                        <div className="flex items-start justify-between mb-2">
+                      <div key={feedback.id || index} className="glass-bar-row p-5">
+                        <div className="flex items-start justify-between mb-3">
                           <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-medium text-slate-800">{feedback.title}</h3>
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="font-semibold text-gray-900">{feedback.title}</h3>
                               {feedback.status && (
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                                  feedback.status === 'resolved' ? 'bg-green-100 text-green-800' :
-                                  feedback.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                  feedback.status === 'resolved' ? 'bg-green-50 text-green-700 border border-green-200' :
+                                  feedback.status === 'in_progress' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
                                   feedback.status === 'closed' ? 'bg-gray-100 text-gray-800' :
-                                  'bg-yellow-100 text-yellow-800'
+                                  'bg-yellow-50 text-yellow-700 border border-yellow-200'
                                 }`}>
                                   {feedback.status.replace('_', ' ')}
                                 </span>
                               )}
                             </div>
                             {feedback.source && (
-                              <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
+                              <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
                                 <span>From {sourceLabel}</span>
                                 {sourceLink && (
                                   <Link 
                                     href={sourceLink}
-                                    className="text-blue-600 hover:text-blue-800 underline"
+                                    className="text-blue-600 hover:text-blue-800 underline font-medium"
                                   >
                                     View Source →
                                   </Link>
@@ -428,21 +426,21 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                               </div>
                             )}
                           </div>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          feedback.urgency === 'High' ? 'bg-red-100 text-red-800' :
-                          feedback.urgency === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-green-100 text-green-800'
-                        }`}>
-                          {feedback.urgency}
-                        </span>
-                      </div>
-                      <p className="text-slate-600">{feedback.description}</p>
+                          <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
+                            feedback.urgency === 'High' ? 'bg-red-50 text-red-700 border border-red-200' :
+                            feedback.urgency === 'Medium' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+                            'bg-green-50 text-green-700 border border-green-200'
+                          }`}>
+                            {feedback.urgency}
+                          </span>
+                        </div>
+                        <p className="text-gray-700 mb-2">{feedback.description}</p>
                         {feedback.created_at && (
-                          <p className="text-xs text-slate-400 mt-2">
+                          <p className="text-xs text-gray-500 mt-2">
                             Created {new Date(feedback.created_at).toLocaleDateString()}
                           </p>
                         )}
-                    </div>
+                      </div>
                     );
                   })}
                 </div>
@@ -451,49 +449,51 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
 
             {/* Next Steps - Enhanced Design */}
             {nextSteps && nextSteps.length > 0 && (
-              <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="glass-card rounded-2xl p-6">
                 {/* Main Section Header */}
-                <div className="flex items-center gap-2 mb-4">
-                  <Clock className="h-6 w-6 text-gray-500" />
+                <div className="flex items-center gap-2 mb-6">
+                  <Clock className="h-6 w-6 text-gray-600" />
                   <h3 className="text-xl font-semibold text-gray-900">Next Steps</h3>
                 </div>
                 
                 {/* Active Next Steps */}
                 {nextSteps.filter(s => !s.completed).length > 0 && (
                   <div className="mb-6">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Users className="h-5 w-5 text-gray-500" />
-                      <h4 className="font-semibold">Next Steps</h4>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Users className="h-5 w-5 text-gray-600" />
+                      <h4 className="font-semibold text-gray-900">Active Next Steps</h4>
                     </div>
                     
                     <ul className="space-y-3">
                       {nextSteps.filter(s => !s.completed).map((step) => (
-                        <li key={step.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                          <button
-                            onClick={() => toggleNextStep(step)}
-                            disabled={updatingStepId === step.id}
-                            className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 ${
-                              step.completed
-                                ? 'bg-indigo-600 border-indigo-600'
-                                : 'border-gray-300 hover:border-indigo-600'
-                            } ${updatingStepId === step.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                          >
-                            {step.completed && <CheckCircle className="w-3 h-3 text-white" />}
-                          </button>
-                          
-                          <div className="flex-1 min-w-0">
-                            <p className="text-gray-700">{step.text}</p>
-                            <div className="flex items-center gap-2 mt-1 flex-wrap">
-                              {step.owner && (
-                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                  Owner: {step.owner}
-                                </span>
-                              )}
-                              {step.due_date && (
-                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                                  Due: {new Date(step.due_date).toLocaleDateString()}
-                                </span>
-                              )}
+                        <li key={step.id} className="glass-bar-row p-4">
+                          <div className="flex items-start gap-4">
+                            <button
+                              onClick={() => toggleNextStep(step)}
+                              disabled={updatingStepId === step.id}
+                              className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 ${
+                                step.completed
+                                  ? 'bg-blue-600 border-blue-600'
+                                  : 'border-gray-300 hover:border-blue-600'
+                              } ${updatingStepId === step.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                            >
+                              {step.completed && <CheckCircle className="w-4 h-4 text-white" />}
+                            </button>
+                            
+                            <div className="flex-1 min-w-0">
+                              <p className="text-gray-900 font-medium mb-2">{step.text}</p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {step.owner && (
+                                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                    Owner: {step.owner}
+                                  </span>
+                                )}
+                                {step.due_date && (
+                                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                                    Due: {new Date(step.due_date).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </li>
@@ -507,51 +507,51 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                   <div>
                     <button
                       onClick={() => setCompletedExpanded(!completedExpanded)}
-                      className="flex items-center gap-2 mb-3 w-full text-left"
+                      className="flex items-center gap-2 mb-4 w-full text-left hover:text-gray-900 transition-colors"
                     >
-                      <Users className="h-5 w-5 text-gray-500" />
-                      <h4 className="font-semibold">Completed Next Steps</h4>
-                      <span className="ml-auto text-sm text-gray-500">
+                      <Users className="h-5 w-5 text-gray-600" />
+                      <h4 className="font-semibold text-gray-900">Completed Next Steps</h4>
+                      <span className="ml-auto text-sm text-gray-600">
                         ({nextSteps.filter(s => s.completed).length})
-                        {completedExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        {completedExpanded ? <ChevronDown className="w-4 h-4 inline ml-1" /> : <ChevronRight className="w-4 h-4 inline ml-1" />}
                       </span>
                     </button>
                     
                     {completedExpanded && (
-                      <div className="max-h-96 overflow-y-auto">
-                        <ul className="space-y-3">
-                          {nextSteps.filter(s => s.completed).map((step) => (
-                            <li key={step.id} className="flex items-start gap-3 p-3 bg-green-50 rounded-lg">
+                      <div className="max-h-96 overflow-y-auto space-y-3">
+                        {nextSteps.filter(s => s.completed).map((step) => (
+                          <div key={step.id} className="glass-bar-row p-4 opacity-75">
+                            <div className="flex items-start gap-4">
                               <button
                                 onClick={() => toggleNextStep(step)}
                                 disabled={updatingStepId === step.id}
-                                className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 ${
+                                className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 ${
                                   step.completed
                                     ? 'bg-green-600 border-green-600'
-                                    : 'border-gray-300 hover:border-indigo-600'
+                                    : 'border-gray-300 hover:border-blue-600'
                                 } ${updatingStepId === step.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                               >
-                                {step.completed && <CheckCircle className="w-3 h-3 text-white" />}
+                                {step.completed && <CheckCircle className="w-4 h-4 text-white" />}
                               </button>
                               
                               <div className="flex-1 min-w-0">
-                                <p className="text-gray-700 line-through">{step.text}</p>
-                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <p className="text-gray-700 line-through mb-2">{step.text}</p>
+                                <div className="flex items-center gap-2 flex-wrap">
                                   {step.owner && (
-                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                                       Owner: {step.owner}
                                     </span>
                                   )}
                                   {step.due_date && (
-                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                    <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
                                       Due: {new Date(step.due_date).toLocaleDateString()}
                                     </span>
                                   )}
                                 </div>
                               </div>
-                            </li>
-                          ))}
-                        </ul>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -571,8 +571,8 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                 onClose={() => setSelectedThreadId(null)}
               />
             ) : (
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h2 className="text-xl font-semibold text-slate-800 mb-4">Email Threads</h2>
+              <div className="glass-card rounded-2xl p-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Email Threads</h2>
                 <p className="text-sm text-gray-600 mb-6">
                   {threadsLoading 
                     ? 'Loading threads...' 
