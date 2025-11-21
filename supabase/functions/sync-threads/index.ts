@@ -983,9 +983,72 @@ serve(async (req: Request) => {
               console.log(`✨ Thread ${threadId} is new. Processing...`);
           }
           
-          // --- NEW ---
-          // (Task 2.9) Discovery Loop: Find all companies & customers in this thread
-          const discoveredCompanyIds = new Map<string, boolean>();
+          // --- REFACTORED ---
+          // Step 1: Company Discovery Phase - Discover all unique domains and link to companies
+          // This happens BEFORE customer creation to ensure all companies are discovered regardless of customer creation success
+          const discoveredCompanyIds = new Map<string, boolean>(); // Map<company_id, true>
+          const domainToCompanyId = new Map<string, string>(); // Map<domain, company_id> for quick lookup
+          
+          // Collect all unique domains from all messages
+          const uniqueDomains = new Set<string>();
+          for (const msg of messages) {
+            const msgHeaders = msg.payload?.headers || [];
+            const fromHeader = msgHeaders.find((h: any) => h.name.toLowerCase() === 'from')?.value || '';
+            const toHeader = msgHeaders.find((h: any) => h.name.toLowerCase() === 'to')?.value || '';
+            const ccHeader = msgHeaders.find((h: any) => h.name.toLowerCase() === 'cc')?.value || '';
+            
+            const allParticipantHeaders = [fromHeader, toHeader, ccHeader];
+            
+            for (const header of allParticipantHeaders) {
+              const emails = header.match(/[\w.-]+@[\w.-]+\.\w+/g) || [];
+              for (const email of emails) {
+                if (email === userEmail) continue; // Skip internal email
+                const domain = email.split('@')[1];
+                if (domain) {
+                  uniqueDomains.add(domain);
+                }
+              }
+            }
+          }
+          
+          // For each unique domain, create/find company and add to discoveredCompanyIds
+          console.log(`🔍 Discovering ${uniqueDomains.size} unique company domain(s) for thread ${threadId}`);
+          for (const domain of uniqueDomains) {
+            try {
+              const companyName = domain.split('.')[0].split('-').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+              
+              const { data: company, error: companyError } = await supabaseAdmin.from('companies').upsert({
+                domain_name: domain,
+                company_name: companyName,
+                user_id: userId
+              }, {
+                onConflict: 'user_id, domain_name',
+                ignoreDuplicates: false
+              }).select('company_id').single();
+
+              if (companyError) {
+                console.error(`❌ Failed to create/find company for domain ${domain}:`, companyError);
+                // Continue processing other domains even if this one fails
+                continue;
+              }
+              
+              const companyId = company?.company_id;
+              if (companyId) {
+                discoveredCompanyIds.set(companyId, true);
+                domainToCompanyId.set(domain, companyId);
+                console.log(`✅ Discovered company ${companyId} for domain ${domain}`);
+              } else {
+                console.warn(`⚠️ Company created but no company_id returned for domain ${domain}`);
+              }
+            } catch (error) {
+              console.error(`❌ Error discovering company for domain ${domain}:`, error);
+              // Continue processing other domains
+            }
+          }
+          
+          console.log(`✅ Company discovery complete: ${discoveredCompanyIds.size} company/companies found for thread ${threadId}`);
+          
+          // --- Step 2: Customer Creation Phase - Create/find customers using already-discovered companies
           const discoveredCustomerIds = new Map<string, string>(); // Map<email, customer_id (uuid)>
           const msgCustomerMap = new Map<string, string | null>(); // Map<message_id, customer_id (uuid)>
 
@@ -1005,226 +1068,213 @@ serve(async (req: Request) => {
                 const domain = email.split('@')[1];
                 if (!domain) continue;
                 
-                // This is your exact, proven company/customer creation logic
+                // Get company_id from already-discovered companies
+                const companyId = domainToCompanyId.get(domain);
+                if (!companyId) {
+                  console.warn(`⚠️ Domain ${domain} not found in discovered companies for email ${email}. Skipping customer creation.`);
+                  continue;
+                }
+                
+                // Customer creation logic (company already exists)
                 try {
-                  const companyName = domain.split('.')[0].split('-').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                  const senderName = fromHeader.includes(email) ? (fromHeader.split('<')[0].trim().replace(/"/g, '') || email) : email;
+
+                  // Check cache first to avoid duplicate upserts
+                  let customerId: string | null = null;
                   
-                  const { data: company, error: companyError } = await supabaseAdmin.from('companies').upsert({
-                    domain_name: domain,
-                    company_name: companyName,
-                    user_id: userId
-                  }, {
-                    onConflict: 'user_id, domain_name', // Your existing schema
-                    ignoreDuplicates: false
-                  }).select('company_id').single();
-
-                  if (companyError) throw companyError;
-                  const companyId = company?.company_id; // This is UUID
-
-                  if (companyId) {
-                    discoveredCompanyIds.set(companyId, true); // Add to our set
+                  if (customerCache.has(email)) {
+                    customerId = customerCache.get(email)!;
+                    console.log(`📦 Using cached customer_id for ${email}: ${customerId}`);
+                  } else {
+                    // Try to fetch existing customer first to avoid duplicate key errors
+                    // First check if customer exists for this company
+                    const { data: existingCustomerCheck, error: fetchCheckError } = await supabaseAdmin
+                      .from('customers')
+                      .select('customer_id, company_id')
+                      .eq('email', email)
+                      .eq('company_id', companyId)
+                      .single();
                     
-                    const senderName = fromHeader.includes(email) ? (fromHeader.split('<')[0].trim().replace(/"/g, '') || email) : email;
-
-                    // --- NEW ---
-                    // Check cache first to avoid duplicate upserts
-                    let customerId: string | null = null;
-                    
-                    if (customerCache.has(email)) {
-                      customerId = customerCache.get(email)!;
-                      console.log(`📦 Using cached customer_id for ${email}: ${customerId}`);
+                    if (!fetchCheckError && existingCustomerCheck) {
+                      // Customer already exists for this company - use it
+                      customerId = existingCustomerCheck.customer_id;
+                      if (customerId) {
+                        customerCache.set(email, customerId);
+                        console.log(`✅ Found existing customer ${email} in database: ${customerId}`);
+                      }
                     } else {
-                      // Try to fetch existing customer first to avoid duplicate key errors
-                      // First check if customer exists for this company
-                      const { data: existingCustomerCheck, error: fetchCheckError } = await supabaseAdmin
+                      // Customer doesn't exist for this company - check if it exists for ANY company
+                      // (because unique constraint is only on email, not company_id+email)
+                      const { data: anyCompanyCustomer, error: anyCompanyError } = await supabaseAdmin
                         .from('customers')
                         .select('customer_id, company_id')
                         .eq('email', email)
-                        .eq('company_id', companyId)
                         .single();
                       
-                      if (!fetchCheckError && existingCustomerCheck) {
-                        // Customer already exists for this company - use it
-                        customerId = existingCustomerCheck.customer_id;
-                        if (customerId) {
-                          customerCache.set(email, customerId);
-                          console.log(`✅ Found existing customer ${email} in database: ${customerId}`);
-                        }
-                      } else {
-                        // Customer doesn't exist for this company - check if it exists for ANY company
-                        // (because unique constraint is only on email, not company_id+email)
-                        const { data: anyCompanyCustomer, error: anyCompanyError } = await supabaseAdmin
+                      if (!anyCompanyError && anyCompanyCustomer) {
+                        // Customer exists but for a different company
+                        console.warn(`⚠️ Customer ${email} already exists for company ${anyCompanyCustomer.company_id}, but we're processing for company ${companyId}. Skipping to avoid duplicate key error.`);
+                        // Skip this customer - can't create it due to unique constraint on email
+                        continue;
+                      }
+                      
+                      // Customer doesn't exist at all - attempt upsert with company_id for proper isolation
+                      const { data: customer, error: customerError } = await supabaseAdmin
+                        .from('customers')
+                        .upsert(
+                          {
+                            email: email,
+                            full_name: senderName,
+                            company_id: companyId,
+                          },
+                          {
+                            onConflict: 'company_id, email', // Updated to match new constraint
+                            ignoreDuplicates: false,
+                          }
+                        )
+                        .select('customer_id, company_id')
+                        .single();
+
+                    // --- IMPROVED ERROR HANDLING ---
+                    if (customerError) {
+                      // Check if it's a duplicate key error (code 23505)
+                      // Check multiple ways the error might be structured
+                      const errorCode = customerError.code || customerError?.code || String(customerError.code);
+                      const errorMessage = customerError.message || String(customerError);
+                      const errorString = JSON.stringify(customerError);
+                      
+                      const isDuplicateKeyError = 
+                        errorCode === '23505' || 
+                        errorCode === 23505 ||
+                        errorCode === '23505' ||
+                        String(errorCode) === '23505' ||
+                        errorMessage?.includes('duplicate key') ||
+                        errorMessage?.includes('already exists') ||
+                        errorMessage?.includes('violates unique constraint') ||
+                        errorString?.includes('23505') ||
+                        errorString?.includes('duplicate key') ||
+                        errorString?.includes('customers_email_key') ||
+                        errorString?.includes('violates unique constraint');
+                      
+                      if (isDuplicateKeyError) {
+                        console.warn(`⚠️ Duplicate key error detected for customer ${email}. Error details:`, {
+                          code: errorCode,
+                          message: errorMessage,
+                          fullError: customerError
+                        });
+                        console.warn(`⚠️ Attempting to fetch existing customer for company ${companyId}...`);
+                        
+                        // Try to fetch existing customer for this company_id and email
+                        const { data: existingCustomer, error: fetchError } = await supabaseAdmin
                           .from('customers')
                           .select('customer_id, company_id')
                           .eq('email', email)
+                          .eq('company_id', companyId)
                           .single();
                         
-                        if (!anyCompanyError && anyCompanyCustomer) {
-                          // Customer exists but for a different company
-                          console.warn(`⚠️ Customer ${email} already exists for company ${anyCompanyCustomer.company_id}, but we're processing for company ${companyId}. Skipping to avoid duplicate key error.`);
-                          // Skip this customer - can't create it due to unique constraint on email
+                        if (fetchError || !existingCustomer) {
+                          // Customer exists but for a different company - try to fetch without company_id filter
+                          console.warn(`⚠️ Customer ${email} not found for company ${companyId}. Checking if it exists for another company...`);
+                          
+                          const { data: anyCustomer, error: anyFetchError } = await supabaseAdmin
+                            .from('customers')
+                            .select('customer_id, company_id')
+                            .eq('email', email)
+                            .single();
+                          
+                          if (anyCustomer) {
+                            console.error(`❌ Customer ${email} exists but belongs to company ${anyCustomer.company_id}, not ${companyId}. This indicates the unique constraint should include company_id. Skipping this customer.`);
+                            // Skip this customer but continue processing
+                            continue;
+                          } else {
+                            // This shouldn't happen - duplicate key error but customer doesn't exist?
+                            console.error(`❌ Duplicate key error for ${email} but customer not found in database. This is unexpected. Skipping.`);
+                            continue;
+                          }
+                        }
+                        
+                        // Use the existing customer
+                        customerId = existingCustomer.customer_id;
+                        if (!customerId) {
+                          console.error(`❌ Customer ID not found in existing customer data for ${email}`);
                           continue;
                         }
                         
-                        // Customer doesn't exist at all - attempt upsert with company_id for proper isolation
-                        const { data: customer, error: customerError } = await supabaseAdmin
+                        // Verify it belongs to the correct company
+                        if (existingCustomer.company_id && existingCustomer.company_id !== companyId) {
+                          console.error(`❌ Customer ${email} belongs to company ${existingCustomer.company_id}, not ${companyId}. Skipping.`);
+                          continue;
+                        }
+                        
+                        // Add to cache for subsequent lookups
+                        customerCache.set(email, customerId);
+                        console.log(`✅ Found existing customer for ${email}: ${customerId}`);
+                      } else {
+                        // Other error - try one more time to fetch the customer before failing
+                        console.warn(`⚠️ Upsert failed with non-duplicate-key error. Attempting to fetch customer as fallback...`);
+                        const { data: fallbackCustomer, error: fallbackError } = await supabaseAdmin
                           .from('customers')
-                          .upsert(
-                            {
-                              email: email,
-                              full_name: senderName,
-                              company_id: companyId,
-                            },
-                            {
-                              onConflict: 'company_id, email', // Updated to match new constraint
-                              ignoreDuplicates: false,
-                            }
-                          )
                           .select('customer_id, company_id')
+                          .eq('email', email)
+                          .eq('company_id', companyId)
                           .single();
-
-                      // --- IMPROVED ERROR HANDLING ---
-                      if (customerError) {
-                        // Check if it's a duplicate key error (code 23505)
-                        // Check multiple ways the error might be structured
-                        const errorCode = customerError.code || customerError?.code || String(customerError.code);
-                        const errorMessage = customerError.message || String(customerError);
-                        const errorString = JSON.stringify(customerError);
                         
-                        const isDuplicateKeyError = 
-                          errorCode === '23505' || 
-                          errorCode === 23505 ||
-                          errorCode === '23505' ||
-                          String(errorCode) === '23505' ||
-                          errorMessage?.includes('duplicate key') ||
-                          errorMessage?.includes('already exists') ||
-                          errorMessage?.includes('violates unique constraint') ||
-                          errorString?.includes('23505') ||
-                          errorString?.includes('duplicate key') ||
-                          errorString?.includes('customers_email_key') ||
-                          errorString?.includes('violates unique constraint');
-                        
-                        if (isDuplicateKeyError) {
-                          console.warn(`⚠️ Duplicate key error detected for customer ${email}. Error details:`, {
-                            code: errorCode,
-                            message: errorMessage,
-                            fullError: customerError
-                          });
-                          console.warn(`⚠️ Attempting to fetch existing customer for company ${companyId}...`);
-                          
-                          // Try to fetch existing customer for this company_id and email
-                          const { data: existingCustomer, error: fetchError } = await supabaseAdmin
-                            .from('customers')
-                            .select('customer_id, company_id')
-                            .eq('email', email)
-                            .eq('company_id', companyId)
-                            .single();
-                          
-                          if (fetchError || !existingCustomer) {
-                            // Customer exists but for a different company - try to fetch without company_id filter
-                            console.warn(`⚠️ Customer ${email} not found for company ${companyId}. Checking if it exists for another company...`);
-                            
-                            const { data: anyCustomer, error: anyFetchError } = await supabaseAdmin
-                              .from('customers')
-                              .select('customer_id, company_id')
-                              .eq('email', email)
-                              .single();
-                            
-                            if (anyCustomer) {
-                              console.error(`❌ Customer ${email} exists but belongs to company ${anyCustomer.company_id}, not ${companyId}. This indicates the unique constraint should include company_id. Skipping this customer.`);
-                              // Skip this customer but continue processing
-                              continue;
-                            } else {
-                              // This shouldn't happen - duplicate key error but customer doesn't exist?
-                              console.error(`❌ Duplicate key error for ${email} but customer not found in database. This is unexpected. Skipping.`);
-                              continue;
-                            }
-                          }
-                          
-                          // Use the existing customer
-                          customerId = existingCustomer.customer_id;
-                          if (!customerId) {
-                            console.error(`❌ Customer ID not found in existing customer data for ${email}`);
-                            continue;
-                          }
-                          
-                          // Verify it belongs to the correct company
-                          if (existingCustomer.company_id && existingCustomer.company_id !== companyId) {
-                            console.error(`❌ Customer ${email} belongs to company ${existingCustomer.company_id}, not ${companyId}. Skipping.`);
-                            continue;
-                          }
-                          
-                          // Add to cache for subsequent lookups
-                          customerCache.set(email, customerId);
-                          console.log(`✅ Found existing customer for ${email}: ${customerId}`);
-                        } else {
-                          // Other error - try one more time to fetch the customer before failing
-                          console.warn(`⚠️ Upsert failed with non-duplicate-key error. Attempting to fetch customer as fallback...`);
-                          const { data: fallbackCustomer, error: fallbackError } = await supabaseAdmin
-                            .from('customers')
-                            .select('customer_id, company_id')
-                            .eq('email', email)
-                            .eq('company_id', companyId)
-                            .single();
-                          
-                          if (!fallbackError && fallbackCustomer) {
-                            // Found it - use it
-                            customerId = fallbackCustomer.customer_id;
-                            if (customerId) {
-                              customerCache.set(email, customerId);
-                              console.log(`✅ Fallback fetch succeeded for ${email}: ${customerId}`);
-                            } else {
-                              console.error(`!!! FATAL: Failed to upsert customer ${email} for company ${companyId}. Error:`, customerError);
-                              throw new Error(`Customer upsert failed: ${customerError.message || String(customerError)}`);
-                            }
+                        if (!fallbackError && fallbackCustomer) {
+                          // Found it - use it
+                          customerId = fallbackCustomer.customer_id;
+                          if (customerId) {
+                            customerCache.set(email, customerId);
+                            console.log(`✅ Fallback fetch succeeded for ${email}: ${customerId}`);
                           } else {
-                            // Still not found - throw to fail the job
                             console.error(`!!! FATAL: Failed to upsert customer ${email} for company ${companyId}. Error:`, customerError);
                             throw new Error(`Customer upsert failed: ${customerError.message || String(customerError)}`);
                           }
-                        }
-                      } else {
-                        // No error - check if customer data was returned
-                        if (!customer) {
-                          // This should not happen if the upsert is correct, but it's a good failsafe
-                          throw new Error(`Customer data not returned for ${email} after upsert.`);
                         } else {
-                          // Upsert succeeded - verify the customer belongs to this company
-                          customerId = customer.customer_id;
-                          if (!customerId) {
-                            throw new Error(`Customer ID not found in returned data for ${email}. Customer data: ${JSON.stringify(customer)}`);
-                          }
-                          
-                          // Verify company_id matches (important for data integrity)
-                          if (customer.company_id && customer.company_id !== companyId) {
-                            console.error(`⚠️ WARNING: Customer ${email} belongs to company ${customer.company_id}, but we're processing for company ${companyId}. This suggests a data integrity issue.`);
-                            // Still use the customer_id, but log the warning
-                          }
-                          
-                          console.log(`✅ Successfully upserted customer ${email} with customer_id: ${customerId}`);
+                          // Still not found - throw to fail the job
+                          console.error(`!!! FATAL: Failed to upsert customer ${email} for company ${companyId}. Error:`, customerError);
+                          throw new Error(`Customer upsert failed: ${customerError.message || String(customerError)}`);
                         }
                       }
-                      
-                      // Add to cache for subsequent lookups in this batch
-                      if (customerId) {
-                        customerCache.set(email, customerId);
+                    } else {
+                      // No error - check if customer data was returned
+                      if (!customer) {
+                        // This should not happen if the upsert is correct, but it's a good failsafe
+                        throw new Error(`Customer data not returned for ${email} after upsert.`);
+                      } else {
+                        // Upsert succeeded - verify the customer belongs to this company
+                        customerId = customer.customer_id;
+                        if (!customerId) {
+                          throw new Error(`Customer ID not found in returned data for ${email}. Customer data: ${JSON.stringify(customer)}`);
+                        }
+                        
+                        // Verify company_id matches (important for data integrity)
+                        if (customer.company_id && customer.company_id !== companyId) {
+                          console.error(`⚠️ WARNING: Customer ${email} belongs to company ${customer.company_id}, but we're processing for company ${companyId}. This suggests a data integrity issue.`);
+                          // Still use the customer_id, but log the warning
+                        }
+                        
+                        console.log(`✅ Successfully upserted customer ${email} with customer_id: ${customerId}`);
                       }
                     }
                     
-                    if (!customerId) {
-                      console.error(`❌ Could not get customer_id for ${email}. Skipping.`);
-                      continue;
-                    }
-                    
-                    discoveredCustomerIds.set(email, customerId);
-                    
-                    if (fromHeader.includes(email)) {
-                      msgCustomerMap.set(msg.id, customerId); // Map this message to its sender
+                    // Add to cache for subsequent lookups in this batch
+                    if (customerId) {
+                      customerCache.set(email, customerId);
                     }
                   }
-                }
+                  
+                  if (!customerId) {
+                    console.error(`❌ Could not get customer_id for ${email}. Skipping.`);
+                    continue;
+                  }
+                  
+                  discoveredCustomerIds.set(email, customerId);
+                  
+                  if (fromHeader.includes(email)) {
+                    msgCustomerMap.set(msg.id, customerId); // Map this message to its sender
+                  }
                 } catch (error) {
-                  console.error(`Error in company/customer creation for ${email}:`, error);
+                  console.error(`Error in customer creation for ${email}:`, error);
                   
                   // Check if it's a duplicate key error - handle gracefully
                   const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1240,7 +1290,7 @@ serve(async (req: Request) => {
                   
                   if (isDuplicateKeyError) {
                     console.warn(`⚠️ Duplicate key error caught in outer catch for ${email}. This should have been handled earlier. Skipping this customer.`);
-                    // Skip this customer but continue processing
+                    // Skip this customer but continue processing - company linking already happened
                     continue;
                   }
                   
@@ -1248,7 +1298,7 @@ serve(async (req: Request) => {
                   if (error instanceof Error && error.message.includes('Customer upsert failed')) {
                     throw error;
                   }
-                  // For other errors (like company creation), continue processing
+                  // For other errors, continue processing - company linking already happened
                 }
               }
             }
@@ -1443,8 +1493,17 @@ serve(async (req: Request) => {
           // Now add messages to messagesToStore (only after thread is successfully prepared)
           messagesToStore.push(...threadMessages);
 
-          // Add links for this thread
-          for (const companyId of discoveredCompanyIds.keys()) {
+          // Add links for this thread - link to ALL discovered companies
+          const companyIdsArray = Array.from(discoveredCompanyIds.keys());
+          
+          // Validation: Log warning if no companies were discovered (shouldn't happen if thread has external emails)
+          if (companyIdsArray.length === 0) {
+            console.warn(`⚠️ WARNING: No companies discovered for thread ${threadId}. This thread may only contain internal emails or no valid email addresses.`);
+          } else {
+            console.log(`🔗 Linking thread ${threadId} to ${companyIdsArray.length} company/companies: ${companyIdsArray.join(', ')}`);
+          }
+          
+          for (const companyId of companyIdsArray) {
             linksToStore.push({
               thread_id: threadId,
               company_id: companyId,
@@ -1452,7 +1511,7 @@ serve(async (req: Request) => {
             });
           }
           
-          console.log(`✅ Successfully processed thread ${threadId} - ${messages.length} messages, ${discoveredCompanyIds.size} companies. Added to batch.`);
+          console.log(`✅ Successfully processed thread ${threadId} - ${messages.length} messages, ${discoveredCompanyIds.size} company/companies linked. Added to batch.`);
 
         } catch (error) {
           console.error(`Failed to process thread ${threadId}. Skipping. Error:`, error);
