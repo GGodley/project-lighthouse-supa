@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useSupabase } from '@/components/SupabaseProvider'
-import { MoreHorizontal, Loader2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
+import { MoreHorizontal, Loader2, CheckCircle2, XCircle, RefreshCw, ArrowUp, ArrowDown } from 'lucide-react'
 import { useThreadSync } from '@/hooks/useThreadSync'
 import HealthScoreBar from '@/components/ui/HealthScoreBar'
 import ProgressBar from '@/components/ui/ProgressBar'
@@ -35,6 +35,8 @@ const CustomerThreadsPage: React.FC = () => {
   const [selectedArchivedCompanies, setSelectedArchivedCompanies] = useState<string[]>([])
   const [isMainTableCollapsed, setIsMainTableCollapsed] = useState(false)
   const [isArchivedTableCollapsed, setIsArchivedTableCollapsed] = useState(true)
+  const [sortColumn, setSortColumn] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null)
   const supabase = useSupabase()
 
   // Get auth session for provider token and user email
@@ -94,6 +96,123 @@ const CustomerThreadsPage: React.FC = () => {
     'Neutral': 'bg-yellow-100 text-yellow-800',
     'Needs Attention': 'bg-yellow-100 text-yellow-800',
   };
+
+  // Sort handler - cycles through: desc → asc → null (default)
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      // Same column clicked - cycle through states
+      if (sortDirection === 'desc') {
+        setSortDirection('asc')
+      } else if (sortDirection === 'asc') {
+        setSortColumn(null)
+        setSortDirection(null)
+      }
+    } else {
+      // New column clicked - start with descending
+      setSortColumn(column)
+      setSortDirection('desc')
+    }
+  }
+
+  // Sort companies based on current sort state
+  const sortCompanies = (companiesToSort: Company[]): Company[] => {
+    if (!sortColumn || !sortDirection) {
+      // Default sort: alphabetical by company name
+      return [...companiesToSort].sort((a, b) => {
+        const aName = (a.company_name || '').toLowerCase()
+        const bName = (b.company_name || '').toLowerCase()
+        return aName.localeCompare(bName)
+      })
+    }
+
+    return [...companiesToSort].sort((a, b) => {
+      let aValue: any
+      let bValue: any
+
+      switch (sortColumn) {
+        case 'company_name':
+          aValue = (a.company_name || '').toLowerCase()
+          bValue = (b.company_name || '').toLowerCase()
+          break
+        case 'health_score':
+          aValue = a.health_score ?? -Infinity
+          bValue = b.health_score ?? -Infinity
+          break
+        case 'status':
+          aValue = (a.overall_sentiment || '').toLowerCase()
+          bValue = (b.overall_sentiment || '').toLowerCase()
+          break
+        case 'mrr':
+          aValue = a.mrr ?? -Infinity
+          bValue = b.mrr ?? -Infinity
+          break
+        case 'renewal_date':
+          aValue = a.renewal_date ? new Date(a.renewal_date).getTime() : -Infinity
+          bValue = b.renewal_date ? new Date(b.renewal_date).getTime() : -Infinity
+          break
+        case 'last_interaction':
+          aValue = a.last_interaction_at ? new Date(a.last_interaction_at).getTime() : -Infinity
+          bValue = b.last_interaction_at ? new Date(b.last_interaction_at).getTime() : -Infinity
+          break
+        default:
+          return 0
+      }
+
+      // Handle null/undefined values - place at end
+      if (aValue === null || aValue === undefined || aValue === -Infinity) return 1
+      if (bValue === null || bValue === undefined || bValue === -Infinity) return -1
+
+      // Compare values
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        const comparison = aValue.localeCompare(bValue)
+        return sortDirection === 'asc' ? comparison : -comparison
+      } else {
+        const comparison = aValue < bValue ? -1 : aValue > bValue ? 1 : 0
+        return sortDirection === 'asc' ? comparison : -comparison
+      }
+    })
+  }
+
+  // Get sorted companies
+  const sortedCompanies = sortCompanies(companies)
+  const sortedArchivedCompanies = sortCompanies(archivedCompanies)
+
+  // Render sortable column header
+  const renderSortableHeader = (columnKey: string, label: string) => {
+    const isActive = sortColumn === columnKey
+    const isAsc = isActive && sortDirection === 'asc'
+    const isDesc = isActive && sortDirection === 'desc'
+
+    return (
+      <th 
+        scope="col" 
+        className="px-6 py-3"
+      >
+        <button
+          onClick={() => handleSort(columnKey)}
+          className={`flex items-center space-x-1 px-2 py-1 rounded transition-colors ${
+            isActive 
+              ? 'bg-gray-200 hover:bg-gray-300' 
+              : 'hover:bg-gray-100'
+          }`}
+        >
+          <span>{label}</span>
+          <div className="flex flex-col items-center">
+            <ArrowUp 
+              className={`h-3 w-3 ${
+                isAsc ? 'text-gray-700' : 'text-gray-400'
+              }`} 
+            />
+            <ArrowDown 
+              className={`h-3 w-3 -mt-1 ${
+                isDesc ? 'text-gray-700' : 'text-gray-400'
+              }`} 
+            />
+          </div>
+        </button>
+      </th>
+    )
+  }
 
   useEffect(() => {
     const fetchCompanies = async () => {
@@ -186,7 +305,7 @@ const CustomerThreadsPage: React.FC = () => {
   // Bulk selection handlers
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
-      setSelectedCompanies(companies.map(c => c.company_id))
+      setSelectedCompanies(sortedCompanies.map(c => c.company_id))
     } else {
       setSelectedCompanies([])
     }
@@ -421,16 +540,16 @@ const CustomerThreadsPage: React.FC = () => {
                     <input 
                       type="checkbox" 
                       className="rounded" 
-                      checked={companies.length > 0 && selectedCompanies.length === companies.length}
+                      checked={sortedCompanies.length > 0 && selectedCompanies.length === sortedCompanies.length}
                       onChange={handleSelectAll}
                     />
                   </th>
-                  <th scope="col" className="px-6 py-3">Company Name</th>
-                  <th scope="col" className="px-6 py-3">Health Score</th>
-                  <th scope="col" className="px-6 py-3">Status</th>
-                  <th scope="col" className="px-6 py-3">MRR</th>
-                  <th scope="col" className="px-6 py-3">Renewal Date</th>
-                  <th scope="col" className="px-6 py-3">Last Interaction</th>
+                  {renderSortableHeader('company_name', 'Company Name')}
+                  {renderSortableHeader('health_score', 'Health Score')}
+                  {renderSortableHeader('status', 'Status')}
+                  {renderSortableHeader('mrr', 'MRR')}
+                  {renderSortableHeader('renewal_date', 'Renewal Date')}
+                  {renderSortableHeader('last_interaction', 'Last Interaction')}
                   <th scope="col" className="px-6 py-3">Actions</th>
                 </tr>
               </thead>
@@ -439,10 +558,10 @@ const CustomerThreadsPage: React.FC = () => {
                   <tr><td colSpan={8} className="text-center p-8">Loading companies...</td></tr>
                 ) : error ? (
                   <tr><td colSpan={8} className="text-center p-8 text-red-500">{error}</td></tr>
-                ) : companies.length === 0 ? (
+                ) : sortedCompanies.length === 0 ? (
                   <tr><td colSpan={8} className="text-center p-8 text-gray-500">No companies found. Companies will appear here after thread sync.</td></tr>
                 ) : (
-                  companies.map((company, index) => {
+                  sortedCompanies.map((company, index) => {
                     const isSelected = selectedCompanies.includes(company.company_id);
                     return (
                       <tr key={index} className="bg-white border-b hover:bg-gray-50">
@@ -599,27 +718,27 @@ const CustomerThreadsPage: React.FC = () => {
                         <input 
                           type="checkbox" 
                           className="rounded" 
-                          checked={archivedCompanies.length > 0 && selectedArchivedCompanies.length === archivedCompanies.length}
+                          checked={sortedArchivedCompanies.length > 0 && selectedArchivedCompanies.length === sortedArchivedCompanies.length}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setSelectedArchivedCompanies(archivedCompanies.map(c => c.company_id))
+                              setSelectedArchivedCompanies(sortedArchivedCompanies.map(c => c.company_id))
                             } else {
                               setSelectedArchivedCompanies([])
                             }
                           }}
                         />
                       </th>
-                      <th scope="col" className="px-6 py-3">Company Name</th>
-                      <th scope="col" className="px-6 py-3">Health Score</th>
-                      <th scope="col" className="px-6 py-3">Status</th>
-                      <th scope="col" className="px-6 py-3">MRR</th>
-                      <th scope="col" className="px-6 py-3">Renewal Date</th>
-                      <th scope="col" className="px-6 py-3">Last Interaction</th>
+                      {renderSortableHeader('company_name', 'Company Name')}
+                      {renderSortableHeader('health_score', 'Health Score')}
+                      {renderSortableHeader('status', 'Status')}
+                      {renderSortableHeader('mrr', 'MRR')}
+                      {renderSortableHeader('renewal_date', 'Renewal Date')}
+                      {renderSortableHeader('last_interaction', 'Last Interaction')}
                       <th scope="col" className="px-6 py-3">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {archivedCompanies.map((company, index) => {
+                    {sortedArchivedCompanies.map((company, index) => {
                       const isSelected = selectedArchivedCompanies.includes(company.company_id);
                       return (
                         <tr key={index} className="bg-white border-b hover:bg-gray-50">
