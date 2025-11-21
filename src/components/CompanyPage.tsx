@@ -6,6 +6,7 @@ import ThreadConversationView from './ThreadConversationView';
 import { getThreadById } from '@/lib/threads/queries';
 import { LLMSummary } from '@/lib/types/threads';
 import HealthScoreBar from '@/components/ui/HealthScoreBar';
+import { getSentimentFromHealthScore } from '@/lib/utils';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -377,45 +378,31 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                 {/* Right Column - Overall Sentiment */}
                 <div className="w-full md:w-1/3 p-4">
                   <h3 className="font-semibold mb-3">Overall Sentiment</h3>
-                  {company_details.overall_sentiment ? (
-                    <div className={`border rounded-lg p-4 ${
-                      company_details.overall_sentiment === 'Healthy' 
-                        ? 'bg-green-50 border-green-200' 
-                        : company_details.overall_sentiment === 'At Risk'
-                        ? 'bg-red-50 border-red-200'
-                        : 'bg-yellow-50 border-yellow-200'
-                    }`}>
-                      <div className="flex items-center mb-2">
-                        {company_details.overall_sentiment === 'Healthy' ? (
-                          <ArrowUpRight className="h-5 w-5 text-green-600" />
-                        ) : company_details.overall_sentiment === 'At Risk' ? (
-                          <AlertCircle className="h-5 w-5 text-red-600" />
-                        ) : (
-                          <Clock className="h-5 w-5 text-yellow-600" />
-                        )}
-                        <strong className={`ml-2 ${
-                          company_details.overall_sentiment === 'Healthy' 
-                            ? 'text-green-800' 
-                            : company_details.overall_sentiment === 'At Risk'
-                            ? 'text-red-800'
-                            : 'text-yellow-800'
-                        }`}>
-                          {company_details.overall_sentiment}
-                        </strong>
-                      </div>
-                      <p className="text-sm text-gray-700">
-                        {company_details.overall_sentiment === 'Healthy' 
-                          ? 'Customer shows positive sentiment based on interactions from the last 90 days. Recent communications indicate satisfaction and engagement.'
-                          : company_details.overall_sentiment === 'At Risk'
-                          ? 'Customer shows negative sentiment based on interactions from the last 90 days. Attention may be needed to address concerns.'
-                          : 'Customer sentiment is neutral based on interactions from the last 90 days. No strong positive or negative indicators.'}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                      <p className="text-sm text-gray-500">No sentiment data available</p>
-                    </div>
-                  )}
+                  {(() => {
+                    const sentimentData = getSentimentFromHealthScore(company_details.health_score);
+                    if (sentimentData) {
+                      const IconComponent = sentimentData.icon;
+                      return (
+                        <div className={`border rounded-lg p-4 ${sentimentData.colors.bg} ${sentimentData.colors.border}`}>
+                          <div className="flex items-center mb-2">
+                            <IconComponent className={`h-5 w-5 ${sentimentData.colors.icon}`} />
+                            <strong className={`ml-2 ${sentimentData.colors.text}`}>
+                              {sentimentData.category}
+                            </strong>
+                          </div>
+                          <p className="text-sm text-gray-700">
+                            {sentimentData.message}
+                          </p>
+                        </div>
+                      );
+                    } else {
+                        return (
+                          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                            <p className="text-sm text-gray-500">No sentiment data available</p>
+                          </div>
+                        );
+                      }
+                  })()}
                 </div>
               </div>
             </div>

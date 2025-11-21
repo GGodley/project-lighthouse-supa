@@ -174,21 +174,8 @@ Return a JSON object with the following structure:
       "owner": "Name or email of person responsible (or null if not mentioned)",
       "due_date": "YYYY-MM-DD or null if not mentioned"
     }
-  ],
-  "feature_requests": [
-    {
-      "feature_title": "A concise, generic title for the feature (e.g., 'API Rate Limiting', 'Mobile App Improvements')",
-      "request_details": "A string summary of the specific feature being requested",
-      "urgency": "A string chosen from the Urgency levels ('Low', 'Medium', 'High')"
-    }
   ]
 }
-
-Feature Request Urgency:
-- "Low": A "nice to have" suggestion.
-- "Medium": A feature that would provide significant value.
-- "High": A critical request, blocker, or deal-breaker.
-If no feature requests are found, return an empty array [].
 
 CRITICAL INSTRUCTIONS FOR NEXT STEPS:
 - Only extract next steps that are EXPLICITLY mentioned in the conversation
@@ -304,21 +291,8 @@ Return a JSON object with the following structure:
       "owner": "Name or email of person responsible (or null if not mentioned)",
       "due_date": "YYYY-MM-DD or null if not mentioned"
     }
-  ],
-  "feature_requests": [
-    {
-      "feature_title": "A concise, generic title for the feature (e.g., 'API Rate Limiting', 'Mobile App Improvements')",
-      "request_details": "A string summary of the specific feature being requested",
-      "urgency": "A string chosen from the Urgency levels ('Low', 'Medium', 'High')"
-    }
   ]
 }
-
-Feature Request Urgency:
-- "Low": A "nice to have" suggestion.
-- "Medium": A feature that would provide significant value.
-- "High": A critical request, blocker, or deal-breaker.
-If no feature requests are found, return an empty array [].
 
 CRITICAL INSTRUCTIONS FOR NEXT STEPS:
 - Only extract next steps that are EXPLICITLY mentioned in the conversation
@@ -409,21 +383,8 @@ Return a JSON object with the following structure:
       "owner": "Name or email of person responsible (or null if not mentioned)",
       "due_date": "YYYY-MM-DD or null if not mentioned"
     }
-  ],
-  "feature_requests": [
-    {
-      "feature_title": "A concise, generic title for the feature (e.g., 'API Rate Limiting', 'Mobile App Improvements')",
-      "request_details": "A string summary of the specific feature being requested",
-      "urgency": "A string chosen from the Urgency levels ('Low', 'Medium', 'High')"
-    }
   ]
 }
-
-Feature Request Urgency:
-- "Low": A "nice to have" suggestion.
-- "Medium": A feature that would provide significant value.
-- "High": A critical request, blocker, or deal-breaker.
-If no feature requests are found, return an empty array [].
 
 CRITICAL INSTRUCTIONS FOR NEXT STEPS:
 - Only extract next steps that are EXPLICITLY mentioned in the conversation (including new messages)
@@ -759,17 +720,6 @@ serve(async (req: Request) => {
       // Subtract 1 day from last sync time to ensure we catch threads that were updated
       // right at the boundary (Gmail's after: query is inclusive)
       lastSyncTime = new Date(lastSyncTime.getTime() - (24 * 60 * 60 * 1000)); // Subtract 1 day
-      
-      // Cap at 90 days ago maximum to prevent querying threads older than 90 days
-      // This handles cases where users haven't synced in a long time
-      const ninetyDaysAgo = new Date();
-      ninetyDaysAgo.setUTCDate(ninetyDaysAgo.getUTCDate() - 90);
-      
-      if (lastSyncTime < ninetyDaysAgo) {
-        console.log(`⚠️ Last sync time (${lastSyncTime.toISOString()}) is older than 90 days. Capping at 90 days ago: ${ninetyDaysAgo.toISOString()}`);
-        lastSyncTime = ninetyDaysAgo;
-      }
-      
       console.log(`📅 Last sync time (UTC): ${lastSyncTime.toISOString()}. Querying threads modified after this date.`);
     } else {
       // If no last sync time, default to 90 days ago (in UTC)
@@ -788,6 +738,26 @@ serve(async (req: Request) => {
     // Combine base query with exclusion query
     const finalQuery = `${baseQuery}${exclusionQuery}`;
     
+    // --- MODIFIED ---
+    // Swapped 'messages' for 'threads'
+    let listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${encodeURIComponent(finalQuery)}&maxResults=10`; // MODIFIED: maxResults=10 for safety
+    
+    // --- UNCHANGED ---
+    if (pageToken) {
+      listUrl += `&pageToken=${pageToken}`;
+    }
+    const listResp = await fetch(listUrl, {
+      headers: { Authorization: `Bearer ${provider_token}` }
+    });
+    if (!listResp.ok) {
+      throw new Error(`Gmail API list request failed: ${await listResp.text()}`);
+    }
+    const listJson = await listResp.json();
+    
+    // --- MODIFIED ---
+    // Swapped 'messages' for 'threads'
+    const threadIds = listJson.threads?.map((t: any) => t.id).filter(Boolean) || [];
+
     // --- NEW ---
     // Progress tracking: Get current job progress and update
     // Handle gracefully if progress columns don't exist
@@ -816,73 +786,30 @@ serve(async (req: Request) => {
       console.warn(`⚠️ Progress tracking not available (columns may not exist)`);
     }
     
-    // --- NEW ---
-    // On first page, get accurate estimate from Gmail API using messages.list()
-    // messages.list() provides resultSizeEstimate which we can use to calculate total pages
+    // If this is the first page, estimate total pages conservatively
     if (!pageToken) {
-      try {
-        // Get estimate from messages.list() API (which provides resultSizeEstimate)
-        const estimateUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(finalQuery)}&maxResults=1`;
-        const estimateResp = await fetch(estimateUrl, {
-          headers: { Authorization: `Bearer ${provider_token}` }
-        });
-        
-        if (estimateResp.ok) {
-          const estimateJson = await estimateResp.json();
-          const resultSizeEstimate = estimateJson.resultSizeEstimate || 0;
-          
-          if (resultSizeEstimate > 0) {
-            // Calculate total pages: estimate / threads per page (10)
-            // Note: resultSizeEstimate is for messages, but we're processing threads
-            // Since threads can have multiple messages, this is an approximation
-            // But it's much more accurate than our previous estimate
-            const threadsPerPage = 10;
-            estimatedTotalPages = Math.max(1, Math.ceil(resultSizeEstimate / threadsPerPage));
-            console.log(`📊 Gmail API estimate: ${resultSizeEstimate} messages ≈ ${estimatedTotalPages} pages of threads (${threadsPerPage} threads/page)`);
-          } else {
-            // No results, only 1 page
-            estimatedTotalPages = 1;
-            console.log(`📊 Gmail API estimate: No messages found, 1 page expected`);
-          }
-        } else {
-          // If estimate call fails, fall back to conservative estimate
-          console.warn(`⚠️ Could not get Gmail API estimate, using fallback`);
-          estimatedTotalPages = 10; // Fallback estimate
-        }
-      } catch (estimateError) {
-        // If estimate call fails, fall back to conservative estimate
-        console.warn(`⚠️ Error getting Gmail API estimate:`, estimateError);
-        estimatedTotalPages = 10; // Fallback estimate
+      // Estimate total pages based on first page results
+      // Gmail API returns maxResults=10 per page
+      if (listJson.nextPageToken) {
+        // We have more pages - make a conservative estimate
+        // Since we don't know the total, estimate 10 pages minimum
+        // This gives us a reasonable starting point that won't change too often
+        estimatedTotalPages = 10; // Conservative estimate - will only update if we exceed this
+      } else {
+        // Only one page
+        estimatedTotalPages = 1;
       }
       currentPagesCompleted = 0; // Reset for new sync
+    } else {
+      // For subsequent pages, use the existing estimate (don't change it)
+      // Only increment pages_completed
     }
-    // For subsequent pages, use the existing estimate (don't change it)
-    
-    // --- MODIFIED ---
-    // Swapped 'messages' for 'threads'
-    let listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${encodeURIComponent(finalQuery)}&maxResults=10`; // MODIFIED: maxResults=10 for safety
-    
-    // --- UNCHANGED ---
-    if (pageToken) {
-      listUrl += `&pageToken=${pageToken}`;
-    }
-    const listResp = await fetch(listUrl, {
-      headers: { Authorization: `Bearer ${provider_token}` }
-    });
-    if (!listResp.ok) {
-      throw new Error(`Gmail API list request failed: ${await listResp.text()}`);
-    }
-    const listJson = await listResp.json();
-    
-    // --- MODIFIED ---
-    // Swapped 'messages' for 'threads'
-    const threadIds = listJson.threads?.map((t: any) => t.id).filter(Boolean) || [];
     
     // Increment pages_completed for this page
     currentPagesCompleted += 1;
     
     // Only update total_pages if we've exceeded our estimate AND there's still more pages
-    // This should rarely happen now that we have a better initial estimate
+    // This prevents constant recalculation of the percentage
     if (listJson.nextPageToken && estimatedTotalPages !== null && currentPagesCompleted >= estimatedTotalPages) {
       // We've exceeded our estimate - add a conservative buffer (5 more pages)
       // This prevents the percentage from jumping around too much
@@ -983,72 +910,9 @@ serve(async (req: Request) => {
               console.log(`✨ Thread ${threadId} is new. Processing...`);
           }
           
-          // --- REFACTORED ---
-          // Step 1: Company Discovery Phase - Discover all unique domains and link to companies
-          // This happens BEFORE customer creation to ensure all companies are discovered regardless of customer creation success
-          const discoveredCompanyIds = new Map<string, boolean>(); // Map<company_id, true>
-          const domainToCompanyId = new Map<string, string>(); // Map<domain, company_id> for quick lookup
-          
-          // Collect all unique domains from all messages
-          const uniqueDomains = new Set<string>();
-          for (const msg of messages) {
-            const msgHeaders = msg.payload?.headers || [];
-            const fromHeader = msgHeaders.find((h: any) => h.name.toLowerCase() === 'from')?.value || '';
-            const toHeader = msgHeaders.find((h: any) => h.name.toLowerCase() === 'to')?.value || '';
-            const ccHeader = msgHeaders.find((h: any) => h.name.toLowerCase() === 'cc')?.value || '';
-            
-            const allParticipantHeaders = [fromHeader, toHeader, ccHeader];
-            
-            for (const header of allParticipantHeaders) {
-              const emails = header.match(/[\w.-]+@[\w.-]+\.\w+/g) || [];
-              for (const email of emails) {
-                if (email === userEmail) continue; // Skip internal email
-                const domain = email.split('@')[1];
-                if (domain) {
-                  uniqueDomains.add(domain);
-                }
-              }
-            }
-          }
-          
-          // For each unique domain, create/find company and add to discoveredCompanyIds
-          console.log(`🔍 Discovering ${uniqueDomains.size} unique company domain(s) for thread ${threadId}`);
-          for (const domain of uniqueDomains) {
-            try {
-              const companyName = domain.split('.')[0].split('-').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-              
-              const { data: company, error: companyError } = await supabaseAdmin.from('companies').upsert({
-                domain_name: domain,
-                company_name: companyName,
-                user_id: userId
-              }, {
-                onConflict: 'user_id, domain_name',
-                ignoreDuplicates: false
-              }).select('company_id').single();
-
-              if (companyError) {
-                console.error(`❌ Failed to create/find company for domain ${domain}:`, companyError);
-                // Continue processing other domains even if this one fails
-                continue;
-              }
-              
-              const companyId = company?.company_id;
-              if (companyId) {
-                discoveredCompanyIds.set(companyId, true);
-                domainToCompanyId.set(domain, companyId);
-                console.log(`✅ Discovered company ${companyId} for domain ${domain}`);
-              } else {
-                console.warn(`⚠️ Company created but no company_id returned for domain ${domain}`);
-              }
-            } catch (error) {
-              console.error(`❌ Error discovering company for domain ${domain}:`, error);
-              // Continue processing other domains
-            }
-          }
-          
-          console.log(`✅ Company discovery complete: ${discoveredCompanyIds.size} company/companies found for thread ${threadId}`);
-          
-          // --- Step 2: Customer Creation Phase - Create/find customers using already-discovered companies
+          // --- NEW ---
+          // (Task 2.9) Discovery Loop: Find all companies & customers in this thread
+          const discoveredCompanyIds = new Map<string, boolean>();
           const discoveredCustomerIds = new Map<string, string>(); // Map<email, customer_id (uuid)>
           const msgCustomerMap = new Map<string, string | null>(); // Map<message_id, customer_id (uuid)>
 
@@ -1068,213 +932,226 @@ serve(async (req: Request) => {
                 const domain = email.split('@')[1];
                 if (!domain) continue;
                 
-                // Get company_id from already-discovered companies
-                const companyId = domainToCompanyId.get(domain);
-                if (!companyId) {
-                  console.warn(`⚠️ Domain ${domain} not found in discovered companies for email ${email}. Skipping customer creation.`);
-                  continue;
-                }
-                
-                // Customer creation logic (company already exists)
+                // This is your exact, proven company/customer creation logic
                 try {
-                  const senderName = fromHeader.includes(email) ? (fromHeader.split('<')[0].trim().replace(/"/g, '') || email) : email;
-
-                  // Check cache first to avoid duplicate upserts
-                  let customerId: string | null = null;
+                  const companyName = domain.split('.')[0].split('-').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
                   
-                  if (customerCache.has(email)) {
-                    customerId = customerCache.get(email)!;
-                    console.log(`📦 Using cached customer_id for ${email}: ${customerId}`);
-                  } else {
-                    // Try to fetch existing customer first to avoid duplicate key errors
-                    // First check if customer exists for this company
-                    const { data: existingCustomerCheck, error: fetchCheckError } = await supabaseAdmin
-                      .from('customers')
-                      .select('customer_id, company_id')
-                      .eq('email', email)
-                      .eq('company_id', companyId)
-                      .single();
+                  const { data: company, error: companyError } = await supabaseAdmin.from('companies').upsert({
+                    domain_name: domain,
+                    company_name: companyName,
+                    user_id: userId
+                  }, {
+                    onConflict: 'user_id, domain_name', // Your existing schema
+                    ignoreDuplicates: false
+                  }).select('company_id').single();
+
+                  if (companyError) throw companyError;
+                  const companyId = company?.company_id; // This is UUID
+
+                  if (companyId) {
+                    discoveredCompanyIds.set(companyId, true); // Add to our set
                     
-                    if (!fetchCheckError && existingCustomerCheck) {
-                      // Customer already exists for this company - use it
-                      customerId = existingCustomerCheck.customer_id;
-                      if (customerId) {
-                        customerCache.set(email, customerId);
-                        console.log(`✅ Found existing customer ${email} in database: ${customerId}`);
-                      }
+                    const senderName = fromHeader.includes(email) ? (fromHeader.split('<')[0].trim().replace(/"/g, '') || email) : email;
+
+                    // --- NEW ---
+                    // Check cache first to avoid duplicate upserts
+                    let customerId: string | null = null;
+                    
+                    if (customerCache.has(email)) {
+                      customerId = customerCache.get(email)!;
+                      console.log(`📦 Using cached customer_id for ${email}: ${customerId}`);
                     } else {
-                      // Customer doesn't exist for this company - check if it exists for ANY company
-                      // (because unique constraint is only on email, not company_id+email)
-                      const { data: anyCompanyCustomer, error: anyCompanyError } = await supabaseAdmin
+                      // Try to fetch existing customer first to avoid duplicate key errors
+                      // First check if customer exists for this company
+                      const { data: existingCustomerCheck, error: fetchCheckError } = await supabaseAdmin
                         .from('customers')
                         .select('customer_id, company_id')
                         .eq('email', email)
+                        .eq('company_id', companyId)
                         .single();
                       
-                      if (!anyCompanyError && anyCompanyCustomer) {
-                        // Customer exists but for a different company
-                        console.warn(`⚠️ Customer ${email} already exists for company ${anyCompanyCustomer.company_id}, but we're processing for company ${companyId}. Skipping to avoid duplicate key error.`);
-                        // Skip this customer - can't create it due to unique constraint on email
-                        continue;
-                      }
-                      
-                      // Customer doesn't exist at all - attempt upsert with company_id for proper isolation
-                      const { data: customer, error: customerError } = await supabaseAdmin
-                        .from('customers')
-                        .upsert(
-                          {
-                            email: email,
-                            full_name: senderName,
-                            company_id: companyId,
-                          },
-                          {
-                            onConflict: 'company_id, email', // Updated to match new constraint
-                            ignoreDuplicates: false,
-                          }
-                        )
-                        .select('customer_id, company_id')
-                        .single();
-
-                    // --- IMPROVED ERROR HANDLING ---
-                    if (customerError) {
-                      // Check if it's a duplicate key error (code 23505)
-                      // Check multiple ways the error might be structured
-                      const errorCode = customerError.code || customerError?.code || String(customerError.code);
-                      const errorMessage = customerError.message || String(customerError);
-                      const errorString = JSON.stringify(customerError);
-                      
-                      const isDuplicateKeyError = 
-                        errorCode === '23505' || 
-                        errorCode === 23505 ||
-                        errorCode === '23505' ||
-                        String(errorCode) === '23505' ||
-                        errorMessage?.includes('duplicate key') ||
-                        errorMessage?.includes('already exists') ||
-                        errorMessage?.includes('violates unique constraint') ||
-                        errorString?.includes('23505') ||
-                        errorString?.includes('duplicate key') ||
-                        errorString?.includes('customers_email_key') ||
-                        errorString?.includes('violates unique constraint');
-                      
-                      if (isDuplicateKeyError) {
-                        console.warn(`⚠️ Duplicate key error detected for customer ${email}. Error details:`, {
-                          code: errorCode,
-                          message: errorMessage,
-                          fullError: customerError
-                        });
-                        console.warn(`⚠️ Attempting to fetch existing customer for company ${companyId}...`);
-                        
-                        // Try to fetch existing customer for this company_id and email
-                        const { data: existingCustomer, error: fetchError } = await supabaseAdmin
+                      if (!fetchCheckError && existingCustomerCheck) {
+                        // Customer already exists for this company - use it
+                        customerId = existingCustomerCheck.customer_id;
+                        if (customerId) {
+                          customerCache.set(email, customerId);
+                          console.log(`✅ Found existing customer ${email} in database: ${customerId}`);
+                        }
+                      } else {
+                        // Customer doesn't exist for this company - check if it exists for ANY company
+                        // (because unique constraint is only on email, not company_id+email)
+                        const { data: anyCompanyCustomer, error: anyCompanyError } = await supabaseAdmin
                           .from('customers')
                           .select('customer_id, company_id')
                           .eq('email', email)
-                          .eq('company_id', companyId)
                           .single();
                         
-                        if (fetchError || !existingCustomer) {
-                          // Customer exists but for a different company - try to fetch without company_id filter
-                          console.warn(`⚠️ Customer ${email} not found for company ${companyId}. Checking if it exists for another company...`);
+                        if (!anyCompanyError && anyCompanyCustomer) {
+                          // Customer exists but for a different company
+                          console.warn(`⚠️ Customer ${email} already exists for company ${anyCompanyCustomer.company_id}, but we're processing for company ${companyId}. Skipping to avoid duplicate key error.`);
+                          // Skip this customer - can't create it due to unique constraint on email
+                          continue;
+                        }
+                        
+                        // Customer doesn't exist at all - attempt upsert with company_id for proper isolation
+                        const { data: customer, error: customerError } = await supabaseAdmin
+                          .from('customers')
+                          .upsert(
+                            {
+                              email: email,
+                              full_name: senderName,
+                              company_id: companyId,
+                            },
+                            {
+                              onConflict: 'company_id, email', // Updated to match new constraint
+                              ignoreDuplicates: false,
+                            }
+                          )
+                          .select('customer_id, company_id')
+                          .single();
+
+                      // --- IMPROVED ERROR HANDLING ---
+                      if (customerError) {
+                        // Check if it's a duplicate key error (code 23505)
+                        // Check multiple ways the error might be structured
+                        const errorCode = customerError.code || customerError?.code || String(customerError.code);
+                        const errorMessage = customerError.message || String(customerError);
+                        const errorString = JSON.stringify(customerError);
+                        
+                        const isDuplicateKeyError = 
+                          errorCode === '23505' || 
+                          errorCode === 23505 ||
+                          errorCode === '23505' ||
+                          String(errorCode) === '23505' ||
+                          errorMessage?.includes('duplicate key') ||
+                          errorMessage?.includes('already exists') ||
+                          errorMessage?.includes('violates unique constraint') ||
+                          errorString?.includes('23505') ||
+                          errorString?.includes('duplicate key') ||
+                          errorString?.includes('customers_email_key') ||
+                          errorString?.includes('violates unique constraint');
+                        
+                        if (isDuplicateKeyError) {
+                          console.warn(`⚠️ Duplicate key error detected for customer ${email}. Error details:`, {
+                            code: errorCode,
+                            message: errorMessage,
+                            fullError: customerError
+                          });
+                          console.warn(`⚠️ Attempting to fetch existing customer for company ${companyId}...`);
                           
-                          const { data: anyCustomer, error: anyFetchError } = await supabaseAdmin
+                          // Try to fetch existing customer for this company_id and email
+                          const { data: existingCustomer, error: fetchError } = await supabaseAdmin
                             .from('customers')
                             .select('customer_id, company_id')
                             .eq('email', email)
+                            .eq('company_id', companyId)
                             .single();
                           
-                          if (anyCustomer) {
-                            console.error(`❌ Customer ${email} exists but belongs to company ${anyCustomer.company_id}, not ${companyId}. This indicates the unique constraint should include company_id. Skipping this customer.`);
-                            // Skip this customer but continue processing
-                            continue;
-                          } else {
-                            // This shouldn't happen - duplicate key error but customer doesn't exist?
-                            console.error(`❌ Duplicate key error for ${email} but customer not found in database. This is unexpected. Skipping.`);
+                          if (fetchError || !existingCustomer) {
+                            // Customer exists but for a different company - try to fetch without company_id filter
+                            console.warn(`⚠️ Customer ${email} not found for company ${companyId}. Checking if it exists for another company...`);
+                            
+                            const { data: anyCustomer, error: anyFetchError } = await supabaseAdmin
+                              .from('customers')
+                              .select('customer_id, company_id')
+                              .eq('email', email)
+                              .single();
+                            
+                            if (anyCustomer) {
+                              console.error(`❌ Customer ${email} exists but belongs to company ${anyCustomer.company_id}, not ${companyId}. This indicates the unique constraint should include company_id. Skipping this customer.`);
+                              // Skip this customer but continue processing
+                              continue;
+                            } else {
+                              // This shouldn't happen - duplicate key error but customer doesn't exist?
+                              console.error(`❌ Duplicate key error for ${email} but customer not found in database. This is unexpected. Skipping.`);
+                              continue;
+                            }
+                          }
+                          
+                          // Use the existing customer
+                          customerId = existingCustomer.customer_id;
+                          if (!customerId) {
+                            console.error(`❌ Customer ID not found in existing customer data for ${email}`);
                             continue;
                           }
-                        }
-                        
-                        // Use the existing customer
-                        customerId = existingCustomer.customer_id;
-                        if (!customerId) {
-                          console.error(`❌ Customer ID not found in existing customer data for ${email}`);
-                          continue;
-                        }
-                        
-                        // Verify it belongs to the correct company
-                        if (existingCustomer.company_id && existingCustomer.company_id !== companyId) {
-                          console.error(`❌ Customer ${email} belongs to company ${existingCustomer.company_id}, not ${companyId}. Skipping.`);
-                          continue;
-                        }
-                        
-                        // Add to cache for subsequent lookups
-                        customerCache.set(email, customerId);
-                        console.log(`✅ Found existing customer for ${email}: ${customerId}`);
-                      } else {
-                        // Other error - try one more time to fetch the customer before failing
-                        console.warn(`⚠️ Upsert failed with non-duplicate-key error. Attempting to fetch customer as fallback...`);
-                        const { data: fallbackCustomer, error: fallbackError } = await supabaseAdmin
-                          .from('customers')
-                          .select('customer_id, company_id')
-                          .eq('email', email)
-                          .eq('company_id', companyId)
-                          .single();
-                        
-                        if (!fallbackError && fallbackCustomer) {
-                          // Found it - use it
-                          customerId = fallbackCustomer.customer_id;
-                          if (customerId) {
-                            customerCache.set(email, customerId);
-                            console.log(`✅ Fallback fetch succeeded for ${email}: ${customerId}`);
+                          
+                          // Verify it belongs to the correct company
+                          if (existingCustomer.company_id && existingCustomer.company_id !== companyId) {
+                            console.error(`❌ Customer ${email} belongs to company ${existingCustomer.company_id}, not ${companyId}. Skipping.`);
+                            continue;
+                          }
+                          
+                          // Add to cache for subsequent lookups
+                          customerCache.set(email, customerId);
+                          console.log(`✅ Found existing customer for ${email}: ${customerId}`);
+                        } else {
+                          // Other error - try one more time to fetch the customer before failing
+                          console.warn(`⚠️ Upsert failed with non-duplicate-key error. Attempting to fetch customer as fallback...`);
+                          const { data: fallbackCustomer, error: fallbackError } = await supabaseAdmin
+                            .from('customers')
+                            .select('customer_id, company_id')
+                            .eq('email', email)
+                            .eq('company_id', companyId)
+                            .single();
+                          
+                          if (!fallbackError && fallbackCustomer) {
+                            // Found it - use it
+                            customerId = fallbackCustomer.customer_id;
+                            if (customerId) {
+                              customerCache.set(email, customerId);
+                              console.log(`✅ Fallback fetch succeeded for ${email}: ${customerId}`);
+                            } else {
+                              console.error(`!!! FATAL: Failed to upsert customer ${email} for company ${companyId}. Error:`, customerError);
+                              throw new Error(`Customer upsert failed: ${customerError.message || String(customerError)}`);
+                            }
                           } else {
+                            // Still not found - throw to fail the job
                             console.error(`!!! FATAL: Failed to upsert customer ${email} for company ${companyId}. Error:`, customerError);
                             throw new Error(`Customer upsert failed: ${customerError.message || String(customerError)}`);
                           }
+                        }
+                      } else {
+                        // No error - check if customer data was returned
+                        if (!customer) {
+                          // This should not happen if the upsert is correct, but it's a good failsafe
+                          throw new Error(`Customer data not returned for ${email} after upsert.`);
                         } else {
-                          // Still not found - throw to fail the job
-                          console.error(`!!! FATAL: Failed to upsert customer ${email} for company ${companyId}. Error:`, customerError);
-                          throw new Error(`Customer upsert failed: ${customerError.message || String(customerError)}`);
+                          // Upsert succeeded - verify the customer belongs to this company
+                          customerId = customer.customer_id;
+                          if (!customerId) {
+                            throw new Error(`Customer ID not found in returned data for ${email}. Customer data: ${JSON.stringify(customer)}`);
+                          }
+                          
+                          // Verify company_id matches (important for data integrity)
+                          if (customer.company_id && customer.company_id !== companyId) {
+                            console.error(`⚠️ WARNING: Customer ${email} belongs to company ${customer.company_id}, but we're processing for company ${companyId}. This suggests a data integrity issue.`);
+                            // Still use the customer_id, but log the warning
+                          }
+                          
+                          console.log(`✅ Successfully upserted customer ${email} with customer_id: ${customerId}`);
                         }
                       }
-                    } else {
-                      // No error - check if customer data was returned
-                      if (!customer) {
-                        // This should not happen if the upsert is correct, but it's a good failsafe
-                        throw new Error(`Customer data not returned for ${email} after upsert.`);
-                      } else {
-                        // Upsert succeeded - verify the customer belongs to this company
-                        customerId = customer.customer_id;
-                        if (!customerId) {
-                          throw new Error(`Customer ID not found in returned data for ${email}. Customer data: ${JSON.stringify(customer)}`);
-                        }
-                        
-                        // Verify company_id matches (important for data integrity)
-                        if (customer.company_id && customer.company_id !== companyId) {
-                          console.error(`⚠️ WARNING: Customer ${email} belongs to company ${customer.company_id}, but we're processing for company ${companyId}. This suggests a data integrity issue.`);
-                          // Still use the customer_id, but log the warning
-                        }
-                        
-                        console.log(`✅ Successfully upserted customer ${email} with customer_id: ${customerId}`);
+                      
+                      // Add to cache for subsequent lookups in this batch
+                      if (customerId) {
+                        customerCache.set(email, customerId);
                       }
                     }
                     
-                    // Add to cache for subsequent lookups in this batch
-                    if (customerId) {
-                      customerCache.set(email, customerId);
+                    if (!customerId) {
+                      console.error(`❌ Could not get customer_id for ${email}. Skipping.`);
+                      continue;
+                    }
+                    
+                    discoveredCustomerIds.set(email, customerId);
+                    
+                    if (fromHeader.includes(email)) {
+                      msgCustomerMap.set(msg.id, customerId); // Map this message to its sender
                     }
                   }
-                  
-                  if (!customerId) {
-                    console.error(`❌ Could not get customer_id for ${email}. Skipping.`);
-                    continue;
-                  }
-                  
-                  discoveredCustomerIds.set(email, customerId);
-                  
-                  if (fromHeader.includes(email)) {
-                    msgCustomerMap.set(msg.id, customerId); // Map this message to its sender
-                  }
+                }
                 } catch (error) {
-                  console.error(`Error in customer creation for ${email}:`, error);
+                  console.error(`Error in company/customer creation for ${email}:`, error);
                   
                   // Check if it's a duplicate key error - handle gracefully
                   const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1290,7 +1167,7 @@ serve(async (req: Request) => {
                   
                   if (isDuplicateKeyError) {
                     console.warn(`⚠️ Duplicate key error caught in outer catch for ${email}. This should have been handled earlier. Skipping this customer.`);
-                    // Skip this customer but continue processing - company linking already happened
+                    // Skip this customer but continue processing
                     continue;
                   }
                   
@@ -1298,7 +1175,7 @@ serve(async (req: Request) => {
                   if (error instanceof Error && error.message.includes('Customer upsert failed')) {
                     throw error;
                   }
-                  // For other errors, continue processing - company linking already happened
+                  // For other errors (like company creation), continue processing
                 }
               }
             }
@@ -1493,17 +1370,8 @@ serve(async (req: Request) => {
           // Now add messages to messagesToStore (only after thread is successfully prepared)
           messagesToStore.push(...threadMessages);
 
-          // Add links for this thread - link to ALL discovered companies
-          const companyIdsArray = Array.from(discoveredCompanyIds.keys());
-          
-          // Validation: Log warning if no companies were discovered (shouldn't happen if thread has external emails)
-          if (companyIdsArray.length === 0) {
-            console.warn(`⚠️ WARNING: No companies discovered for thread ${threadId}. This thread may only contain internal emails or no valid email addresses.`);
-          } else {
-            console.log(`🔗 Linking thread ${threadId} to ${companyIdsArray.length} company/companies: ${companyIdsArray.join(', ')}`);
-          }
-          
-          for (const companyId of companyIdsArray) {
+          // Add links for this thread
+          for (const companyId of discoveredCompanyIds.keys()) {
             linksToStore.push({
               thread_id: threadId,
               company_id: companyId,
@@ -1511,7 +1379,7 @@ serve(async (req: Request) => {
             });
           }
           
-          console.log(`✅ Successfully processed thread ${threadId} - ${messages.length} messages, ${discoveredCompanyIds.size} company/companies linked. Added to batch.`);
+          console.log(`✅ Successfully processed thread ${threadId} - ${messages.length} messages, ${discoveredCompanyIds.size} companies. Added to batch.`);
 
         } catch (error) {
           console.error(`Failed to process thread ${threadId}. Skipping. Error:`, error);
@@ -1589,12 +1457,10 @@ serve(async (req: Request) => {
         console.warn(`⚠️ Filtered out ${invalidMessagesCount} messages for threads that were not successfully inserted`);
       }
       
-      // Process next steps and feature requests for each thread that has a summary
+      // Process next steps for each thread that has a summary with next steps
       for (const threadData of threadsToStore) {
         if (successfullyInsertedThreadIds.has(threadData.thread_id) && threadData.llm_summary && typeof threadData.llm_summary === 'object') {
           const summary = threadData.llm_summary as any;
-          
-          // Process next steps
           const hasNextSteps = (
             (summary.next_steps && Array.isArray(summary.next_steps) && summary.next_steps.length > 0) ||
             (summary.csm_next_step && typeof summary.csm_next_step === 'string' && summary.csm_next_step.trim() !== '')
@@ -1611,71 +1477,6 @@ serve(async (req: Request) => {
               console.error(`Failed to invoke process-next-steps for thread ${threadData.thread_id}:`, err);
               // Don't throw - this is not critical for the sync to continue
             });
-          }
-          
-          // Process feature requests
-          if (summary.feature_requests && Array.isArray(summary.feature_requests) && summary.feature_requests.length > 0) {
-            // Extract and validate feature requests
-            const featureRequests = summary.feature_requests.filter((req: any) => 
-              typeof req === 'object' && 
-              req !== null &&
-              typeof req.feature_title === 'string' &&
-              typeof req.request_details === 'string' &&
-              ['Low', 'Medium', 'High'].includes(req.urgency)
-            ).map((req: any) => ({
-              feature_title: req.feature_title.trim(),
-              request_details: req.request_details.trim(),
-              urgency: req.urgency as 'Low' | 'Medium' | 'High'
-            }));
-            
-            if (featureRequests.length > 0) {
-              // Get company_id and customer_id from thread context
-              // Find the first company linked to this thread
-              const threadLink = linksToStore.find(link => link.thread_id === threadData.thread_id);
-              if (threadLink) {
-                // Get customer_id from thread messages (use first customer message)
-                const threadMessage = messagesToStore.find(msg => 
-                  msg.thread_id === threadData.thread_id && msg.customer_id
-                );
-                
-                if (threadMessage && threadMessage.customer_id) {
-                  // Get company_id from customer
-                  const { data: customer, error: customerError } = await supabaseAdmin
-                    .from('customers')
-                    .select('company_id')
-                    .eq('customer_id', threadMessage.customer_id)
-                    .single();
-                  
-                  if (!customerError && customer) {
-                    // Import and use shared utility function
-                    const { saveFeatureRequests } = await import('../_shared/feature-request-utils.ts');
-                    
-                    const result = await saveFeatureRequests(
-                      supabaseAdmin,
-                      featureRequests,
-                      {
-                        company_id: customer.company_id,
-                        customer_id: threadMessage.customer_id,
-                        source: 'thread',
-                        thread_id: threadData.thread_id
-                      }
-                    );
-                    
-                    if (result.success) {
-                      console.log(`✅ Successfully saved ${result.savedCount} feature requests from thread ${threadData.thread_id}`);
-                    } else {
-                      console.warn(`⚠️ Saved ${result.savedCount} feature requests with ${result.errors.length} errors for thread ${threadData.thread_id}`);
-                    }
-                  } else {
-                    console.warn(`⚠️ Could not find customer for thread ${threadData.thread_id}, skipping feature requests`);
-                  }
-                } else {
-                  console.warn(`⚠️ No customer messages found for thread ${threadData.thread_id}, skipping feature requests`);
-                }
-              } else {
-                console.warn(`⚠️ No company link found for thread ${threadData.thread_id}, skipping feature requests`);
-              }
-            }
           }
         }
       }

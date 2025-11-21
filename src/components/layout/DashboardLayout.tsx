@@ -98,12 +98,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   // Do not block rendering if profile is missing; continue to show dashboard
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen glass-bg">
       <Sidebar onSignOut={handleSignOut} />
       <main className="flex-1 overflow-auto">
-        <div className="p-6">
-          {children}
-        </div>
+        {children}
       </main>
     </div>
   )
