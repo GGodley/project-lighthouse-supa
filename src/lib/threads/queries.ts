@@ -92,7 +92,7 @@ export async function getThreadMessages(
     .from('thread_messages')
     .select('*')
     .eq('thread_id', threadId)
-    .order('sent_date', { ascending: true });
+    .order('sent_date', { ascending: false });
 }
 
 /**
