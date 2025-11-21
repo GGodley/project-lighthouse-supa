@@ -243,34 +243,34 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
               <p className="text-gray-600 mt-1">Domain: {company_details.domain_name}</p>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-sm">
-              {/* Status pill */}
+                {/* Status pill */}
               <span className="px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-medium">
-                {company_details.status || 'Active'}
-              </span>
-
-              {/* Overall Sentiment pill */}
-              {company_details.overall_sentiment && (
-                <span
-                  className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
-                    sentimentStyles[company_details.overall_sentiment] || 'bg-gray-100 text-gray-800'
-                  }`}
-                >
-                  {company_details.overall_sentiment}
+                  {company_details.status || 'Active'}
                 </span>
-              )}
 
-              {/* Health score */}
-              {company_details.health_score !== null && (
-                <div className="flex items-center gap-2">
+                {/* Overall Sentiment pill */}
+                {company_details.overall_sentiment && (
+                  <span
+                  className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
+                      sentimentStyles[company_details.overall_sentiment] || 'bg-gray-100 text-gray-800'
+                    }`}
+                  >
+                    {company_details.overall_sentiment}
+                  </span>
+                )}
+
+                {/* Health score */}
+                {company_details.health_score !== null && (
+                  <div className="flex items-center gap-2">
                   <span className="text-gray-600 text-sm font-medium">Health Score:</span>
-                  <HealthScoreBar score={company_details.health_score} showLabel={true} />
-                </div>
-              )}
+                    <HealthScoreBar score={company_details.health_score} showLabel={true} />
+                  </div>
+                )}
 
-              {/* MRR */}
+                {/* MRR */}
               <span className="text-gray-700 font-medium">
-                MRR: ${company_details.mrr ? company_details.mrr.toLocaleString() : 'N/A'}
-              </span>
+                  MRR: ${company_details.mrr ? company_details.mrr.toLocaleString() : 'N/A'}
+                </span>
             </div>
           </div>
         </div>
@@ -327,16 +327,16 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                       threads.slice(0, 3).map((thread) => (
                         <div key={thread.thread_id} className="glass-bar-row p-4">
                           <div className="flex gap-4">
-                            <div className="w-1/4">
+                          <div className="w-1/4">
                               <div className="flex items-center text-blue-600 mb-1">
-                                <Mail className="h-4 w-4 mr-1" />
+                              <Mail className="h-4 w-4 mr-1" />
                                 <span className="font-semibold text-sm">Thread</span>
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                {thread.last_message_date ? formatDate(thread.last_message_date) : 'No date'}
-                              </div>
                             </div>
-                            <div className="w-3/4">
+                              <div className="text-xs text-gray-500">
+                              {thread.last_message_date ? formatDate(thread.last_message_date) : 'No date'}
+                            </div>
+                          </div>
+                          <div className="w-3/4">
                               <p className="text-gray-900 font-semibold mb-1">{thread.subject || 'No Subject'}</p>
                               <p className="text-sm text-gray-600 line-clamp-1">{thread.snippet || 'No preview'}</p>
                             </div>
@@ -348,47 +348,33 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                 </div>
 
                 {/* Right Column - Overall Sentiment */}
-<<<<<<< HEAD
                 <div className="w-full md:w-1/3">
                   <h3 className="font-semibold mb-4 text-gray-900">Overall Sentiment</h3>
-                  <div className="glass-card rounded-xl p-4 bg-green-50/50 border-green-200/50">
-                    <div className="flex items-center mb-2">
-                      <ArrowUpRight className="h-5 w-5 text-green-600" />
-                      <strong className="ml-2 text-green-800">Positive</strong>
-                    </div>
-                    <p className="text-sm text-gray-700">
-                      Customer shows high satisfaction with current services. Recent interactions indicate strong engagement and interest in expanding usage. No major concerns raised in recent communications.
-                    </p>
-                  </div>
-=======
-                <div className="w-full md:w-1/3 p-4">
-                  <h3 className="font-semibold mb-3">Overall Sentiment</h3>
                   {(() => {
                     const sentimentData = getSentimentFromHealthScore(company_details.health_score);
                     if (sentimentData) {
                       const IconComponent = sentimentData.icon;
                       return (
-                        <div className={`border rounded-lg p-4 ${sentimentData.colors.bg} ${sentimentData.colors.border}`}>
-                          <div className="flex items-center mb-2">
+                        <div className={`glass-card rounded-xl p-4 ${sentimentData.colors.bg} ${sentimentData.colors.border}`}>
+                    <div className="flex items-center mb-2">
                             <IconComponent className={`h-5 w-5 ${sentimentData.colors.icon}`} />
                             <strong className={`ml-2 ${sentimentData.colors.text}`}>
                               {sentimentData.category}
                             </strong>
-                          </div>
-                          <p className="text-sm text-gray-700">
+                    </div>
+                    <p className="text-sm text-gray-700">
                             {sentimentData.message}
-                          </p>
-                        </div>
+                    </p>
+                  </div>
                       );
                     } else {
                       return (
-                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <div className="glass-card rounded-xl p-4 bg-gray-50/50 border-gray-200/50">
                           <p className="text-sm text-gray-500">No sentiment data available</p>
                         </div>
                       );
                     }
                   })()}
->>>>>>> feature/dynamic-sentiment-from-health-score
                 </div>
               </div>
             </div>
@@ -461,17 +447,17 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                             feedback.urgency === 'High' ? 'bg-red-50 text-red-700 border border-red-200' :
                             feedback.urgency === 'Medium' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
                             'bg-green-50 text-green-700 border border-green-200'
-                          }`}>
-                            {feedback.urgency}
-                          </span>
-                        </div>
+                        }`}>
+                          {feedback.urgency}
+                        </span>
+                      </div>
                         <p className="text-gray-700 mb-2">{feedback.description}</p>
                         {feedback.created_at && (
                           <p className="text-xs text-gray-500 mt-2">
                             Created {new Date(feedback.created_at).toLocaleDateString()}
                           </p>
                         )}
-                      </div>
+                    </div>
                     );
                   })}
                 </div>
@@ -499,31 +485,31 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                       {nextSteps.filter(s => !s.completed).map((step) => (
                         <li key={step.id} className="glass-bar-row p-4">
                           <div className="flex items-start gap-4">
-                            <button
-                              onClick={() => toggleNextStep(step)}
-                              disabled={updatingStepId === step.id}
+                          <button
+                            onClick={() => toggleNextStep(step)}
+                            disabled={updatingStepId === step.id}
                               className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 ${
-                                step.completed
+                              step.completed
                                   ? 'bg-blue-600 border-blue-600'
                                   : 'border-gray-300 hover:border-blue-600'
-                              } ${updatingStepId === step.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                            >
+                            } ${updatingStepId === step.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
                               {step.completed && <CheckCircle className="w-4 h-4 text-white" />}
-                            </button>
-                            
-                            <div className="flex-1 min-w-0">
+                          </button>
+                          
+                          <div className="flex-1 min-w-0">
                               <p className="text-gray-900 font-medium mb-2">{step.text}</p>
                               <div className="flex items-center gap-2 flex-wrap">
-                                {step.owner && (
+                              {step.owner && (
                                   <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                    Owner: {step.owner}
-                                  </span>
-                                )}
-                                {step.due_date && (
+                                  Owner: {step.owner}
+                                </span>
+                              )}
+                              {step.due_date && (
                                   <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                                    Due: {new Date(step.due_date).toLocaleDateString()}
-                                  </span>
-                                )}
+                                  Due: {new Date(step.due_date).toLocaleDateString()}
+                                </span>
+                              )}
                               </div>
                             </div>
                           </div>
@@ -550,7 +536,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                     
                     {completedExpanded && (
                       <div className="max-h-96 overflow-y-auto space-y-3">
-                        {nextSteps.filter(s => s.completed).map((step) => (
+                          {nextSteps.filter(s => s.completed).map((step) => (
                           <div key={step.id} className="glass-bar-row p-4 opacity-75">
                             <div className="flex items-start gap-4">
                               <button
@@ -582,7 +568,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                               </div>
                             </div>
                           </div>
-                        ))}
+                          ))}
                       </div>
                     )}
                   </div>
