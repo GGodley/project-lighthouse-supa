@@ -91,7 +91,7 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
                   <div
                     key={message.message_id}
                     className={`border-b border-white/20 dark:border-white/10 pb-4 mb-4 last:border-b-0 last:mb-0 ${
-                      index === messages.length - 1 ? 'glass-card -mx-6 px-6 pt-4 rounded-lg' : ''
+                      index === 0 ? 'glass-card -mx-6 px-6 pt-4 rounded-lg' : ''
                     }`}
                   >
                     {/* Email Header - Traditional Email Style */}
