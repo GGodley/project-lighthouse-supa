@@ -405,3 +405,13 @@ button:active,
   border-bottom: none !important;
   color: inherit !important;
 }
+
+/* Prevent default link styling in navigation sidebar */
+.glass-header nav a,
+.glass-header nav a:visited,
+.glass-header nav a:hover,
+.glass-header nav a:active,
+.glass-header nav a:focus {
+  text-decoration: none !important;
+  color: inherit !important;
+}

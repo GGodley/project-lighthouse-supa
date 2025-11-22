@@ -8,6 +8,7 @@ import ThreadListView from './ThreadListView';
 import ThreadConversationView from './ThreadConversationView';
 import HealthScoreBar from '@/components/ui/HealthScoreBar';
 import { getSentimentFromHealthScore } from '@/lib/utils';
+import { LLMSummary } from '@/lib/types/threads';
 
 interface CompanyThreadPageProps {
   companyId: string;
@@ -329,25 +330,33 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                     ) : threads.length === 0 ? (
                       <p className="text-sm text-gray-500">No threads found. Threads will appear here after syncing.</p>
                     ) : (
-                      threads.slice(0, 3).map((thread) => (
-                        <div key={thread.thread_id} className="glass-bar-row p-4">
-                          <div className="flex gap-4">
-                          <div className="w-1/4">
-                              <div className="flex items-center text-blue-600 mb-1">
-                              <Mail className="h-4 w-4 mr-1" />
-                                <span className="font-semibold text-sm">Thread</span>
-                            </div>
-                              <div className="text-xs text-gray-500">
-                              {thread.last_message_date ? formatDate(thread.last_message_date) : 'No date'}
+                      threads.slice(0, 3).map((thread) => {
+                        // Extract summary from llm_summary
+                        const summary = thread.llm_summary;
+                        const isError = summary !== null && 'error' in summary;
+                        const llmSummary = isError ? null : (summary as LLMSummary | null);
+                        const summaryText = llmSummary?.problem_statement || llmSummary?.timeline_summary || thread.snippet || 'No summary available';
+                        
+                        return (
+                          <div key={thread.thread_id} className="glass-bar-row p-4">
+                            <div className="flex gap-4">
+                              <div className="w-1/4">
+                                <div className="flex items-center text-blue-600 mb-1">
+                                  <Mail className="h-4 w-4 mr-1" />
+                                  <span className="font-semibold text-sm">Thread</span>
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {thread.last_message_date ? formatDate(thread.last_message_date) : 'No date'}
+                                </div>
+                              </div>
+                              <div className="w-3/4">
+                                <p className="text-gray-900 font-semibold mb-1">{thread.subject || 'No Subject'}</p>
+                                <p className="text-sm text-gray-600 line-clamp-1">{summaryText}</p>
+                              </div>
                             </div>
                           </div>
-                          <div className="w-3/4">
-                              <p className="text-gray-900 font-semibold mb-1">{thread.subject || 'No Subject'}</p>
-                              <p className="text-sm text-gray-600 line-clamp-1">{thread.snippet || 'No preview'}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </div>

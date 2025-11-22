@@ -91,7 +91,7 @@ export default function Sidebar({ onSignOut }: SidebarProps) {
               key={item.name}
               href={item.href}
               className={cn(
-                'relative flex items-center px-4 py-3 text-sm rounded-xl transition-all',
+                'relative flex items-center px-4 py-3 text-sm rounded-xl transition-all no-underline',
                 isActive
                   ? 'glass-card font-semibold text-gray-900 shadow-md'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-white/30'
