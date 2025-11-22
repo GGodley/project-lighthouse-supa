@@ -86,8 +86,9 @@ export default function CalendarPage() {
   }, [syncAndFetchCalendar])
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="min-h-screen glass-bg">
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Calendar</h1>
           <p className="text-gray-600 mt-2">
@@ -147,6 +148,7 @@ export default function CalendarPage() {
             }}
           />
         )}
+        </div>
       </div>
     </div>
   )

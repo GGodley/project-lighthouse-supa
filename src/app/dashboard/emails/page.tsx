@@ -147,9 +147,11 @@ export default function EmailsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <EmailSyncManager />
-      <div className="flex justify-between items-center">
+    <div className="min-h-screen glass-bg">
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="space-y-6">
+          <EmailSyncManager />
+          <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Emails</h1>
           <p className="text-gray-600">View and sync your recent emails</p>
@@ -228,6 +230,8 @@ export default function EmailsPage() {
             <div className="text-gray-500">No new mails</div>
           </div>
         )}
+      </div>
+        </div>
       </div>
     </div>
   )

@@ -136,9 +136,11 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
+    <div className="min-h-screen glass-bg">
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
         <p className="text-gray-600">Manage your account and integrations</p>
       </div>
 
@@ -314,6 +316,8 @@ export default function SettingsPage() {
               </span>
             </div>
           </div>
+        </div>
+      </div>
         </div>
       </div>
     </div>

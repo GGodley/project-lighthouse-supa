@@ -332,3 +332,25 @@ body {
 [data-theme="dark"] .bg-gray-100 {
   background-color: rgba(55, 65, 81, 0.5);
 }
+
+[data-theme="dark"] .bg-gray-50 {
+  background-color: rgba(30, 33, 40, 0.5);
+}
+
+/* Dark theme for white backgrounds - convert to dark glass */
+[data-theme="dark"] .bg-white {
+  background: rgba(30, 33, 40, 0.7);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Dark theme for thread conversation view */
+[data-theme="dark"] .prose,
+[data-theme="dark"] .prose-sm {
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .prose p {
+  color: #e5e7eb;
+}

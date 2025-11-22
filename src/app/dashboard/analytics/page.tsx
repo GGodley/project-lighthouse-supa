@@ -241,10 +241,12 @@ const AnalyticsTab = () => {
   }];
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
+    <div className="min-h-screen glass-bg">
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="space-y-8">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-gray-600" />
           <Badge variant="outline" className="text-gray-600">
@@ -355,6 +357,8 @@ const AnalyticsTab = () => {
           </div>
         </CardContent>
       </Card>
+        </div>
+      </div>
     </div>
   );
 };

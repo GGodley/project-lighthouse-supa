@@ -115,14 +115,16 @@ export default async function DashboardPage() {
   ]
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600">Welcome back! Here&apos;s what&apos;s happening with your clients.</p>
-        <div className="mt-4">
-          <SyncEmailsButton />
-        </div>
-      </div>
+    <div className="min-h-screen glass-bg">
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+            <p className="text-gray-600">Welcome back! Here&apos;s what&apos;s happening with your clients.</p>
+            <div className="mt-4">
+              <SyncEmailsButton />
+            </div>
+          </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {statCards.map((stat) => (
@@ -189,6 +191,7 @@ export default async function DashboardPage() {
             )}
           </div>
         </div>
+      </div>
       </div>
     </div>
   )

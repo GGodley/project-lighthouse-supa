@@ -11,6 +11,7 @@ export default function ThemeToggle() {
     <button
       onClick={toggleTheme}
       className="glass-button fixed top-4 right-4 z-50 p-3 rounded-xl transition-all"
+      style={{ marginRight: '1rem' }}
       aria-label={`Switch to ${isDark ? 'light' : 'dark'} theme`}
       title={`Switch to ${isDark ? 'light' : 'dark'} theme`}
     >

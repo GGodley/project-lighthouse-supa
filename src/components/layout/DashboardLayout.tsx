@@ -103,7 +103,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       <Sidebar onSignOut={handleSignOut} />
       <main className="flex-1 overflow-auto relative">
         <ThemeToggle />
-        {children}
+        <div className="relative">
+          {children}
+        </div>
       </main>
     </div>
   )
