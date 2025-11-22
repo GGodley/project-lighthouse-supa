@@ -355,33 +355,53 @@ body {
   color: #e5e7eb;
 }
 
-/* Prevent prose styles from affecting buttons */
+/* Prevent prose styles from affecting buttons - must be very specific */
 .prose button,
 .prose-sm button,
+.prose button:hover,
+.prose-sm button:hover,
 .prose [role="button"],
-.prose-sm [role="button"] {
+.prose-sm [role="button"],
+.prose [role="button"]:hover,
+.prose-sm [role="button"]:hover,
+.prose a button,
+.prose-sm a button,
+.prose p button,
+.prose-sm p button,
+.prose div button,
+.prose-sm div button {
   color: inherit !important;
   text-decoration: none !important;
   text-underline-offset: 0 !important;
   border-bottom: none !important;
+  background-color: inherit !important;
 }
 
-.prose button:hover,
-.prose-sm button:hover,
-.prose [role="button"]:hover,
-.prose-sm [role="button"]:hover {
+/* Ensure all buttons maintain their intended styles - global override */
+button,
+button:hover,
+button:focus,
+button:active,
+[role="button"],
+[role="button"]:hover,
+[role="button"]:focus,
+[role="button"]:active {
+  text-decoration: none !important;
+  border-bottom: none !important;
+  text-underline-offset: 0 !important;
+}
+
+/* Prevent prose link styles from affecting buttons */
+.prose a:has(button),
+.prose-sm a:has(button) {
+  text-decoration: none !important;
   color: inherit !important;
-  text-decoration: none !important;
-  border-bottom: none !important;
 }
 
-/* Ensure all buttons maintain their intended styles */
-button {
+/* Additional protection for buttons inside prose containers */
+.prose * button,
+.prose-sm * button {
   text-decoration: none !important;
   border-bottom: none !important;
-}
-
-button:hover {
-  text-decoration: none !important;
-  border-bottom: none !important;
+  color: inherit !important;
 }
