@@ -11,8 +11,11 @@ import {
   Home,
   PieChart,
   Calendar,
-  MessageSquare
+  MessageSquare,
+  Sun,
+  Moon
 } from 'lucide-react'
+import { useTheme } from '@/contexts/ThemeContext'
 
 const navigation = [
   { name: 'Current', href: '/dashboard', icon: BarChart3 },
@@ -30,6 +33,8 @@ interface SidebarProps {
 
 export default function Sidebar({ onSignOut }: SidebarProps) {
   const pathname = usePathname()
+  const { theme, toggleTheme } = useTheme()
+  const isDark = theme === 'dark'
 
   // Check if a route is active (handles nested routes like /dashboard/customer-threads/[id])
   const isRouteActive = (href: string) => {
@@ -42,8 +47,40 @@ export default function Sidebar({ onSignOut }: SidebarProps) {
 
   return (
     <div className="flex flex-col w-64 glass-header border-r border-white/20">
-      <div className="flex items-center h-16 px-4 border-b border-white/20">
+      <div className="flex items-center justify-between h-16 px-4 border-b border-white/20">
         <h1 className="text-xl font-bold text-gray-900">Lighthouse</h1>
+        <button
+          onClick={toggleTheme}
+          className="p-2 rounded-lg hover:bg-white/30 transition-colors"
+          aria-label={`Switch to ${isDark ? 'light' : 'dark'} theme`}
+          title={`Switch to ${isDark ? 'light' : 'dark'} theme`}
+        >
+          <div className="relative w-8 h-5 flex items-center">
+            {/* Track */}
+            <div className={`absolute inset-0 rounded-full transition-colors ${
+              isDark 
+                ? 'bg-gray-700' 
+                : 'bg-gray-300'
+            }`} />
+            
+            {/* Slider */}
+            <div className={`absolute w-4 h-4 rounded-full bg-white shadow-md transition-transform duration-300 ${
+              isDark 
+                ? 'translate-x-4' 
+                : 'translate-x-0.5'
+            }`} />
+            
+            {/* Icons */}
+            <div className="relative w-full h-full flex items-center justify-between px-1 pointer-events-none">
+              <Sun className={`w-3 h-3 transition-opacity ${
+                isDark ? 'opacity-0' : 'opacity-100 text-yellow-500'
+              }`} />
+              <Moon className={`w-3 h-3 transition-opacity ${
+                isDark ? 'opacity-100 text-blue-300' : 'opacity-0'
+              }`} />
+            </div>
+          </div>
+        </button>
       </div>
       
       <nav className="flex-1 px-3 py-6 space-y-2">

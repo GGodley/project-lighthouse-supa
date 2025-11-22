@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { useRouter } from 'next/navigation'
 import Sidebar from './Sidebar'
-import ThemeToggle from '@/components/ThemeToggle'
 import { Database } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -102,10 +101,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     <div className="flex h-screen glass-bg">
       <Sidebar onSignOut={handleSignOut} />
       <main className="flex-1 overflow-auto relative">
-        <ThemeToggle />
-        <div className="relative">
-          {children}
-        </div>
+        {children}
       </main>
     </div>
   )
