@@ -1,0 +1,39 @@
+name: Record Monthly Customer Counts
+
+on:
+  schedule:
+    # Run on the 1st of each month at 00:00 UTC
+    # This records the previous month's customer count for all users
+    - cron: '0 0 1 * *'
+  workflow_dispatch:  # Allow manual trigger from GitHub UI
+
+jobs:
+  record-monthly-counts:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Record Monthly Customer Counts
+        run: |
+          echo "📊 Recording monthly customer counts for all users..."
+          
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            https://fdaqphksmlmupyrsatcz.supabase.co/functions/v1/record-monthly-customer-counts \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json")
+          
+          # Extract HTTP status code (last line)
+          http_code=$(echo "$response" | tail -n1)
+          
+          # Extract response body (all lines except last)
+          response_body=$(echo "$response" | head -n -1)
+          
+          echo "📊 Response Status: $http_code"
+          echo "📋 Response Body: $response_body"
+          
+          if [ "$http_code" -eq 200 ]; then
+            echo "✅ Monthly customer counts recorded successfully"
+          else
+            echo "❌ Error recording monthly customer counts"
+            exit 1
+          fi
+
