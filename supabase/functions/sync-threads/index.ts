@@ -74,8 +74,9 @@ async function openAiCallWithBackoff<T>(
   throw new Error('Max retries exhausted');
 }
 
-// --- UNCHANGED ---
+// --- UPDATED ---
 // Helper Functions to Correctly Parse Gmail's Complex Payload
+// Fixed to properly decode UTF-8 characters using TextDecoder
 const decodeBase64Url = (data: string | undefined): string | undefined => {
   if (!data) return undefined;
   try {
@@ -83,7 +84,16 @@ const decodeBase64Url = (data: string | undefined): string | undefined => {
     while(base64.length % 4){
       base64 += '=';
     }
-    return atob(base64);
+    // Decode base64 to binary string
+    const binaryString = atob(base64);
+    // Convert binary string to Uint8Array
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    // Decode Uint8Array to UTF-8 string using TextDecoder
+    const decoder = new TextDecoder('utf-8');
+    return decoder.decode(bytes);
   } catch (e) {
     console.error("Base64 decoding failed for data chunk.", e);
     return undefined;
@@ -709,6 +719,13 @@ serve(async (req: Request) => {
     // --- NEW CODE END ---
     
     // --- NEW ---
+    // Build calendar invitation exclusion string
+    // Exclude calendar invitations at the API level to reduce noise
+    // Calendar invitations typically have .ics attachments or calendar-related subjects
+    const calendarExclusionQuery = ` -filename:.ics -subject:("Accepted:" OR "Declined:" OR "Tentative:" OR "invitation" OR "Invitation")`;
+    console.log(`📅 Excluding calendar invitations from thread sync (filtered at Gmail API level)`);
+    
+    // --- NEW ---
     // Get the last sync time from profiles table (stored in UTC)
     // This determines what date to query Gmail from
     // All times are handled in UTC to ensure consistency across timezones
@@ -735,8 +752,9 @@ serve(async (req: Request) => {
     const baseQuery = `after:${unixTimestamp}`;
     
     // --- MODIFIED ---
-    // Combine base query with exclusion query
-    const finalQuery = `${baseQuery}${exclusionQuery}`;
+    // Combine base query with domain exclusions and calendar invitation exclusions
+    // All exclusions happen at the Gmail API level (server-side filtering)
+    const finalQuery = `${baseQuery}${exclusionQuery}${calendarExclusionQuery}`;
     
     // --- MODIFIED ---
     // Swapped 'messages' for 'threads'
