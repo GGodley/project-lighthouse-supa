@@ -36,6 +36,7 @@ export default function ThreadListView({ threads, onThreadSelect, selectedThread
         return 'bg-blue-50 text-blue-700 border border-blue-200';
       case 'frustrated':
       case 'negative':
+      case 'very negative':
         return 'bg-red-50 text-red-700 border border-red-200';
       default:
         return 'bg-gray-50 text-gray-700 border border-gray-200';
