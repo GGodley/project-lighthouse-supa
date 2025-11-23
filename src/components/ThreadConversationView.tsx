@@ -162,7 +162,7 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
 
         {/* Summary Sidebar - Separate bubble element */}
         <div className="w-full lg:w-96 p-6 bg-gray-50 overflow-y-auto border-l border-gray-200 glass-card">
-          <h4 className="font-semibold text-black mb-4 text-lg" style={{ color: '#000000' }}>Thread Summary</h4>
+          <h4 className="font-semibold text-black dark:text-gray-100 mb-4 text-lg" style={{ color: '#000000' }}>Thread Summary</h4>
           
           {threadSummary && 'error' in threadSummary ? (
             <div className="text-sm text-red-600 dark:text-red-400">
@@ -173,14 +173,14 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
               {threadSummary.problem_statement && (
                 <div className="glass-card rounded-xl p-4">
                   <h5 className="font-semibold text-black dark:text-gray-100 mb-2 text-base" style={{ color: '#000000' }}>Problem Statement</h5>
-                  <p className="text-sm text-black dark:text-gray-300" style={{ color: '#000000' }}>{threadSummary.problem_statement}</p>
+                  <p className="text-sm text-black dark:text-gray-100" style={{ color: '#000000' }}>{threadSummary.problem_statement}</p>
                 </div>
               )}
 
               {threadSummary.key_participants && Array.isArray(threadSummary.key_participants) && threadSummary.key_participants.length > 0 && (
                 <div className="glass-card rounded-xl p-4">
                   <h5 className="font-semibold text-black dark:text-gray-100 mb-2 text-base" style={{ color: '#000000' }}>Key Participants</h5>
-                  <ul className="list-disc list-inside text-sm text-black dark:text-gray-300 space-y-1" style={{ color: '#000000' }}>
+                  <ul className="list-disc list-inside text-sm text-black dark:text-gray-100 space-y-1" style={{ color: '#000000' }}>
                     {threadSummary.key_participants.map((participant: string, idx: number) => (
                       <li key={idx} style={{ color: '#000000' }}>{participant}</li>
                     ))}
@@ -191,21 +191,21 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
               {threadSummary.timeline_summary && (
                 <div className="glass-card rounded-xl p-4">
                   <h5 className="font-semibold text-black dark:text-gray-100 mb-2 text-base" style={{ color: '#000000' }}>Timeline</h5>
-                  <p className="text-sm text-black dark:text-gray-300" style={{ color: '#000000' }}>{threadSummary.timeline_summary}</p>
+                  <p className="text-sm text-black dark:text-gray-100" style={{ color: '#000000' }}>{threadSummary.timeline_summary}</p>
                 </div>
               )}
 
               {threadSummary.resolution_status && (
                 <div className="glass-card rounded-xl p-4">
                   <h5 className="font-semibold text-black dark:text-gray-100 mb-2 text-base" style={{ color: '#000000' }}>Resolution Status</h5>
-                  <p className="text-sm text-black dark:text-gray-300" style={{ color: '#000000' }}>{threadSummary.resolution_status}</p>
+                  <p className="text-sm text-black dark:text-gray-100" style={{ color: '#000000' }}>{threadSummary.resolution_status}</p>
                 </div>
               )}
 
               {threadSummary.customer_sentiment && (
                 <div className="glass-card rounded-xl p-4">
                   <h5 className="font-semibold text-black dark:text-gray-100 mb-2 text-base" style={{ color: '#000000' }}>Customer Sentiment</h5>
-                  <p className="text-sm text-black dark:text-gray-300" style={{ color: '#000000' }}>{threadSummary.customer_sentiment}</p>
+                  <p className="text-sm text-black dark:text-gray-100" style={{ color: '#000000' }}>{threadSummary.customer_sentiment}</p>
                 </div>
               )}
 
@@ -214,13 +214,13 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
                   <h5 className="font-semibold text-black dark:text-gray-100 mb-3 text-base" style={{ color: '#000000' }}>Next Steps</h5>
                   <ul className="space-y-3">
                     {threadSummary.next_steps.map((step: NextStep, idx: number) => (
-                      <li key={idx} className="text-sm text-black dark:text-gray-300" style={{ color: '#000000' }}>
+                      <li key={idx} className="text-sm text-black dark:text-gray-100" style={{ color: '#000000' }}>
                         <div className="flex items-start gap-2">
                           <span className="text-blue-600 dark:text-blue-400 mt-1 font-bold">•</span>
                           <div className="flex-1">
-                            <p className="text-sm text-black dark:text-gray-300" style={{ color: '#000000' }}>{step.text}</p>
+                            <p className="text-sm text-black dark:text-gray-100" style={{ color: '#000000' }}>{step.text}</p>
                             {(step.owner || step.due_date) && (
-                              <div className="mt-1 flex flex-wrap gap-2 text-xs text-black dark:text-gray-400" style={{ color: '#000000' }}>
+                              <div className="mt-1 flex flex-wrap gap-2 text-xs text-black dark:text-gray-100" style={{ color: '#000000' }}>
                                 {step.owner && <span>Owner: {step.owner}</span>}
                                 {step.due_date && <span>Due: {new Date(step.due_date).toLocaleDateString()}</span>}
                               </div>
@@ -236,12 +236,12 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
               {threadSummary.csm_next_step && (
                 <div className="glass-card rounded-xl p-4">
                   <h5 className="font-semibold text-black dark:text-gray-100 mb-2 text-base" style={{ color: '#000000' }}>Next Step (Legacy)</h5>
-                  <p className="text-sm text-black dark:text-gray-300" style={{ color: '#000000' }}>{threadSummary.csm_next_step}</p>
+                  <p className="text-sm text-black dark:text-gray-100" style={{ color: '#000000' }}>{threadSummary.csm_next_step}</p>
                 </div>
               )}
             </div>
           ) : (
-            <div className="text-sm text-black dark:text-gray-400" style={{ color: '#000000' }}>
+            <div className="text-sm text-black dark:text-gray-100" style={{ color: '#000000' }}>
               <p>No summary available for this thread.</p>
             </div>
           )}
