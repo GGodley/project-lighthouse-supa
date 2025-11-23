@@ -72,7 +72,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
   const [companyData, setCompanyData] = useState<CompanyData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'Overview' | 'Interaction Timeline'>('Overview');
+  const [activeView, setActiveView] = useState<'Overview' | 'Threads' | 'Interaction Timeline'>('Overview');
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [selectedThreadSummary, setSelectedThreadSummary] = useState<LLMSummary | { error: string } | null>(null);
   const [loadingThread, setLoadingThread] = useState<boolean>(false);
@@ -87,6 +87,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
 
   // Next Steps state management
   const [nextSteps, setNextSteps] = useState<NextStep[]>([]);
+  const [activeExpanded, setActiveExpanded] = useState<boolean>(true);
   const [completedExpanded, setCompletedExpanded] = useState<boolean>(false);
   const [updatingStepId, setUpdatingStepId] = useState<string | null>(null);
 
@@ -334,6 +335,19 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
               Overview
             </button>
             <button
+              onClick={() => {
+                setActiveView('Threads');
+                setSelectedThreadId(null);
+              }}
+              className={`flex-1 py-3 px-4 rounded-xl text-sm font-medium transition-all ${
+                activeView === 'Threads'
+                  ? 'bg-white/90 text-blue-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
+              }`}
+            >
+              Threads ({threads.length})
+            </button>
+            <button
               onClick={() => setActiveView('Interaction Timeline')}
               className={`flex-1 py-3 px-4 rounded-xl text-sm font-medium transition-all ${
                 activeView === 'Interaction Timeline'
@@ -523,16 +537,24 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                   <h3 className="text-xl font-semibold text-gray-900">Next Steps</h3>
                 </div>
                 
-                {/* Active Next Steps */}
+                {/* Active Next Steps - Collapsible */}
                 {nextSteps.filter(s => !s.completed).length > 0 && (
                   <div className="mb-6">
-                    <div className="flex items-center gap-2 mb-4">
+                    <button
+                      onClick={() => setActiveExpanded(!activeExpanded)}
+                      className="flex items-center gap-2 mb-4 w-full text-left hover:text-gray-900 transition-colors"
+                    >
                       <Users className="h-5 w-5 text-gray-600" />
                       <h4 className="font-semibold text-gray-900">Active Next Steps</h4>
-                    </div>
+                      <span className="ml-auto text-sm text-gray-600">
+                        ({nextSteps.filter(s => !s.completed).length})
+                        {activeExpanded ? <ChevronDown className="w-4 h-4 inline ml-1" /> : <ChevronRight className="w-4 h-4 inline ml-1" />}
+                      </span>
+                    </button>
                     
-                    <ul className="space-y-3">
-                      {nextSteps.filter(s => !s.completed).map((step) => (
+                    {activeExpanded && (
+                      <ul className="space-y-3">
+                        {nextSteps.filter(s => !s.completed).map((step) => (
                         <li key={step.id} className="glass-bar-row p-4">
                           <div className="flex items-start gap-4">
                           <button
@@ -565,7 +587,8 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                           </div>
                         </li>
                       ))}
-                    </ul>
+                      </ul>
+                    )}
                   </div>
                 )}
 
@@ -628,15 +651,49 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
           </div>
         )}
 
+        {/* Threads View */}
+        {activeView === 'Threads' && (
+          <div className="glass-card rounded-2xl p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-6">Threads</h2>
+            <ThreadListView
+              threads={threads}
+              onThreadSelect={(threadId) => {
+                setLoadingThread(true);
+                setSelectedThreadId(threadId);
+                
+                // Find the thread and get its summary
+                const thread = threads.find(t => t.thread_id === threadId);
+                if (thread && thread.llm_summary) {
+                  setSelectedThreadSummary(thread.llm_summary);
+                  setLoadingThread(false);
+                } else {
+                  // Fetch thread if summary not available
+                  getThreadById(supabase, threadId).then(({ data: threadData, error }) => {
+                    if (error || !threadData) {
+                      setSelectedThreadSummary({ error: error?.message || 'Thread not found' });
+                    } else {
+                      setSelectedThreadSummary(threadData.llm_summary);
+                    }
+                    setLoadingThread(false);
+                  }).catch((err) => {
+                    console.error('Error fetching thread:', err);
+                    setSelectedThreadSummary({ error: 'Failed to load thread' });
+                    setLoadingThread(false);
+                  });
+                }
+              }}
+              selectedThreadId={selectedThreadId}
+            />
+          </div>
+        )}
+
         {/* Interaction Timeline View */}
         {activeView === 'Interaction Timeline' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Left Side - Interaction Timeline List */}
-            <div className="glass-card rounded-2xl p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">Interaction Timeline</h2>
-              <p className="text-sm text-gray-600 mb-6">Complete history of calls and emails with detailed summaries.</p>
-              
-              <div className="space-y-4">
+          <div className="glass-card rounded-2xl p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Interaction Timeline</h2>
+            <p className="text-sm text-gray-600 mb-6">Complete history of calls and emails with detailed summaries.</p>
+            
+            <div className="space-y-4">
                 {interaction_timeline && interaction_timeline.length > 0 ? (
                   interaction_timeline.map((interaction, index) => {
                     // All email interactions should be clickable (they are threads)
@@ -744,39 +801,43 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                     )}
                   </div>
                 )}
-              </div>
-            </div>
-
-            {/* Right Side - Thread Conversation View */}
-            <div className="glass-card rounded-2xl p-6">
-              {selectedThreadId ? (
-                loadingThread ? (
-                  <div className="flex items-center justify-center p-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    <p className="ml-4 text-gray-600">Loading thread...</p>
-                  </div>
-                ) : (
-                  <ThreadConversationView
-                    threadId={selectedThreadId}
-                    threadSummary={selectedThreadSummary}
-                    onClose={() => {
-                      setSelectedThreadId(null);
-                      setSelectedThreadSummary(null);
-                    }}
-                  />
-                )
-              ) : (
-                <div className="flex items-center justify-center h-full min-h-[400px] text-gray-500">
-                  <div className="text-center">
-                    <Mail className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                    <p className="text-lg font-medium">Select a thread to view conversation</p>
-                    <p className="text-sm mt-2">Click on any email thread from the timeline to see the full conversation and AI-generated summary.</p>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}
+
+      {/* Thread Conversation Modal Overlay - Full Page (excluding nav bar) */}
+      {selectedThreadId && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-50"
+          style={{ marginLeft: '256px' }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedThreadId(null);
+              setSelectedThreadSummary(null);
+            }
+          }}
+        >
+          <div 
+            className="bg-white w-full h-full overflow-hidden flex flex-col"
+          >
+            {loadingThread ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <p className="ml-4 text-gray-600">Loading thread...</p>
+              </div>
+            ) : (
+              <ThreadConversationView
+                threadId={selectedThreadId}
+                threadSummary={selectedThreadSummary}
+                onClose={() => {
+                  setSelectedThreadId(null);
+                  setSelectedThreadSummary(null);
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );

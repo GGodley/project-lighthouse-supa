@@ -60,9 +60,9 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
   }
 
   return (
-    <div className="glass-card rounded-lg">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="border-b border-white/20 dark:border-white/10 p-4 flex items-center justify-between">
+      <div className="border-b border-gray-200 p-4 flex items-center justify-between bg-white flex-shrink-0">
         <h3 className="text-lg font-semibold text-gray-900">Thread Conversation</h3>
         <button
           onClick={onClose}
@@ -72,9 +72,9 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
         </button>
       </div>
 
-      <div className="flex flex-col lg:flex-row h-[600px]">
-        {/* Messages Panel - Email Thread Style */}
-        <div className="flex-1 overflow-y-auto p-6 border-r border-white/20 dark:border-white/10">
+      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
+        {/* Messages Panel - Email Thread Style - Takes up most of the space */}
+        <div className="flex-1 overflow-y-auto p-6 border-r border-gray-200" style={{ minWidth: '60%' }}>
           {messages.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <p>No messages found in this thread.</p>
@@ -159,9 +159,9 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
           )}
         </div>
 
-        {/* Summary Sidebar */}
-        <div className="w-full lg:w-80 p-4 glass-card overflow-y-auto">
-          <h4 className="font-semibold text-gray-900 mb-4">Thread Summary</h4>
+        {/* Summary Sidebar - Separate bubble element */}
+        <div className="w-full lg:w-96 p-6 bg-gray-50 overflow-y-auto border-l border-gray-200 glass-card">
+          <h4 className="font-semibold text-gray-900 mb-4 text-lg">Thread Summary</h4>
           
           {threadSummary && 'error' in threadSummary ? (
             <div className="text-sm text-red-600 dark:text-red-400">
@@ -208,9 +208,33 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
                 </div>
               )}
 
+              {threadSummary.next_steps && Array.isArray(threadSummary.next_steps) && threadSummary.next_steps.length > 0 && (
+                <div>
+                  <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-2">Next Steps</h5>
+                  <ul className="space-y-2">
+                    {threadSummary.next_steps.map((step: any, idx: number) => (
+                      <li key={idx} className="text-gray-600 dark:text-gray-400">
+                        <div className="flex items-start gap-2">
+                          <span className="text-blue-600 dark:text-blue-400 mt-1">•</span>
+                          <div className="flex-1">
+                            <p className="text-sm">{step.text}</p>
+                            {(step.owner || step.due_date) && (
+                              <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-500">
+                                {step.owner && <span>Owner: {step.owner}</span>}
+                                {step.due_date && <span>Due: {new Date(step.due_date).toLocaleDateString()}</span>}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
               {threadSummary.csm_next_step && (
                 <div>
-                  <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-1">Next Step</h5>
+                  <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-1">Next Step (Legacy)</h5>
                   <p className="text-gray-600 dark:text-gray-400">{threadSummary.csm_next_step}</p>
                 </div>
               )}
