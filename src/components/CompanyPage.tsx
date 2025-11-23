@@ -362,7 +362,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                               ? 'text-indigo-600' 
                               : 'text-pink-600'
                           }`}>
-                            {interaction.interaction_type === 'meeting' ? 'Call' : 'Email'}
+                            {interaction.interaction_type === 'meeting' ? 'Meeting' : 'Email'}
                           </div>
                           <div className="text-sm text-gray-500">{formatDate(interaction.interaction_date)}</div>
                         </div>
@@ -639,7 +639,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                       <div className="flex-1">
                         {/* Top Row (Metadata) */}
                         <div className="flex items-center gap-3 mb-1">
-                          <span className="font-semibold">{interaction.interaction_type === 'meeting' ? 'Call' : 'Email Thread'}</span>
+                          <span className="font-semibold">{interaction.interaction_type === 'meeting' ? 'Meeting' : 'Email Thread'}</span>
                           <span className="text-sm text-gray-500">{formatDate(interaction.interaction_date)}</span>
                           <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getSentimentColor(interaction.sentiment)}`}>
                             {interaction.sentiment}
