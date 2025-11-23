@@ -3,7 +3,7 @@
 import React from 'react';
 import { Mail, User, X } from 'lucide-react';
 import { useThreadMessages } from '@/hooks/useThreadMessages';
-import { LLMSummary } from '@/lib/types/threads';
+import { LLMSummary, NextStep } from '@/lib/types/threads';
 
 interface ThreadConversationViewProps {
   threadId: string;
@@ -212,7 +212,7 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
                 <div>
                   <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-2">Next Steps</h5>
                   <ul className="space-y-2">
-                    {threadSummary.next_steps.map((step: any, idx: number) => (
+                    {threadSummary.next_steps.map((step: NextStep, idx: number) => (
                       <li key={idx} className="text-gray-600 dark:text-gray-400">
                         <div className="flex items-start gap-2">
                           <span className="text-blue-600 dark:text-blue-400 mt-1">•</span>

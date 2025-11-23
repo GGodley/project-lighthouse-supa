@@ -82,9 +82,6 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
   // Get threads for this company
   const { threads, loading: threadsLoading } = useCompanyThreads(companyId);
 
-  // Get selected thread's summary
-  const selectedThread = threads.find(t => t.thread_id === selectedThreadId);
-
   // Next Steps state management
   const [nextSteps, setNextSteps] = useState<NextStep[]>([]);
   const [activeExpanded, setActiveExpanded] = useState<boolean>(true);

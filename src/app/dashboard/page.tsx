@@ -159,7 +159,7 @@ export default async function DashboardPage() {
   }
 
   // Format percentage change for display
-  const formatPercentageChange = (change: number | null, trend: 'up' | 'down' | 'neutral') => {
+  const formatPercentageChange = (change: number | null) => {
     if (change === null) return 'N/A'
     const sign = change >= 0 ? '+' : ''
     return `${sign}${change.toFixed(1)}%`
@@ -171,7 +171,7 @@ export default async function DashboardPage() {
       value: stats.totalCustomers,
       icon: Users,
       color: 'bg-blue-500',
-      change: formatPercentageChange(stats.customerCountChange, stats.customerCountTrend),
+      change: formatPercentageChange(stats.customerCountChange),
       trend: stats.customerCountTrend
     },
     {
