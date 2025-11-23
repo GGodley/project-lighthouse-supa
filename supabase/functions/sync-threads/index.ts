@@ -4,6 +4,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import OpenAI from "https://esm.sh/openai@4.20.1";
+import { saveFeatureRequests } from "../_shared/feature-request-utils.ts";
 
 // --- UNCHANGED ---
 const corsHeaders = {
@@ -168,43 +169,92 @@ const processShortThread = async (script: string): Promise<any> => {
     return { "error": "OPENAI_API_KEY not configured" };
   }
 
-  const systemPrompt = `You are a world-class Customer Success Manager (CSM) analyst. Analyze email threads and extract structured summaries.
+  const systemPrompt = `You are an AI analyst reviewing customer email conversations.
 
-Return a JSON object with the following structure:
+Your objective is to identify all feature requests mentioned by the customer and produce a clear, structured summary that can be compared across multiple customers.
+
+For each email or thread, follow these steps:
+
+1. Detect Feature Requests
+
+Identify any sentence or paragraph where the customer is:
+
+• Requesting a new feature
+
+• Suggesting an improvement
+
+• Reporting a limitation that implies a feature is missing
+
+• Asking for a capability that doesn't exist yet
+
+If no feature requests exist, state: "No feature requests detected."
+
+2. Extract & Summarize Each Feature Request
+
+For every feature request found, produce this structure:
+
+Feature Request
+
+• Title (generic, short):
+
+A brief name that represents the feature conceptually (e.g., "Bulk User Editing", "API Export for Reports").
+
+• Customer Description (raw meaning):
+
+A 1–2 sentence summary of what the customer is asking for, in your own words.
+
+Keep it specific enough to understand the context, but generic enough to compare across customers.
+
+• Use Case / Problem:
+
+Why the customer wants it; what problem they are trying to solve.
+
+• Urgency Level (estimate):
+
+Categorize as:
+
+    * High – Blocking workflows, time-sensitive, critical pain.
+
+    * Medium – Important but not blocking.
+
+    * Low – Nice-to-have or long-term improvement.
+
+• Signals that justify the urgency rating:
+
+Quote or paraphrase the phrasing that indicates priority (e.g. "we need this before Q1 launch," "this is causing delays," "not urgent but useful").
+
+• Customer Impact (1 sentence):
+
+Who is affected and how.
+
+3. Output Format
+
+Return all results in clean JSON, with this structure:
+
 {
-  "problem_statement": "A clear statement of the problem or topic discussed",
-  "key_participants": ["array", "of", "participant", "names"],
-  "timeline_summary": "A summary of the timeline of events in the thread",
-  "resolution_status": "Status of resolution (e.g., 'Resolved', 'In Progress', 'Pending', 'Unresolved')",
-  "customer_sentiment": "Customer sentiment (e.g., 'Very Positive', 'Positive', 'Neutral', 'Negative', 'Very Negative')",
-  "sentiment_score": The numeric score that corresponds to the chosen sentiment (-2 for very negative, -1 for negative, 0 for neutral, 1 for positive, 2 for very positive),
-  "next_steps": [
+  "customer": "<customer name or domain if available>",
+  "email_date": "<date if available>",
+  "feature_requests": [
     {
-      "text": "Action item description",
-      "owner": "Name or email of person responsible (or null if not mentioned)",
-      "due_date": "YYYY-MM-DD or null if not mentioned"
+      "title": "",
+      "customer_description": "",
+      "use_case": "",
+      "urgency": "",
+      "urgency_signals": "",
+      "customer_impact": ""
     }
   ]
 }
 
-CRITICAL INSTRUCTIONS FOR NEXT STEPS:
-- Only extract next steps that are EXPLICITLY mentioned in the conversation
-- Do NOT create or infer next steps if they are not clearly stated
-- If no next steps are mentioned, return an empty array []
-- For owner: Extract the name or email of the person responsible. If not mentioned, use null
-- For due_date: Extract the date in YYYY-MM-DD format if mentioned. If not mentioned, use null
-- Do not hallucinate or make up next steps
+If there are multiple feature requests in the same email, include multiple objects in the feature_requests array.
 
-Sentiment Categories & Scores:
-- "Very Positive" (Score: 2): Enthusiastic, explicit praise, clear plans for expansion
-- "Positive" (Score: 1): Satisfied, complimentary, minor issues resolved, optimistic
-- "Neutral" (Score: 0): No strong feelings, factual, informational, no complaints but no praise
-- "Negative" (Score: -1): Frustrated, confused, mentioned blockers, unhappy with a feature or price
-- "Very Negative" (Score: -2): Explicitly angry, threatening to churn, multiple major issues
+4. Additional Rules
 
-The "customer" is any participant who is NOT the "CSM".`;
+• Make all titles and descriptions general enough that similar requests across customers can be grouped later.
 
-  const userQuery = `Email Thread:\n\n${script}\n\nPlease analyze this thread and return the JSON summary.`;
+• Be consistent in naming patterns so clustering will work well.`;
+
+  const userQuery = `Email Thread:\n\n${script}\n\nAnalyze this thread and return the JSON with feature requests.`;
 
   try {
     // Wrap the API call with retry logic
@@ -257,7 +307,7 @@ const processLongThread = async (script: string): Promise<any> => {
 
   // Task 3.6: Map
   const chunkSummaries: string[] = [];
-  const mapPrompt = "You are an email analyst. Concisely summarize the key events, questions, and outcomes from this *part* of an email thread. This is an intermediate step; do not create a final report. Just state the facts of this chunk.\n\nChunk:\n";
+  const mapPrompt = "You are an email analyst. Identify any feature requests mentioned in this *part* of an email thread. This is an intermediate step; just list any feature requests, improvements, or missing capabilities mentioned by the customer. If none, state 'No feature requests in this chunk.'\n\nChunk:\n";
 
   for (const chunk of chunks) {
     try {
@@ -285,41 +335,74 @@ const processLongThread = async (script: string): Promise<any> => {
 
   // Task 3.6: Reduce
   const combinedSummaries = chunkSummaries.join("\n\n---\n\n");
-  const reducePrompt = `You are a world-class Customer Success Manager (CSM) analyst. The following are intermediate summaries from a very long email thread. Combine them into a single, cohesive, final report.
+  const reducePrompt = `You are an AI analyst reviewing customer email conversations.
 
-Return a JSON object with the following structure:
+Your objective is to identify all feature requests mentioned by the customer and produce a clear, structured summary that can be compared across multiple customers.
+
+The following are intermediate summaries from a very long email thread. Combine them to identify all feature requests across the entire thread.
+
+For each feature request found, produce this structure:
+
+Feature Request
+
+• Title (generic, short):
+
+A brief name that represents the feature conceptually (e.g., "Bulk User Editing", "API Export for Reports").
+
+• Customer Description (raw meaning):
+
+A 1–2 sentence summary of what the customer is asking for, in your own words.
+
+Keep it specific enough to understand the context, but generic enough to compare across customers.
+
+• Use Case / Problem:
+
+Why the customer wants it; what problem they are trying to solve.
+
+• Urgency Level (estimate):
+
+Categorize as:
+
+    * High – Blocking workflows, time-sensitive, critical pain.
+
+    * Medium – Important but not blocking.
+
+    * Low – Nice-to-have or long-term improvement.
+
+• Signals that justify the urgency rating:
+
+Quote or paraphrase the phrasing that indicates priority (e.g. "we need this before Q1 launch," "this is causing delays," "not urgent but useful").
+
+• Customer Impact (1 sentence):
+
+Who is affected and how.
+
+Return all results in clean JSON, with this structure:
+
 {
-  "problem_statement": "A clear statement of the problem or topic discussed",
-  "key_participants": ["array", "of", "participant", "names"],
-  "timeline_summary": "A summary of the timeline of events in the thread",
-  "resolution_status": "Status of resolution (e.g., 'Resolved', 'In Progress', 'Pending', 'Unresolved')",
-  "customer_sentiment": "Customer sentiment (e.g., 'Very Positive', 'Positive', 'Neutral', 'Negative', 'Very Negative')",
-  "sentiment_score": The numeric score that corresponds to the chosen sentiment (-2 for very negative, -1 for negative, 0 for neutral, 1 for positive, 2 for very positive),
-  "next_steps": [
+  "customer": "<customer name or domain if available>",
+  "email_date": "<date if available>",
+  "feature_requests": [
     {
-      "text": "Action item description",
-      "owner": "Name or email of person responsible (or null if not mentioned)",
-      "due_date": "YYYY-MM-DD or null if not mentioned"
+      "title": "",
+      "customer_description": "",
+      "use_case": "",
+      "urgency": "",
+      "urgency_signals": "",
+      "customer_impact": ""
     }
   ]
 }
 
-CRITICAL INSTRUCTIONS FOR NEXT STEPS:
-- Only extract next steps that are EXPLICITLY mentioned in the conversation
-- Do NOT create or infer next steps if they are not clearly stated
-- If no next steps are mentioned, return an empty array []
-- For owner: Extract the name or email of the person responsible. If not mentioned, use null
-- For due_date: Extract the date in YYYY-MM-DD format if mentioned. If not mentioned, use null
-- Do not hallucinate or make up next steps
+If there are multiple feature requests, include multiple objects in the feature_requests array. If no feature requests exist, return an empty array for feature_requests.
 
-Sentiment Categories & Scores:
-- "Very Positive" (Score: 2): Enthusiastic, explicit praise, clear plans for expansion
-- "Positive" (Score: 1): Satisfied, complimentary, minor issues resolved, optimistic
-- "Neutral" (Score: 0): No strong feelings, factual, informational, no complaints but no praise
-- "Negative" (Score: -1): Frustrated, confused, mentioned blockers, unhappy with a feature or price
-- "Very Negative" (Score: -2): Explicitly angry, threatening to churn, multiple major issues`;
+Additional Rules:
 
-  const reduceQuery = `Intermediate Summaries:\n\n${combinedSummaries}\n\nPlease analyze these summaries and generate the final JSON report.`;
+• Make all titles and descriptions general enough that similar requests across customers can be grouped later.
+
+• Be consistent in naming patterns so clustering will work well.`;
+
+  const reduceQuery = `Intermediate Summaries:\n\n${combinedSummaries}\n\nAnalyze these summaries and return the JSON with all feature requests from the entire thread.`;
 
   try {
     // Wrap the API call with retry logic
@@ -367,52 +450,80 @@ const summarizeThreadIncremental = async (
   // Format only the new messages
   const newMessagesScript = formatThreadForLLM(newMessages, csmEmail);
   
-  const systemPrompt = `You are a world-class Customer Success Manager (CSM) analyst. Your task is to update an existing email thread summary with new messages that have arrived.
+  const systemPrompt = `You are an AI analyst reviewing customer email conversations.
+
+Your objective is to identify all feature requests mentioned by the customer and produce a clear, structured summary that can be compared across multiple customers.
 
 You will receive:
-1. The previous summary of the email thread (as a JSON object)
+1. The previous summary of the email thread (as a JSON object with feature_requests)
 2. New messages that have been added to the thread
 
 Your job is to:
-- Integrate the new information from the new messages into the existing summary
-- Update the timeline, sentiment, resolution status, and next steps based on the new messages
-- Maintain continuity with the previous summary while incorporating the latest developments
-- If the new messages contradict or update previous information, reflect the most current state
+- Identify any NEW feature requests in the new messages
+- Combine the feature requests from the previous summary with any new feature requests found in the new messages
+- If a feature request in the new messages is similar to one already in the previous summary, merge them or keep both if they are distinct
+- Maintain the same structure and format
 
-Return a JSON object with the following structure:
+For each feature request found, produce this structure:
+
+Feature Request
+
+• Title (generic, short):
+
+A brief name that represents the feature conceptually (e.g., "Bulk User Editing", "API Export for Reports").
+
+• Customer Description (raw meaning):
+
+A 1–2 sentence summary of what the customer is asking for, in your own words.
+
+Keep it specific enough to understand the context, but generic enough to compare across customers.
+
+• Use Case / Problem:
+
+Why the customer wants it; what problem they are trying to solve.
+
+• Urgency Level (estimate):
+
+Categorize as:
+
+    * High – Blocking workflows, time-sensitive, critical pain.
+
+    * Medium – Important but not blocking.
+
+    * Low – Nice-to-have or long-term improvement.
+
+• Signals that justify the urgency rating:
+
+Quote or paraphrase the phrasing that indicates priority (e.g. "we need this before Q1 launch," "this is causing delays," "not urgent but useful").
+
+• Customer Impact (1 sentence):
+
+Who is affected and how.
+
+Return all results in clean JSON, with this structure:
+
 {
-  "problem_statement": "An updated clear statement of the problem or topic discussed (incorporating new information)",
-  "key_participants": ["array", "of", "all", "participant", "names", "including", "new", "ones"],
-  "timeline_summary": "An updated summary of the timeline of events, including the new messages",
-  "resolution_status": "Updated status of resolution (e.g., 'Resolved', 'In Progress', 'Pending', 'Unresolved')",
-  "customer_sentiment": "Updated customer sentiment based on all messages (e.g., 'Very Positive', 'Positive', 'Neutral', 'Negative', 'Very Negative')",
-  "sentiment_score": The numeric score that corresponds to the chosen sentiment (-2 for very negative, -1 for negative, 0 for neutral, 1 for positive, 2 for very positive),
-  "next_steps": [
+  "customer": "<customer name or domain if available>",
+  "email_date": "<date if available>",
+  "feature_requests": [
     {
-      "text": "Action item description",
-      "owner": "Name or email of person responsible (or null if not mentioned)",
-      "due_date": "YYYY-MM-DD or null if not mentioned"
+      "title": "",
+      "customer_description": "",
+      "use_case": "",
+      "urgency": "",
+      "urgency_signals": "",
+      "customer_impact": ""
     }
   ]
 }
 
-CRITICAL INSTRUCTIONS FOR NEXT STEPS:
-- Only extract next steps that are EXPLICITLY mentioned in the conversation (including new messages)
-- Do NOT create or infer next steps if they are not clearly stated
-- If no next steps are mentioned, return an empty array []
-- For owner: Extract the name or email of the person responsible. If not mentioned, use null
-- For due_date: Extract the date in YYYY-MM-DD format if mentioned. If not mentioned, use null
-- Do not hallucinate or make up next steps
-- Update existing next steps if they are mentioned in new messages, or add new ones if explicitly stated
+Include ALL feature requests: both from the previous summary and any new ones from the new messages. If there are no feature requests at all, return an empty array for feature_requests.
 
-Sentiment Categories & Scores:
-- "Very Positive" (Score: 2): Enthusiastic, explicit praise, clear plans for expansion
-- "Positive" (Score: 1): Satisfied, complimentary, minor issues resolved, optimistic
-- "Neutral" (Score: 0): No strong feelings, factual, informational, no complaints but no praise
-- "Negative" (Score: -1): Frustrated, confused, mentioned blockers, unhappy with a feature or price
-- "Very Negative" (Score: -2): Explicitly angry, threatening to churn, multiple major issues
+Additional Rules:
 
-The "customer" is any participant who is NOT the "CSM".`;
+• Make all titles and descriptions general enough that similar requests across customers can be grouped later.
+
+• Be consistent in naming patterns so clustering will work well.`;
 
   const userQuery = `Previous Summary:
 ${JSON.stringify(previousSummary, null, 2)}
@@ -420,7 +531,7 @@ ${JSON.stringify(previousSummary, null, 2)}
 New Messages in Thread:
 ${newMessagesScript}
 
-Please update the summary to incorporate the new messages and return the updated JSON summary.`;
+Analyze the new messages and return the JSON with all feature requests (combining previous and new).`;
 
   try {
     const apiCallFunction = async () => {
@@ -1319,48 +1430,87 @@ serve(async (req: Request) => {
           }
 
           // --- NEW ---
-          // Extract and validate sentiment_score from summaryJson
-          let sentimentScore: number | null = null;
-          if (summaryJson && !summaryJson.error) {
-            const score = summaryJson.sentiment_score;
-            // Validate sentiment_score is a number between -2 and 2
-            if (typeof score === 'number' && score >= -2 && score <= 2) {
-              sentimentScore = score;
-            } else {
-              // Try to map old sentiment text to new score if sentiment_score is missing
-              const sentimentText = summaryJson.customer_sentiment;
-              if (typeof sentimentText === 'string') {
-                const sentimentMap: Record<string, number> = {
-                  'Very Positive': 2,
-                  'Positive': 1,
-                  'Neutral': 0,
-                  'Negative': -1,
-                  'Very Negative': -2,
-                  'Frustrated': -2, // Map old "Frustrated" to -2
-                };
-                sentimentScore = sentimentMap[sentimentText] ?? 0;
-              } else {
-                sentimentScore = 0; // Default to neutral
-              }
-            }
-            console.log(`📊 Extracted sentiment_score: ${sentimentScore} for thread ${threadId}`);
-          }
+          // Extract and save feature requests from summaryJson
+          if (summaryJson && !summaryJson.error && Array.isArray(summaryJson.feature_requests) && summaryJson.feature_requests.length > 0) {
+            // Map new format to FeatureRequest interface
+            const featureRequests = summaryJson.feature_requests
+              .filter((req: any) => req && req.title && req.urgency)
+              .map((req: any) => {
+                // Combine customer_description, use_case, and urgency_signals into request_details
+                const requestDetails = [
+                  req.customer_description || '',
+                  req.use_case ? `Use case: ${req.use_case}` : '',
+                  req.urgency_signals ? `Urgency signals: ${req.urgency_signals}` : '',
+                  req.customer_impact ? `Impact: ${req.customer_impact}` : ''
+                ].filter(Boolean).join(' ').trim() || req.customer_description || 'No details provided';
 
-          // Also update existing customer messages in the thread with the new sentiment_score
-          // This ensures all messages in the thread have the same sentiment_score
-          if (sentimentScore !== null) {
-            const { error: updateError } = await supabaseAdmin
-              .from('thread_messages')
-              .update({ sentiment_score: sentimentScore })
-              .eq('thread_id', threadId)
-              .not('customer_id', 'is', null);
-            
-            if (updateError) {
-              console.warn(`⚠️ Failed to update sentiment_score for existing messages in thread ${threadId}:`, updateError);
-              // Don't throw - this is not critical, continue processing
+                return {
+                  feature_title: req.title,
+                  request_details: requestDetails,
+                  urgency: req.urgency as 'Low' | 'Medium' | 'High'
+                };
+              })
+              .filter((req: any) => ['Low', 'Medium', 'High'].includes(req.urgency));
+
+            if (featureRequests.length > 0) {
+              // Save feature requests for each company associated with the thread
+              // Fetch all customers for all companies in a single query for efficiency
+              const companyIdsArray = Array.from(discoveredCompanyIds.keys());
+              const customerIdsArray = Array.from(discoveredCustomerIds.values());
+              
+              let companyCustomerMap = new Map<string, string>(); // Map<company_id, customer_id>
+              
+              if (companyIdsArray.length > 0 && customerIdsArray.length > 0) {
+                // Fetch customers that belong to any of the discovered companies
+                const { data: customersData } = await supabaseAdmin
+                  .from('customers')
+                  .select('customer_id, company_id')
+                  .in('company_id', companyIdsArray)
+                  .in('customer_id', customerIdsArray);
+                
+                if (customersData) {
+                  // Build a map of company_id -> first customer_id found
+                  for (const customer of customersData) {
+                    if (!companyCustomerMap.has(customer.company_id)) {
+                      companyCustomerMap.set(customer.company_id, customer.customer_id);
+                    }
+                  }
+                }
+              }
+
+              // Save feature requests for each company
+              for (const companyId of discoveredCompanyIds.keys()) {
+                const customerIdForCompany = companyCustomerMap.get(companyId);
+
+                // If no customer found for this company, skip saving for this company
+                if (!customerIdForCompany) {
+                  console.warn(`⚠️ No customer found for company ${companyId} in thread ${threadId}, skipping feature request save for this company`);
+                  continue;
+                }
+
+                // Save feature requests for this company/customer
+                const result = await saveFeatureRequests(
+                  supabaseAdmin,
+                  featureRequests,
+                  {
+                    company_id: companyId,
+                    customer_id: customerIdForCompany,
+                    source: 'thread',
+                    thread_id: threadId
+                  }
+                );
+
+                if (result.success) {
+                  console.log(`✅ Successfully saved ${result.savedCount} feature requests for thread ${threadId}, company ${companyId}`);
+                } else {
+                  console.warn(`⚠️ Saved ${result.savedCount} feature requests with ${result.errors.length} errors for thread ${threadId}, company ${companyId}`);
+                }
+              }
             } else {
-              console.log(`✅ Updated sentiment_score for existing customer messages in thread ${threadId}`);
+              console.log(`ℹ️ No valid feature requests found in thread ${threadId} (filtered out invalid entries)`);
             }
+          } else if (summaryJson && !summaryJson.error) {
+            console.log(`ℹ️ No feature requests found in thread ${threadId}`);
           }
 
           // --- UPDATED ---
@@ -1369,20 +1519,6 @@ serve(async (req: Request) => {
           if (threadIndex !== -1) {
             threadsToStore[threadIndex].llm_summary = summaryJson;
             threadsToStore[threadIndex].llm_summary_updated_at = new Date().toISOString();
-          }
-
-          // Update sentiment_score for messages in local array
-          if (sentimentScore !== null) {
-            for (let i = 0; i < threadMessages.length; i++) {
-              const msg = threadMessages[i];
-              // Only set sentiment_score for messages from customers (where customer_id is not null)
-              if (msg.customer_id) {
-                threadMessages[i] = {
-                  ...msg,
-                  sentiment_score: sentimentScore
-                };
-              }
-            }
           }
           
           // Now add messages to messagesToStore (only after thread is successfully prepared)
