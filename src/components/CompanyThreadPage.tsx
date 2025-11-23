@@ -9,6 +9,7 @@ import ThreadConversationView from './ThreadConversationView';
 import HealthScoreBar from '@/components/ui/HealthScoreBar';
 import { getSentimentFromHealthScore } from '@/lib/utils';
 import { LLMSummary } from '@/lib/types/threads';
+import { getThreadById } from '@/lib/threads/queries';
 
 interface CompanyThreadPageProps {
   companyId: string;
@@ -73,6 +74,8 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
   const [error, setError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'Overview' | 'Interaction Timeline'>('Overview');
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [selectedThreadSummary, setSelectedThreadSummary] = useState<LLMSummary | { error: string } | null>(null);
+  const [loadingThread, setLoadingThread] = useState<boolean>(false);
   const supabase = useSupabase();
   const searchParams = useSearchParams();
 
@@ -146,6 +149,14 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
         // Initialize next steps state
         if (data && data.next_steps) {
           setNextSteps(data.next_steps);
+        }
+
+        // Debug: Log interaction_timeline to see if meetings are included
+        if (data && data.interaction_timeline) {
+          console.log('Interaction Timeline Data:', data.interaction_timeline);
+          const meetings = data.interaction_timeline.filter((i: Interaction) => i.interaction_type === 'meeting');
+          const emails = data.interaction_timeline.filter((i: Interaction) => i.interaction_type === 'email');
+          console.log(`Meetings: ${meetings.length}, Emails: ${emails.length}`);
         }
       } catch (err) {
         console.error('Error fetching company data:', err);
@@ -619,96 +630,139 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
 
         {/* Interaction Timeline View */}
         {activeView === 'Interaction Timeline' && (
-          <div className="space-y-6">
-            {selectedThreadId && selectedThread ? (
-              <ThreadConversationView
-                threadId={selectedThreadId}
-                threadSummary={selectedThread.llm_summary}
-                onClose={() => setSelectedThreadId(null)}
-              />
-            ) : (
-              <div className="glass-card rounded-2xl p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">Interaction Timeline</h2>
-                <p className="text-sm text-gray-600 mb-6">Complete history of calls and emails with detailed summaries.</p>
-                
-                <div className="space-y-4">
-                  {interaction_timeline && interaction_timeline.length > 0 ? (
-                    interaction_timeline.map((interaction, index) => {
-                      const isThread = interaction.interaction_type === 'email' && interaction.id && interaction.id.length > 20 && !interaction.id.includes('-');
-                      const isClickable = interaction.interaction_type === 'email' && isThread;
-                      
-                      return (
-                        <div 
-                          key={index} 
-                          className={`glass-bar-row p-5 ${isClickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
-                          onClick={() => {
-                            if (isClickable) {
-                              setSelectedThreadId(interaction.id);
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left Side - Interaction Timeline List */}
+            <div className="glass-card rounded-2xl p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">Interaction Timeline</h2>
+              <p className="text-sm text-gray-600 mb-6">Complete history of calls and emails with detailed summaries.</p>
+              
+              <div className="space-y-4">
+                {interaction_timeline && interaction_timeline.length > 0 ? (
+                  interaction_timeline.map((interaction, index) => {
+                    const isThread = interaction.interaction_type === 'email' && interaction.id && interaction.id.length > 20 && !interaction.id.includes('-');
+                    const isClickable = interaction.interaction_type === 'email' && isThread;
+                    const isSelected = selectedThreadId === interaction.id;
+                    
+                    return (
+                      <div 
+                        key={index} 
+                        className={`glass-bar-row p-5 ${isClickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''} ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
+                        onClick={async () => {
+                          if (isClickable) {
+                            setLoadingThread(true);
+                            setSelectedThreadId(interaction.id);
+                            
+                            try {
+                              // Fetch the thread to get its summary
+                              const { data: thread, error: threadError } = await getThreadById(supabase, interaction.id);
+                              
+                              if (threadError || !thread) {
+                                setSelectedThreadSummary({ error: threadError?.message || 'Thread not found' });
+                              } else {
+                                setSelectedThreadSummary(thread.llm_summary);
+                              }
+                            } catch (err) {
+                              console.error('Error fetching thread:', err);
+                              setSelectedThreadSummary({ error: 'Failed to load thread' });
+                            } finally {
+                              setLoadingThread(false);
                             }
-                          }}
-                        >
-                          <div className="flex items-start gap-4">
-                            {/* Icon */}
-                            <div className={`flex-shrink-0 w-12 h-12 rounded-xl border flex items-center justify-center ${
-                              interaction.interaction_type === 'meeting' 
-                                ? 'bg-pink-50 border-pink-200' 
-                                : 'bg-blue-50 border-blue-200'
-                            }`}>
-                              {interaction.interaction_type === 'meeting' ? (
-                                <Phone className="w-6 h-6 text-pink-600" />
-                              ) : (
-                                <Mail className="w-6 h-6 text-blue-600" />
+                          }
+                        }}
+                      >
+                        <div className="flex items-start gap-4">
+                          {/* Icon */}
+                          <div className={`flex-shrink-0 w-12 h-12 rounded-xl border flex items-center justify-center ${
+                            interaction.interaction_type === 'meeting' 
+                              ? 'bg-pink-50 border-pink-200' 
+                              : 'bg-blue-50 border-blue-200'
+                          }`}>
+                            {interaction.interaction_type === 'meeting' ? (
+                              <Phone className="w-6 h-6 text-pink-600" />
+                            ) : (
+                              <Mail className="w-6 h-6 text-blue-600" />
+                            )}
+                          </div>
+
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-2">
+                              <h3 className="font-semibold text-gray-900 truncate text-base">
+                                {interaction.title || 'No Title'}
+                              </h3>
+                              <span className="text-sm text-gray-600 flex-shrink-0 ml-2 font-medium">
+                                {formatDate(interaction.interaction_date)}
+                              </span>
+                            </div>
+
+                            {/* Type and Sentiment */}
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-sm font-medium text-gray-700">
+                                {interaction.interaction_type === 'meeting' ? 'Meeting' : 'Email Thread'}
+                              </span>
+                              {interaction.sentiment && (
+                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${getSentimentColor(interaction.sentiment)}`}>
+                                  {interaction.sentiment}
+                                </span>
                               )}
                             </div>
 
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                              {/* Header */}
-                              <div className="flex items-center justify-between mb-2">
-                                <h3 className="font-semibold text-gray-900 truncate text-base">
-                                  {interaction.title || 'No Title'}
-                                </h3>
-                                <span className="text-sm text-gray-600 flex-shrink-0 ml-2 font-medium">
-                                  {formatDate(interaction.interaction_date)}
-                                </span>
-                              </div>
+                            {/* Summary */}
+                            <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                              {interaction.summary || 'No summary available'}
+                            </p>
 
-                              {/* Type and Sentiment */}
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="text-sm font-medium text-gray-700">
-                                  {interaction.interaction_type === 'meeting' ? 'Meeting' : 'Email Thread'}
-                                </span>
-                                {interaction.sentiment && (
-                                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${getSentimentColor(interaction.sentiment)}`}>
-                                    {interaction.sentiment}
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Summary */}
-                              <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                                {interaction.summary || 'No summary available'}
-                              </p>
-
-                              {/* Click hint for threads */}
-                              {isClickable && (
-                                <span className="text-xs text-blue-600 hover:underline">
-                                  Click to view full thread conversation →
-                                </span>
-                              )}
-                            </div>
+                            {/* Click hint for threads */}
+                            {isClickable && (
+                              <span className="text-xs text-blue-600 hover:underline">
+                                Click to view full thread conversation →
+                              </span>
+                            )}
                           </div>
                         </div>
-                      );
-                    })
-                  ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      <p>No interactions found for this company.</p>
-                    </div>
-                  )}
-                </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No interactions found for this company.</p>
+                    {!interaction_timeline && (
+                      <p className="text-xs mt-2 text-gray-400">interaction_timeline is null or undefined</p>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+
+            {/* Right Side - Thread Conversation View */}
+            <div className="glass-card rounded-2xl p-6">
+              {selectedThreadId ? (
+                loadingThread ? (
+                  <div className="flex items-center justify-center p-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <p className="ml-4 text-gray-600">Loading thread...</p>
+                  </div>
+                ) : (
+                  <ThreadConversationView
+                    threadId={selectedThreadId}
+                    threadSummary={selectedThreadSummary}
+                    onClose={() => {
+                      setSelectedThreadId(null);
+                      setSelectedThreadSummary(null);
+                    }}
+                  />
+                )
+              ) : (
+                <div className="flex items-center justify-center h-full min-h-[400px] text-gray-500">
+                  <div className="text-center">
+                    <Mail className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                    <p className="text-lg font-medium">Select a thread to view conversation</p>
+                    <p className="text-sm mt-2">Click on any email thread from the timeline to see the full conversation and AI-generated summary.</p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
