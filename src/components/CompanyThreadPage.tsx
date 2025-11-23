@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { AlertCircle, List, Clock, Users, Mail, ArrowLeft, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertCircle, List, Clock, Users, Mail, ArrowLeft, CheckCircle, ChevronDown, ChevronRight, Phone } from 'lucide-react';
 import { useSupabase } from '@/components/SupabaseProvider';
 import { useCompanyThreads } from '@/hooks/useCompanyThreads';
 import ThreadListView from './ThreadListView';
@@ -51,9 +51,19 @@ interface NextStep {
   created_at: string;
 }
 
+interface Interaction {
+  interaction_type: 'email' | 'meeting';
+  interaction_date: string;
+  id: string;
+  title: string;
+  summary: string;
+  sentiment: string;
+}
+
 interface CompanyData {
   company_details: CompanyDetails;
   product_feedback: ProductFeedback[];
+  interaction_timeline: Interaction[];
   next_steps: NextStep[];
 }
 
@@ -61,7 +71,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
   const [companyData, setCompanyData] = useState<CompanyData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'Overview' | 'Threads'>('Overview');
+  const [activeView, setActiveView] = useState<'Overview' | 'Interaction Timeline'>('Overview');
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const supabase = useSupabase();
   const searchParams = useSearchParams();
@@ -160,7 +170,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
       if (threadExists) {
         // Thread belongs to this company, select it
         setSelectedThreadId(threadParam);
-        setActiveView('Threads');
+        setActiveView('Interaction Timeline');
       } else {
         // Thread doesn't exist or doesn't belong to this company
         console.warn(`Thread ${threadParam} not found in company ${companyId}'s threads`);
@@ -213,7 +223,22 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
     );
   }
 
-  const { company_details, product_feedback } = companyData;
+  const { company_details, product_feedback, interaction_timeline } = companyData;
+
+  const getSentimentColor = (sentiment: string | null): string => {
+    switch (sentiment?.toLowerCase()) {
+      case 'positive':
+      case 'very positive':
+        return 'bg-green-100 text-green-800';
+      case 'neutral':
+        return 'bg-blue-100 text-blue-800';
+      case 'frustrated':
+      case 'negative':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
 
   // Sentiment chip styles for company overall sentiment
   const sentimentStyles: Record<string, string> = {
@@ -298,14 +323,14 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
               Overview
             </button>
             <button
-              onClick={() => setActiveView('Threads')}
+              onClick={() => setActiveView('Interaction Timeline')}
               className={`flex-1 py-3 px-4 rounded-xl text-sm font-medium transition-all ${
-                activeView === 'Threads'
+                activeView === 'Interaction Timeline'
                   ? 'bg-white/90 text-blue-700 shadow-sm'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
               }`}
             >
-              Threads ({threads.length})
+              Interaction Timeline
             </button>
           </div>
         </div>
@@ -592,8 +617,8 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
           </div>
         )}
 
-        {/* Threads View */}
-        {activeView === 'Threads' && (
+        {/* Interaction Timeline View */}
+        {activeView === 'Interaction Timeline' && (
           <div className="space-y-6">
             {selectedThreadId && selectedThread ? (
               <ThreadConversationView
@@ -603,19 +628,85 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
               />
             ) : (
               <div className="glass-card rounded-2xl p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Email Threads</h2>
-                <p className="text-sm text-gray-600 mb-6">
-                  {threadsLoading 
-                    ? 'Loading threads...' 
-                    : threads.length === 0 
-                    ? 'No threads found. Threads will appear here after syncing from Gmail.'
-                    : 'Click on a thread to view the conversation and AI-generated summary.'}
-                </p>
-                <ThreadListView
-                  threads={threads}
-                  onThreadSelect={setSelectedThreadId}
-                  selectedThreadId={selectedThreadId}
-                />
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">Interaction Timeline</h2>
+                <p className="text-sm text-gray-600 mb-6">Complete history of calls and emails with detailed summaries.</p>
+                
+                <div className="space-y-4">
+                  {interaction_timeline && interaction_timeline.length > 0 ? (
+                    interaction_timeline.map((interaction, index) => {
+                      const isThread = interaction.interaction_type === 'email' && interaction.id && interaction.id.length > 20 && !interaction.id.includes('-');
+                      const isClickable = interaction.interaction_type === 'email' && isThread;
+                      
+                      return (
+                        <div 
+                          key={index} 
+                          className={`glass-bar-row p-5 ${isClickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                          onClick={() => {
+                            if (isClickable) {
+                              setSelectedThreadId(interaction.id);
+                            }
+                          }}
+                        >
+                          <div className="flex items-start gap-4">
+                            {/* Icon */}
+                            <div className={`flex-shrink-0 w-12 h-12 rounded-xl border flex items-center justify-center ${
+                              interaction.interaction_type === 'meeting' 
+                                ? 'bg-pink-50 border-pink-200' 
+                                : 'bg-blue-50 border-blue-200'
+                            }`}>
+                              {interaction.interaction_type === 'meeting' ? (
+                                <Phone className="w-6 h-6 text-pink-600" />
+                              ) : (
+                                <Mail className="w-6 h-6 text-blue-600" />
+                              )}
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 min-w-0">
+                              {/* Header */}
+                              <div className="flex items-center justify-between mb-2">
+                                <h3 className="font-semibold text-gray-900 truncate text-base">
+                                  {interaction.title || 'No Title'}
+                                </h3>
+                                <span className="text-sm text-gray-600 flex-shrink-0 ml-2 font-medium">
+                                  {formatDate(interaction.interaction_date)}
+                                </span>
+                              </div>
+
+                              {/* Type and Sentiment */}
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-sm font-medium text-gray-700">
+                                  {interaction.interaction_type === 'meeting' ? 'Meeting' : 'Email Thread'}
+                                </span>
+                                {interaction.sentiment && (
+                                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${getSentimentColor(interaction.sentiment)}`}>
+                                    {interaction.sentiment}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Summary */}
+                              <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                                {interaction.summary || 'No summary available'}
+                              </p>
+
+                              {/* Click hint for threads */}
+                              {isClickable && (
+                                <span className="text-xs text-blue-600 hover:underline">
+                                  Click to view full thread conversation →
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>No interactions found for this company.</p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
