@@ -355,6 +355,44 @@ body {
   color: #e5e7eb;
 }
 
+/* Force black text in light theme for summary sidebar - highest specificity */
+.thread-summary-sidebar,
+.thread-summary-sidebar h4,
+.thread-summary-sidebar h5,
+.thread-summary-sidebar p,
+.thread-summary-sidebar li,
+.thread-summary-sidebar span,
+.thread-summary-sidebar div {
+  color: #000000 !important;
+}
+
+/* Preserve colored elements (errors, bullets) */
+.thread-summary-sidebar .text-red-600,
+.thread-summary-sidebar .text-red-400,
+.thread-summary-sidebar .text-blue-600,
+.thread-summary-sidebar .text-blue-400 {
+  color: inherit !important;
+}
+
+/* Dark theme override for summary sidebar */
+[data-theme="dark"] .thread-summary-sidebar,
+[data-theme="dark"] .thread-summary-sidebar h4,
+[data-theme="dark"] .thread-summary-sidebar h5,
+[data-theme="dark"] .thread-summary-sidebar p,
+[data-theme="dark"] .thread-summary-sidebar li,
+[data-theme="dark"] .thread-summary-sidebar span,
+[data-theme="dark"] .thread-summary-sidebar div {
+  color: #f3f4f6 !important;
+}
+
+/* Preserve colored elements in dark theme */
+[data-theme="dark"] .thread-summary-sidebar .text-red-600,
+[data-theme="dark"] .thread-summary-sidebar .text-red-400,
+[data-theme="dark"] .thread-summary-sidebar .text-blue-600,
+[data-theme="dark"] .thread-summary-sidebar .text-blue-400 {
+  color: inherit !important;
+}
+
 /* Prevent prose styles from affecting buttons - must be very specific */
 .prose button,
 .prose-sm button,
