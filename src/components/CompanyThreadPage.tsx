@@ -639,16 +639,21 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
               <div className="space-y-4">
                 {interaction_timeline && interaction_timeline.length > 0 ? (
                   interaction_timeline.map((interaction, index) => {
-                    const isThread = interaction.interaction_type === 'email' && interaction.id && interaction.id.length > 20 && !interaction.id.includes('-');
-                    const isClickable = interaction.interaction_type === 'email' && isThread;
+                    // All email interactions should be clickable (they are threads)
+                    const isClickable = interaction.interaction_type === 'email' && interaction.id;
                     const isSelected = selectedThreadId === interaction.id;
                     
                     return (
                       <div 
                         key={index} 
-                        className={`glass-bar-row p-5 ${isClickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''} ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
-                        onClick={async () => {
-                          if (isClickable) {
+                        role={isClickable ? "button" : undefined}
+                        tabIndex={isClickable ? 0 : undefined}
+                        className={`glass-bar-row p-5 ${isClickable ? 'cursor-pointer hover:shadow-md transition-all hover:bg-white/90 focus:outline-none focus:ring-2 focus:ring-blue-500' : ''} ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/50' : ''}`}
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (isClickable && interaction.id) {
+                            console.log('Clicking on thread:', interaction.id);
                             setLoadingThread(true);
                             setSelectedThreadId(interaction.id);
                             
@@ -657,6 +662,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                               const { data: thread, error: threadError } = await getThreadById(supabase, interaction.id);
                               
                               if (threadError || !thread) {
+                                console.error('Thread fetch error:', threadError);
                                 setSelectedThreadSummary({ error: threadError?.message || 'Thread not found' });
                               } else {
                                 setSelectedThreadSummary(thread.llm_summary);
@@ -667,6 +673,12 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                             } finally {
                               setLoadingThread(false);
                             }
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
+                            e.preventDefault();
+                            (e.currentTarget as HTMLElement).click();
                           }
                         }}
                       >
@@ -715,9 +727,9 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
 
                             {/* Click hint for threads */}
                             {isClickable && (
-                              <span className="text-xs text-blue-600 hover:underline">
-                                Click to view full thread conversation →
-                              </span>
+                              <div className="mt-2 text-xs text-blue-600 font-medium">
+                                Click anywhere to view full thread conversation →
+                              </div>
                             )}
                           </div>
                         </div>

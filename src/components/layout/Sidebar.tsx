@@ -94,12 +94,12 @@ export default function Sidebar({ onSignOut }: SidebarProps) {
                 'relative flex items-center px-4 py-3 text-sm rounded-xl transition-all no-underline',
                 isActive
                   ? 'glass-card font-semibold text-gray-900 shadow-md'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-white/30'
+                  : 'text-gray-800 hover:text-gray-900 hover:bg-white/30'
               )}
             >
               <item.icon className={cn(
                 'w-5 h-5 mr-3 flex-shrink-0',
-                isActive ? 'text-gray-900' : 'text-gray-500'
+                isActive ? 'text-gray-900' : 'text-gray-700'
               )} />
               <span className={cn(
                 isActive ? 'font-semibold' : 'font-medium'
