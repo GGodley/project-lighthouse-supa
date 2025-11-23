@@ -72,7 +72,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
   const [companyData, setCompanyData] = useState<CompanyData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'Overview' | 'Threads' | 'Interaction Timeline'>('Overview');
+  const [activeView, setActiveView] = useState<'Overview' | 'Interaction Timeline'>('Overview');
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [selectedThreadSummary, setSelectedThreadSummary] = useState<LLMSummary | { error: string } | null>(null);
   const [loadingThread, setLoadingThread] = useState<boolean>(false);
@@ -330,19 +330,6 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
               }`}
             >
               Overview
-            </button>
-            <button
-              onClick={() => {
-                setActiveView('Threads');
-                setSelectedThreadId(null);
-              }}
-              className={`flex-1 py-3 px-4 rounded-xl text-sm font-medium transition-all ${
-                activeView === 'Threads'
-                  ? 'bg-white/90 text-blue-700 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
-              }`}
-            >
-              Threads ({threads.length})
             </button>
             <button
               onClick={() => setActiveView('Interaction Timeline')}
@@ -648,42 +635,6 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
           </div>
         )}
 
-        {/* Threads View */}
-        {activeView === 'Threads' && (
-          <div className="glass-card rounded-2xl p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">Threads</h2>
-            <ThreadListView
-              threads={threads}
-              onThreadSelect={(threadId) => {
-                setLoadingThread(true);
-                setSelectedThreadId(threadId);
-                
-                // Find the thread and get its summary
-                const thread = threads.find(t => t.thread_id === threadId);
-                if (thread && thread.llm_summary) {
-                  setSelectedThreadSummary(thread.llm_summary);
-                  setLoadingThread(false);
-                } else {
-                  // Fetch thread if summary not available
-                  getThreadById(supabase, threadId).then(({ data: threadData, error }) => {
-                    if (error || !threadData) {
-                      setSelectedThreadSummary({ error: error?.message || 'Thread not found' });
-                    } else {
-                      setSelectedThreadSummary(threadData.llm_summary);
-                    }
-                    setLoadingThread(false);
-                  }).catch((err) => {
-                    console.error('Error fetching thread:', err);
-                    setSelectedThreadSummary({ error: 'Failed to load thread' });
-                    setLoadingThread(false);
-                  });
-                }
-              }}
-              selectedThreadId={selectedThreadId}
-            />
-          </div>
-        )}
-
         {/* Interaction Timeline View */}
         {activeView === 'Interaction Timeline' && (
           <div className="glass-card rounded-2xl p-6">
@@ -757,14 +708,14 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                               <h3 className="font-semibold text-gray-900 truncate text-base">
                                 {interaction.title || 'No Title'}
                               </h3>
-                              <span className="text-sm text-gray-600 flex-shrink-0 ml-2 font-medium">
+                              <span className="text-sm text-gray-900 flex-shrink-0 ml-2 font-medium">
                                 {formatDate(interaction.interaction_date)}
                               </span>
                             </div>
 
                             {/* Type and Sentiment */}
                             <div className="flex items-center gap-2 mb-2">
-                              <span className="text-sm font-medium text-gray-700">
+                              <span className="text-sm font-medium text-gray-900">
                                 {interaction.interaction_type === 'meeting' ? 'Meeting' : 'Email Thread'}
                               </span>
                               {interaction.sentiment && (
@@ -775,7 +726,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                             </div>
 
                             {/* Summary */}
-                            <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                            <p className="text-sm text-gray-900 mb-3 line-clamp-2">
                               {interaction.summary || 'No summary available'}
                             </p>
 

@@ -79,20 +79,20 @@ export default function ThreadListView({ threads, onThreadSelect, selectedThread
                     <h3 className="font-semibold text-gray-900 truncate text-base">
                       {thread.subject || 'No Subject'}
                     </h3>
-                    <span className="text-sm text-gray-600 flex-shrink-0 ml-2 font-medium">
+                    <span className="text-sm text-gray-900 flex-shrink-0 ml-2 font-medium">
                       {formatDate(thread.last_message_date)}
                     </span>
                   </div>
 
                   {/* Snippet */}
-                  <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                  <p className="text-sm text-gray-900 mb-3 line-clamp-2">
                     {thread.snippet || 'No preview available'}
                   </p>
 
                   {/* Summary Info */}
                   {llmSummary && (
                     <div className="mt-3 space-y-2">
-                      <p className="text-sm text-gray-700">
+                      <p className="text-sm text-gray-900">
                         <span className="font-semibold">Problem: </span>
                         {problemStatement.length > 150 
                           ? `${problemStatement.substring(0, 150)}...` 
@@ -109,7 +109,7 @@ export default function ThreadListView({ threads, onThreadSelect, selectedThread
                   {/* Key Participants */}
                   {llmSummary && llmSummary.key_participants && Array.isArray(llmSummary.key_participants) && llmSummary.key_participants.length > 0 && (
                     <div className="mt-2">
-                      <span className="text-xs text-gray-600">
+                      <span className="text-xs text-gray-900">
                         Participants: {llmSummary.key_participants.join(', ')}
                       </span>
                     </div>
