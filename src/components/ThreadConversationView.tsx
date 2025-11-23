@@ -115,13 +115,13 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
                           </div>
                           
                           {toAddresses.length > 0 && (
-                            <div className="text-xs text-gray-600 dark:text-gray-400 ml-6">
+                            <div className="text-xs text-gray-900 dark:text-gray-400 ml-6">
                               <span className="font-medium">To:</span> {toAddresses.join(', ')}
                             </div>
                           )}
                           
                           {ccAddresses.length > 0 && (
-                            <div className="text-xs text-gray-600 dark:text-gray-400 ml-6">
+                            <div className="text-xs text-gray-900 dark:text-gray-400 ml-6">
                               <span className="font-medium">Cc:</span> {ccAddresses.join(', ')}
                             </div>
                           )}
@@ -137,7 +137,7 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
                     <div className="ml-6">
                       {message.body_html ? (
                         <div
-                          className="text-sm text-gray-900 dark:text-gray-100 prose prose-sm max-w-none"
+                          className="text-sm text-gray-900 dark:text-gray-100 prose prose-sm max-w-none prose-p:text-gray-900 prose-p:dark:text-gray-100 prose-strong:text-gray-900 prose-strong:dark:text-gray-100 prose-a:text-blue-600 prose-a:dark:text-blue-400"
                           dangerouslySetInnerHTML={{
                             __html: message.body_html
                           }}
@@ -147,9 +147,9 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
                           {message.body_text}
                         </div>
                       ) : message.snippet ? (
-                        <p className="text-sm text-gray-600 dark:text-gray-300 italic">{message.snippet}</p>
+                        <p className="text-sm text-gray-900 dark:text-gray-300 italic">{message.snippet}</p>
                       ) : (
-                        <p className="text-sm text-gray-400 dark:text-gray-500 italic">No content available</p>
+                        <p className="text-sm text-gray-900 dark:text-gray-500 italic">No content available</p>
                       )}
                     </div>
                   </div>
