@@ -137,19 +137,20 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
                     <div className="ml-6">
                       {message.body_html ? (
                         <div
-                          className="text-sm text-gray-900 dark:text-gray-100 prose prose-sm max-w-none prose-p:text-gray-900 prose-p:dark:text-gray-100 prose-strong:text-gray-900 prose-strong:dark:text-gray-100 prose-a:text-blue-600 prose-a:dark:text-blue-400"
+                          className="text-sm text-black dark:text-gray-100 prose prose-sm max-w-none prose-p:text-black prose-p:dark:text-gray-100 prose-strong:text-black prose-strong:dark:text-gray-100 prose-a:text-blue-600 prose-a:dark:text-blue-400 prose-li:text-black prose-li:dark:text-gray-100 prose-ul:text-black prose-ul:dark:text-gray-100 prose-ol:text-black prose-ol:dark:text-gray-100 prose-heading:text-black prose-heading:dark:text-gray-100"
+                          style={{ color: '#000000' }}
                           dangerouslySetInnerHTML={{
                             __html: message.body_html
                           }}
                         />
                       ) : message.body_text ? (
-                        <div className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">
+                        <div className="text-sm text-black dark:text-gray-100 whitespace-pre-wrap" style={{ color: '#000000' }}>
                           {message.body_text}
                         </div>
                       ) : message.snippet ? (
-                        <p className="text-sm text-gray-900 dark:text-gray-300 italic">{message.snippet}</p>
+                        <p className="text-sm text-black dark:text-gray-300 italic" style={{ color: '#000000' }}>{message.snippet}</p>
                       ) : (
-                        <p className="text-sm text-gray-900 dark:text-gray-500 italic">No content available</p>
+                        <p className="text-sm text-black dark:text-gray-500 italic" style={{ color: '#000000' }}>No content available</p>
                       )}
                     </div>
                   </div>

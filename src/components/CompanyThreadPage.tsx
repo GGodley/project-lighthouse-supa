@@ -756,7 +756,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
       {/* Thread Conversation Modal Overlay - Centered with buffers */}
       {selectedThreadId && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-6"
+          className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center p-6"
           style={{ marginLeft: '256px' }}
           onClick={(e) => {
             if (e.target === e.currentTarget) {
