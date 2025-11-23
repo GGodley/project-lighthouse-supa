@@ -169,18 +169,18 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
               <p>Error generating summary: {(threadSummary as { error: string }).error}</p>
             </div>
           ) : threadSummary ? (
-            <div className="space-y-4 text-sm">
+            <div className="space-y-4">
               {threadSummary.problem_statement && (
-                <div>
-                  <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-1">Problem Statement</h5>
-                  <p className="text-gray-600 dark:text-gray-400">{threadSummary.problem_statement}</p>
+                <div className="glass-card rounded-xl p-4">
+                  <h5 className="font-semibold text-gray-900 dark:text-gray-100 mb-2 text-base">Problem Statement</h5>
+                  <p className="text-sm text-gray-900 dark:text-gray-300">{threadSummary.problem_statement}</p>
                 </div>
               )}
 
               {threadSummary.key_participants && Array.isArray(threadSummary.key_participants) && threadSummary.key_participants.length > 0 && (
-                <div>
-                  <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-1">Key Participants</h5>
-                  <ul className="list-disc list-inside text-gray-600 dark:text-gray-400">
+                <div className="glass-card rounded-xl p-4">
+                  <h5 className="font-semibold text-gray-900 dark:text-gray-100 mb-2 text-base">Key Participants</h5>
+                  <ul className="list-disc list-inside text-sm text-gray-900 dark:text-gray-300 space-y-1">
                     {threadSummary.key_participants.map((participant: string, idx: number) => (
                       <li key={idx}>{participant}</li>
                     ))}
@@ -189,38 +189,38 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
               )}
 
               {threadSummary.timeline_summary && (
-                <div>
-                  <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-1">Timeline</h5>
-                  <p className="text-gray-600 dark:text-gray-400">{threadSummary.timeline_summary}</p>
+                <div className="glass-card rounded-xl p-4">
+                  <h5 className="font-semibold text-gray-900 dark:text-gray-100 mb-2 text-base">Timeline</h5>
+                  <p className="text-sm text-gray-900 dark:text-gray-300">{threadSummary.timeline_summary}</p>
                 </div>
               )}
 
               {threadSummary.resolution_status && (
-                <div>
-                  <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-1">Resolution Status</h5>
-                  <p className="text-gray-600 dark:text-gray-400">{threadSummary.resolution_status}</p>
+                <div className="glass-card rounded-xl p-4">
+                  <h5 className="font-semibold text-gray-900 dark:text-gray-100 mb-2 text-base">Resolution Status</h5>
+                  <p className="text-sm text-gray-900 dark:text-gray-300">{threadSummary.resolution_status}</p>
                 </div>
               )}
 
               {threadSummary.customer_sentiment && (
-                <div>
-                  <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-1">Customer Sentiment</h5>
-                  <p className="text-gray-600 dark:text-gray-400">{threadSummary.customer_sentiment}</p>
+                <div className="glass-card rounded-xl p-4">
+                  <h5 className="font-semibold text-gray-900 dark:text-gray-100 mb-2 text-base">Customer Sentiment</h5>
+                  <p className="text-sm text-gray-900 dark:text-gray-300">{threadSummary.customer_sentiment}</p>
                 </div>
               )}
 
               {threadSummary.next_steps && Array.isArray(threadSummary.next_steps) && threadSummary.next_steps.length > 0 && (
-                <div>
-                  <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-2">Next Steps</h5>
-                  <ul className="space-y-2">
+                <div className="glass-card rounded-xl p-4">
+                  <h5 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 text-base">Next Steps</h5>
+                  <ul className="space-y-3">
                     {threadSummary.next_steps.map((step: NextStep, idx: number) => (
-                      <li key={idx} className="text-gray-600 dark:text-gray-400">
+                      <li key={idx} className="text-sm text-gray-900 dark:text-gray-300">
                         <div className="flex items-start gap-2">
-                          <span className="text-blue-600 dark:text-blue-400 mt-1">•</span>
+                          <span className="text-blue-600 dark:text-blue-400 mt-1 font-bold">•</span>
                           <div className="flex-1">
-                            <p className="text-sm">{step.text}</p>
+                            <p className="text-sm text-gray-900 dark:text-gray-300">{step.text}</p>
                             {(step.owner || step.due_date) && (
-                              <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-500">
+                              <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-700 dark:text-gray-400">
                                 {step.owner && <span>Owner: {step.owner}</span>}
                                 {step.due_date && <span>Due: {new Date(step.due_date).toLocaleDateString()}</span>}
                               </div>
@@ -234,9 +234,9 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
               )}
               
               {threadSummary.csm_next_step && (
-                <div>
-                  <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-1">Next Step (Legacy)</h5>
-                  <p className="text-gray-600 dark:text-gray-400">{threadSummary.csm_next_step}</p>
+                <div className="glass-card rounded-xl p-4">
+                  <h5 className="font-semibold text-gray-900 dark:text-gray-100 mb-2 text-base">Next Step (Legacy)</h5>
+                  <p className="text-sm text-gray-900 dark:text-gray-300">{threadSummary.csm_next_step}</p>
                 </div>
               )}
             </div>
