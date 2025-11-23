@@ -148,12 +148,41 @@ serve(async (req) => {
       let companyId = null;
 
       // Find the first customer that matches any of the external attendees
-      const { data: customer, error: findErr } = await supabase
-        .from('customers')
-        .select('customer_id, company_id')
-        .in('email', externalEmails)
-        .limit(1)
-        .maybeSingle();
+      // CRITICAL: Filter by user_id to prevent cross-user data leakage
+      // Get user's companies first, then find customers in those companies
+      const { data: userCompanies, error: companiesErr } = await supabase
+        .from('companies')
+        .select('company_id')
+        .eq('user_id', userId);
+
+      if (companiesErr) {
+        console.error('❌ Failed to fetch user companies:', companiesErr);
+      } else if (userCompanies && userCompanies.length > 0) {
+        const companyIds = userCompanies.map(c => c.company_id);
+        
+        // Find customer in user's companies only
+        const { data: customer, error: findErr } = await supabase
+          .from('customers')
+          .select('customer_id, company_id')
+          .in('email', externalEmails)
+          .in('company_id', companyIds)  // CRITICAL: Only search in user's companies
+          .limit(1)
+          .maybeSingle();
+
+        if (findErr) {
+          console.error('❌ Customer lookup failed:', findErr);
+        } else if (customer) {
+          // We found a match!
+          customerId = customer.customer_id;
+          companyId = customer.company_id;
+          console.log(`✅ Found matching customer: ${customerId} (Company: ${companyId})`);
+        } else {
+          // No match was found.
+          console.warn(`ℹ️ No known customer found for this meeting. The meeting will be saved without a customer link.`);
+        }
+      } else {
+        console.warn(`ℹ️ User has no companies. The meeting will be saved without a customer link.`);
+      }
 
       if (findErr) {
         console.error('❌ Customer lookup failed:', findErr);
@@ -182,6 +211,23 @@ serve(async (req) => {
       console.log(`🔗 Meeting URL detected: ${meetingUrl}, Type: ${meetingType}`)
 
       // Step a: Create the Meeting Record with dispatch_status 'pending'
+      // CRITICAL: Validate that customer_id belongs to user's company before linking
+      if (customerId && companyId) {
+        // Double-check: verify the company belongs to this user
+        const { data: companyCheck, error: companyCheckErr } = await supabase
+          .from('companies')
+          .select('company_id')
+          .eq('company_id', companyId)
+          .eq('user_id', userId)
+          .single();
+
+        if (companyCheckErr || !companyCheck) {
+          console.warn(`⚠️ Security check failed: Company ${companyId} does not belong to user ${userId}. Clearing customer/company link.`);
+          customerId = null;
+          companyId = null;
+        }
+      }
+
       const meetingPayload: MeetingPayload = {
         user_id: userId,
         google_event_id: event.id,
