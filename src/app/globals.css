@@ -444,6 +444,50 @@ button:active,
   color: inherit !important;
 }
 
+/* Force black text in light theme for glass-card elements - highest specificity */
+.glass-card,
+.glass-card h1,
+.glass-card h2,
+.glass-card h3,
+.glass-card h4,
+.glass-card h5,
+.glass-card h6,
+.glass-card p,
+.glass-card span,
+.glass-card div,
+.glass-card li,
+.glass-card ul,
+.glass-card ol {
+  color: #000000 !important;
+}
+
+/* Preserve colored elements (badges, sentiment pills, etc.) */
+.glass-card .text-blue-700,
+.glass-card .text-green-700,
+.glass-card .text-red-700,
+.glass-card .text-purple-700,
+.glass-card .text-yellow-700,
+.glass-card .text-pink-600 {
+  color: inherit !important;
+}
+
+/* Dark theme override for glass-card */
+[data-theme="dark"] .glass-card,
+[data-theme="dark"] .glass-card h1,
+[data-theme="dark"] .glass-card h2,
+[data-theme="dark"] .glass-card h3,
+[data-theme="dark"] .glass-card h4,
+[data-theme="dark"] .glass-card h5,
+[data-theme="dark"] .glass-card h6,
+[data-theme="dark"] .glass-card p,
+[data-theme="dark"] .glass-card span,
+[data-theme="dark"] .glass-card div,
+[data-theme="dark"] .glass-card li,
+[data-theme="dark"] .glass-card ul,
+[data-theme="dark"] .glass-card ol {
+  color: #f3f4f6 !important;
+}
+
 /* Prevent default link styling in navigation sidebar */
 .glass-header nav a,
 .glass-header nav a:visited,
