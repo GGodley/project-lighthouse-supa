@@ -165,7 +165,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
   };
 
   return (
-    <div className="glass-card rounded-lg">
+    <div className="glass-card rounded-lg" style={{ color: '#000000' }}>
       {/* Header */}
       <div className="border-b border-white/20 dark:border-white/10 p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -184,7 +184,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
 
       <div className="flex flex-col lg:flex-row h-[600px]">
         {/* Main Content Panel */}
-        <div className="flex-1 overflow-y-auto p-6 border-r border-white/20 dark:border-white/10">
+        <div className="flex-1 overflow-y-auto p-6 border-r border-white/20 dark:border-white/10" style={{ color: '#000000' }}>
           <div className="space-y-6">
             {/* Date and Time */}
             <div className="glass-card rounded-xl p-4">
@@ -261,7 +261,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
         </div>
 
         {/* Next Steps Sidebar */}
-        <div className="w-full lg:w-80 p-4 glass-card overflow-y-auto">
+        <div className="w-full lg:w-80 p-4 glass-card overflow-y-auto" style={{ color: '#000000' }}>
           <div className="flex items-center gap-2 mb-4">
             <CheckCircle className="h-5 w-5 text-black dark:text-gray-400" />
             <h4 className="font-semibold text-black">Next Steps</h4>
