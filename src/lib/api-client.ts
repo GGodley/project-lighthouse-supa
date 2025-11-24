@@ -19,32 +19,6 @@ import { createClient } from '@/lib/supabase/client';
 let redirectInProgress = false;
 
 /**
- * Validates that a returnUrl is safe (same-origin) to prevent open redirects
- */
-function isValidReturnUrl(url: string | null): boolean {
-  if (!url) return false;
-  
-  try {
-    // If it's a relative path, it's safe
-    if (url.startsWith('/')) {
-      // Ensure it doesn't start with // (protocol-relative URL)
-      if (!url.startsWith('//')) {
-        return true;
-      }
-    }
-    
-    // If it's an absolute URL, check same-origin
-    const returnUrlObj = new URL(url, window.location.origin);
-    const currentOrigin = window.location.origin;
-    
-    return returnUrlObj.origin === currentOrigin;
-  } catch {
-    // Invalid URL format
-    return false;
-  }
-}
-
-/**
  * Handles 401 Unauthorized responses by redirecting to login
  */
 async function handleUnauthorized(currentPath: string): Promise<void> {
@@ -168,7 +142,8 @@ export async function apiFetchJson<T = any>(
     throw new Error(errorMessage);
   }
 
-  return response.json();
+  const json: unknown = await response.json();
+  return json as T;
 }
 
 /**
