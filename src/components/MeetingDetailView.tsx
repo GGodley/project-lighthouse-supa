@@ -68,11 +68,16 @@ export default function MeetingDetailView({ meeting, onClose }: MeetingDetailVie
   const parseNextSteps = (nextSteps: Json | string | null): Array<{ text: string; owner: string | null; due_date: string | null }> => {
     if (!nextSteps) return [];
     if (Array.isArray(nextSteps)) {
-      return nextSteps.map(step => ({
-        text: step.text || step || '',
-        owner: step.owner || null,
-        due_date: step.due_date || null
-      })).filter(step => step.text !== '');
+      return nextSteps
+        .filter((step): step is { text?: string; owner?: string; due_date?: string } => 
+          step !== null && typeof step === 'object' && !Array.isArray(step)
+        )
+        .map(step => ({
+          text: step.text || '',
+          owner: step.owner || null,
+          due_date: step.due_date || null
+        }))
+        .filter(step => step.text !== '');
     } else if (typeof nextSteps === 'string') {
       return [{ text: nextSteps.trim(), owner: null, due_date: null }];
     }
