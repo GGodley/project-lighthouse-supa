@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Phone, Mail, AlertCircle, CheckCircle, List, Clock, Users, ChevronDown, ChevronRight } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import ThreadConversationView from './ThreadConversationView';
+import MeetingDetailView from './MeetingDetailView';
 import { getThreadById } from '@/lib/threads/queries';
 import { LLMSummary } from '@/lib/types/threads';
 import HealthScoreBar from '@/components/ui/HealthScoreBar';
@@ -81,6 +82,11 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [selectedThreadSummary, setSelectedThreadSummary] = useState<LLMSummary | { error: string } | null>(null);
   const [loadingThread, setLoadingThread] = useState<boolean>(false);
+  
+  // Meeting modal state
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
+  const [selectedMeeting, setSelectedMeeting] = useState<any | null>(null);
+  const [loadingMeeting, setLoadingMeeting] = useState<boolean>(false);
   
   // Next Steps state management
   const [nextSteps, setNextSteps] = useState<NextStep[]>([]);
@@ -579,18 +585,21 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
               <div className="space-y-4">
                 {interaction_timeline && interaction_timeline.length > 0 ? (
                   interaction_timeline.map((interaction, index) => {
-                    const isThread = interaction.interaction_type === 'email' && interaction.id && interaction.id.length > 20 && !interaction.id.includes('-');
-                    const isClickable = interaction.interaction_type === 'email' && isThread;
-                    const isSelected = selectedThreadId === interaction.id;
+                    const isThread = interaction.interaction_type === 'email' && interaction.id;
+                    const isMeeting = interaction.interaction_type === 'meeting' && interaction.id;
+                    const isClickable = isThread || isMeeting;
+                    const isSelected = (isThread && selectedThreadId === interaction.id) || (isMeeting && selectedMeetingId === interaction.id);
                     
                     return (
                       <div 
                         key={index} 
-                        className={`bg-white border border-gray-200 rounded-lg shadow-sm p-4 ${isClickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''} ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
+                        className={`glass-bar-row p-5 ${isClickable ? 'cursor-pointer hover:shadow-md transition-all hover:bg-white/90' : ''} ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/50' : ''}`}
                         onClick={async () => {
-                          if (isClickable) {
+                          if (isThread && interaction.id) {
                             setLoadingThread(true);
                             setSelectedThreadId(interaction.id);
+                            setSelectedMeetingId(null);
+                            setSelectedMeeting(null);
                             
                             try {
                               // Fetch the thread to get its summary
@@ -606,6 +615,32 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                               setSelectedThreadSummary({ error: 'Failed to load thread' });
                             } finally {
                               setLoadingThread(false);
+                            }
+                          } else if (isMeeting && interaction.id) {
+                            setLoadingMeeting(true);
+                            setSelectedMeetingId(interaction.id);
+                            setSelectedThreadId(null);
+                            setSelectedThreadSummary(null);
+                            
+                            try {
+                              // Fetch the meeting details
+                              const { data: meeting, error: meetingError } = await supabase
+                                .from('meetings')
+                                .select('*')
+                                .eq('google_event_id', interaction.id)
+                                .single();
+                              
+                              if (meetingError || !meeting) {
+                                console.error('Error fetching meeting:', meetingError);
+                                setSelectedMeeting(null);
+                              } else {
+                                setSelectedMeeting(meeting);
+                              }
+                            } catch (err) {
+                              console.error('Error fetching meeting:', err);
+                              setSelectedMeeting(null);
+                            } finally {
+                              setLoadingMeeting(false);
                             }
                           }
                         }}
@@ -653,10 +688,10 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                               {interaction.summary || 'No summary available'}
                             </p>
 
-                            {/* Click hint for threads */}
+                            {/* Click hint */}
                             {isClickable && (
-                              <span className="text-xs text-blue-600 hover:underline">
-                                Click to view full thread conversation →
+                              <span className="text-xs text-blue-600">
+                                {isThread ? 'Click to view full thread conversation →' : 'Click to view meeting details →'}
                               </span>
                             )}
                           </div>
@@ -693,18 +728,70 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                     }}
                   />
                 )
+              ) : selectedMeetingId ? (
+                loadingMeeting ? (
+                  <div className="flex items-center justify-center p-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <p className="ml-4 text-gray-600">Loading meeting...</p>
+                  </div>
+                ) : selectedMeeting ? (
+                  <MeetingDetailView
+                    meeting={selectedMeeting}
+                    onClose={() => {
+                      setSelectedMeetingId(null);
+                      setSelectedMeeting(null);
+                    }}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center p-8 text-red-600">
+                    <p>Failed to load meeting details</p>
+                  </div>
+                )
               ) : (
                 <div className="flex items-center justify-center h-full min-h-[400px] text-gray-500">
                   <div className="text-center">
                     <Mail className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                    <p className="text-lg font-medium">Select a thread to view conversation</p>
-                    <p className="text-sm mt-2">Click on any email thread from the timeline to see the full conversation and AI-generated summary.</p>
+                    <p className="text-lg font-medium">Select a thread or meeting to view details</p>
+                    <p className="text-sm mt-2">Click on any email thread or meeting from the timeline to see the full details.</p>
                   </div>
                 </div>
               )}
             </div>
           </div>
         )}
+
+      {/* Meeting Detail Modal Overlay - Centered with buffers */}
+      {selectedMeetingId && selectedMeeting && (
+        <div 
+          className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+          style={{ marginLeft: '256px' }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedMeetingId(null);
+              setSelectedMeeting(null);
+            }
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl h-full max-h-[90vh] overflow-hidden flex flex-col"
+          >
+            {loadingMeeting ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <p className="ml-4 text-gray-600">Loading meeting...</p>
+              </div>
+            ) : (
+              <MeetingDetailView
+                meeting={selectedMeeting}
+                onClose={() => {
+                  setSelectedMeetingId(null);
+                  setSelectedMeeting(null);
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
