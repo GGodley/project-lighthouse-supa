@@ -710,58 +710,45 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
               </div>
             </div>
 
-            {/* Right Side - Thread Conversation View */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              {selectedThreadId ? (
-                loadingThread ? (
-                  <div className="flex items-center justify-center p-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    <p className="ml-4 text-gray-600">Loading thread...</p>
-                  </div>
-                ) : (
-                  <ThreadConversationView
-                    threadId={selectedThreadId}
-                    threadSummary={selectedThreadSummary}
-                    onClose={() => {
-                      setSelectedThreadId(null);
-                      setSelectedThreadSummary(null);
-                    }}
-                  />
-                )
-              ) : selectedMeetingId ? (
-                loadingMeeting ? (
-                  <div className="flex items-center justify-center p-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    <p className="ml-4 text-gray-600">Loading meeting...</p>
-                  </div>
-                ) : selectedMeeting ? (
-                  <MeetingDetailView
-                    meeting={selectedMeeting}
-                    onClose={() => {
-                      setSelectedMeetingId(null);
-                      setSelectedMeeting(null);
-                    }}
-                  />
-                ) : (
-                  <div className="flex items-center justify-center p-8 text-red-600">
-                    <p>Failed to load meeting details</p>
-                  </div>
-                )
-              ) : (
-                <div className="flex items-center justify-center h-full min-h-[400px] text-gray-500">
-                  <div className="text-center">
-                    <Mail className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                    <p className="text-lg font-medium">Select a thread or meeting to view details</p>
-                    <p className="text-sm mt-2">Click on any email thread or meeting from the timeline to see the full details.</p>
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
         )}
 
-      {/* Meeting Detail Modal Overlay - Centered with buffers */}
-      {selectedMeetingId && selectedMeeting && (
+      {/* Thread Conversation Modal Overlay */}
+      {selectedThreadId && (
+        <div 
+          className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+          style={{ marginLeft: '256px' }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedThreadId(null);
+              setSelectedThreadSummary(null);
+            }
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl h-full max-h-[90vh] overflow-hidden flex flex-col"
+          >
+            {loadingThread ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <p className="ml-4 text-gray-600">Loading thread...</p>
+              </div>
+            ) : (
+              <ThreadConversationView
+                threadId={selectedThreadId}
+                threadSummary={selectedThreadSummary}
+                onClose={() => {
+                  setSelectedThreadId(null);
+                  setSelectedThreadSummary(null);
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Meeting Detail Modal Overlay */}
+      {selectedMeetingId && (
         <div 
           className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center p-6"
           style={{ marginLeft: '256px' }}
