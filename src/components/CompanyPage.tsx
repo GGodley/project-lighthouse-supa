@@ -733,22 +733,22 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
           >
             {loadingThread ? (
               <div className="flex items-center justify-center h-full">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                <p className="ml-4 text-gray-600">Loading thread...</p>
-              </div>
-            ) : (
-              <ThreadConversationView
-                threadId={selectedThreadId}
-                threadSummary={selectedThreadSummary}
-                onClose={() => {
-                  setSelectedThreadId(null);
-                  setSelectedThreadSummary(null);
-                }}
-              />
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <p className="ml-4 text-gray-600">Loading thread...</p>
+                  </div>
+                ) : (
+                  <ThreadConversationView
+                    threadId={selectedThreadId}
+                    threadSummary={selectedThreadSummary}
+                    onClose={() => {
+                      setSelectedThreadId(null);
+                      setSelectedThreadSummary(null);
+                    }}
+                  />
             )}
-          </div>
-        </div>
-      )}
+                  </div>
+                </div>
+              )}
 
       {/* Meeting Detail Modal Overlay */}
       {selectedMeetingId && (
@@ -784,9 +784,9 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                 <p>Failed to load meeting details</p>
               </div>
             )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
       </div>
     </div>
   );

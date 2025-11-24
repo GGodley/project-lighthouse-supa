@@ -2,7 +2,6 @@
 
 import HomeNavigation from '@/components/layout/HomeNavigation'
 import Typewriter from '@/components/ui/Typewriter'
-import Link from 'next/link'
 
 export default function Home() {
   return (
