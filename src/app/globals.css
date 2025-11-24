@@ -488,6 +488,22 @@ button:active,
   color: #f3f4f6 !important;
 }
 
+/* Force black text on all paragraphs and spans in glass-card - override dark: classes */
+.glass-card p,
+.glass-card span:not(.text-blue-700):not(.text-green-700):not(.text-red-700):not(.text-purple-700):not(.text-yellow-700):not(.text-pink-600),
+.glass-card li,
+.glass-card div:not([class*="text-"]) {
+  color: #000000 !important;
+}
+
+/* Dark theme override for paragraphs and spans */
+[data-theme="dark"] .glass-card p,
+[data-theme="dark"] .glass-card span:not(.text-blue-700):not(.text-green-700):not(.text-red-700):not(.text-purple-700):not(.text-yellow-700):not(.text-pink-600),
+[data-theme="dark"] .glass-card li,
+[data-theme="dark"] .glass-card div:not([class*="text-"]) {
+  color: #f3f4f6 !important;
+}
+
 /* Prevent default link styling in navigation sidebar */
 .glass-header nav a,
 .glass-header nav a:visited,
