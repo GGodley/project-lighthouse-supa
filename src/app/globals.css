@@ -444,7 +444,7 @@ button:active,
   color: inherit !important;
 }
 
-/* Force black text in light theme for glass-card elements - highest specificity */
+/* Force dark grey text in light theme for glass-card elements - highest specificity */
 .glass-card,
 .glass-card h1,
 .glass-card h2,
@@ -458,7 +458,7 @@ button:active,
 .glass-card li,
 .glass-card ul,
 .glass-card ol {
-  color: #000000 !important;
+  color: #1a1a1a !important;
 }
 
 /* Preserve colored elements (badges, sentiment pills, etc.) */
@@ -488,12 +488,12 @@ button:active,
   color: #f3f4f6 !important;
 }
 
-/* Force black text on all paragraphs and spans in glass-card - override dark: classes */
+/* Force dark grey text on all paragraphs and spans in glass-card - override dark: classes */
 .glass-card p,
 .glass-card span:not(.text-blue-700):not(.text-green-700):not(.text-red-700):not(.text-purple-700):not(.text-yellow-700):not(.text-pink-600),
 .glass-card li,
 .glass-card div:not([class*="text-"]) {
-  color: #000000 !important;
+  color: #1a1a1a !important;
 }
 
 /* Dark theme override for paragraphs and spans */

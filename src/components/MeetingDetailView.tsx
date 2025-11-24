@@ -165,7 +165,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
   };
 
   return (
-    <div className="glass-card rounded-lg" style={{ color: '#000000' }}>
+    <div className="glass-card rounded-lg" style={{ color: '#1a1a1a' }}>
       {/* Header */}
       <div className="border-b border-white/20 dark:border-white/10 p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -184,35 +184,35 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
 
       <div className="flex flex-col lg:flex-row h-[600px]">
         {/* Main Content Panel */}
-        <div className="flex-1 overflow-y-auto p-6 border-r border-white/20 dark:border-white/10" style={{ color: '#000000' }}>
+        <div className="flex-1 overflow-y-auto p-6 border-r border-white/20 dark:border-white/10" style={{ color: '#1a1a1a' }}>
           <div className="space-y-6">
             {/* Date and Time */}
-            <div className="glass-card rounded-xl p-4" style={{ color: '#000000' }}>
+            <div className="glass-card rounded-xl p-4" style={{ color: '#1a1a1a' }}>
               <div className="flex items-center gap-2 mb-3">
                 <Calendar className="h-5 w-5 text-black dark:text-gray-400" />
                 <h4 className="font-semibold text-black">Date & Time</h4>
               </div>
-              <div className="space-y-2 text-sm" style={{ color: '#000000' }}>
+              <div className="space-y-2 text-sm" style={{ color: '#1a1a1a' }}>
                 <div>
-                  <span className="font-medium text-black dark:text-gray-300" style={{ color: '#000000' }}>Date: </span>
-                  <span className="text-black dark:text-gray-400" style={{ color: '#000000' }}>{formatDate(meeting.start_time)}</span>
+                  <span className="font-medium text-black dark:text-gray-300" style={{ color: '#1a1a1a' }}>Date: </span>
+                  <span className="text-black dark:text-gray-400" style={{ color: '#1a1a1a' }}>{formatDate(meeting.start_time)}</span>
                 </div>
                 <div className="flex items-center gap-4">
                   <div>
-                    <span className="font-medium text-black dark:text-gray-300" style={{ color: '#000000' }}>Start: </span>
-                    <span className="text-black dark:text-gray-400" style={{ color: '#000000' }}>{formatTime(meeting.start_time)}</span>
+                    <span className="font-medium text-black dark:text-gray-300" style={{ color: '#1a1a1a' }}>Start: </span>
+                    <span className="text-black dark:text-gray-400" style={{ color: '#1a1a1a' }}>{formatTime(meeting.start_time)}</span>
                   </div>
                   {meeting.end_time && (
                     <div>
-                      <span className="font-medium text-black dark:text-gray-300" style={{ color: '#000000' }}>End: </span>
-                      <span className="text-black dark:text-gray-400" style={{ color: '#000000' }}>{formatTime(meeting.end_time)}</span>
+                      <span className="font-medium text-black dark:text-gray-300" style={{ color: '#1a1a1a' }}>End: </span>
+                      <span className="text-black dark:text-gray-400" style={{ color: '#1a1a1a' }}>{formatTime(meeting.end_time)}</span>
                     </div>
                   )}
                 </div>
                 {meeting.start_time && meeting.end_time && (
                   <div className="flex items-center gap-2 mt-2">
-                    <Clock className="h-4 w-4 text-black dark:text-gray-400" style={{ color: '#000000' }} />
-                    <span className="text-xs text-black dark:text-gray-400" style={{ color: '#000000' }}>
+                    <Clock className="h-4 w-4 text-black dark:text-gray-400" style={{ color: '#1a1a1a' }} />
+                    <span className="text-xs text-black dark:text-gray-400" style={{ color: '#1a1a1a' }}>
                       Duration: {Math.round((new Date(meeting.end_time).getTime() - new Date(meeting.start_time).getTime()) / 60000)} minutes
                     </span>
                   </div>
@@ -222,7 +222,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
 
             {/* Attendees */}
             {attendees.length > 0 && (
-              <div className="glass-card rounded-xl p-4" style={{ color: '#000000' }}>
+              <div className="glass-card rounded-xl p-4" style={{ color: '#1a1a1a' }}>
                 <div className="flex items-center gap-2 mb-3">
                   <Users className="h-5 w-5 text-black dark:text-gray-400" />
                   <h4 className="font-semibold text-black">Attendees</h4>
@@ -240,9 +240,9 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
 
             {/* Summary */}
             {meeting.summary && (
-              <div className="glass-card rounded-xl p-4" style={{ color: '#000000' }}>
+              <div className="glass-card rounded-xl p-4" style={{ color: '#1a1a1a' }}>
                 <h4 className="font-semibold text-black mb-3">Summary</h4>
-                <p className="text-sm text-black dark:text-gray-300 whitespace-pre-wrap" style={{ color: '#000000 !important' } as React.CSSProperties}>
+                <p className="text-sm text-black dark:text-gray-300 whitespace-pre-wrap" style={{ color: '#1a1a1a' }}>
                   {meeting.summary}
                 </p>
               </div>
@@ -250,7 +250,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
 
             {/* Sentiment */}
             {meeting.customer_sentiment && (
-              <div className="glass-card rounded-xl p-4" style={{ color: '#000000' }}>
+              <div className="glass-card rounded-xl p-4" style={{ color: '#1a1a1a' }}>
                 <h4 className="font-semibold text-black mb-3">Customer Sentiment</h4>
                 <span className={`inline-block px-3 py-1.5 rounded-full text-xs font-semibold ${getSentimentColor(meeting.customer_sentiment)}`}>
                   {meeting.customer_sentiment}
@@ -261,7 +261,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
         </div>
 
         {/* Next Steps Sidebar */}
-        <div className="w-full lg:w-80 p-4 glass-card overflow-y-auto" style={{ color: '#000000' }}>
+        <div className="w-full lg:w-80 p-4 glass-card overflow-y-auto" style={{ color: '#1a1a1a' }}>
           <div className="flex items-center gap-2 mb-4">
             <CheckCircle className="h-5 w-5 text-black dark:text-gray-400" />
             <h4 className="font-semibold text-black">Next Steps</h4>
@@ -287,7 +287,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
                       {step.completed && <CheckCircle className="w-4 h-4 text-white" />}
                     </button>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm text-black font-medium mb-2 ${step.completed ? 'line-through' : ''}`} style={{ color: '#000000' }}>
+                      <p className={`text-sm text-black font-medium mb-2 ${step.completed ? 'line-through' : ''}`} style={{ color: '#1a1a1a' }}>
                         {step.text}
                       </p>
                       <div className="flex items-center gap-2 flex-wrap">
