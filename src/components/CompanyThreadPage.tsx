@@ -139,7 +139,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
       
       try {
         const functionName = `get-company-page-details?company_id=${companyId}`;
-        const { data, error } = await supabase.functions.invoke(functionName, {
+        const { data, error } = await supabase.functions.invoke<CompanyData>(functionName, {
           method: 'GET',
         });
 
@@ -845,7 +845,6 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
             ) : selectedMeeting ? (
               <MeetingDetailView
                 meeting={selectedMeeting}
-                companyId={companyId}
                 onClose={() => {
                   setSelectedMeetingId(null);
                   setSelectedMeeting(null);
