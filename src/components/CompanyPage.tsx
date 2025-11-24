@@ -137,7 +137,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
       
       try {
         const functionName = `get-company-page-details?company_id=${companyId}`;
-        const { data, error } = await supabase.functions.invoke<CompanyData>(functionName, {
+        const { data, error } = await supabase.functions.invoke(functionName, {
           method: 'GET',
         });
 
@@ -733,22 +733,22 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
           >
             {loadingThread ? (
               <div className="flex items-center justify-center h-full">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    <p className="ml-4 text-gray-600">Loading thread...</p>
-                  </div>
-                ) : (
-                  <ThreadConversationView
-                    threadId={selectedThreadId}
-                    threadSummary={selectedThreadSummary}
-                    onClose={() => {
-                      setSelectedThreadId(null);
-                      setSelectedThreadSummary(null);
-                    }}
-                  />
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <p className="ml-4 text-gray-600">Loading thread...</p>
+              </div>
+            ) : (
+              <ThreadConversationView
+                threadId={selectedThreadId}
+                threadSummary={selectedThreadSummary}
+                onClose={() => {
+                  setSelectedThreadId(null);
+                  setSelectedThreadSummary(null);
+                }}
+              />
             )}
-                  </div>
-                </div>
-              )}
+          </div>
+        </div>
+      )}
 
       {/* Meeting Detail Modal Overlay */}
       {selectedMeetingId && (
@@ -772,20 +772,25 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
               </div>
             ) : selectedMeeting ? (
               <MeetingDetailView
-                meeting={selectedMeeting}
+                meeting={{
+                  google_event_id: selectedMeeting.google_event_id,
+                  title: selectedMeeting.title,
+                  summary: selectedMeeting.summary,
+                  start_time: selectedMeeting.start_time,
+                  end_time: selectedMeeting.end_time,
+                  attendees: selectedMeeting.attendees,
+                  next_steps: selectedMeeting.next_steps,
+                  customer_sentiment: selectedMeeting.customer_sentiment,
+                }}
                 onClose={() => {
                   setSelectedMeetingId(null);
                   setSelectedMeeting(null);
                 }}
               />
-            ) : (
-              <div className="flex items-center justify-center h-full text-red-600">
-                <p>Failed to load meeting details</p>
-              </div>
-            )}
-            </div>
+            ) : null}
           </div>
-        )}
+        </div>
+      )}
       </div>
     </div>
   );

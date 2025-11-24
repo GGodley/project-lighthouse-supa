@@ -2,9 +2,15 @@
 
 import React from 'react';
 import { Phone, X, Calendar, Users, Clock, CheckCircle } from 'lucide-react';
-import { Database, Json } from '@/types/database';
+import { Json } from '@/types/database';
 
-type Meeting = Database['public']['Tables']['meetings']['Row'];
+type Attendee = string | { email?: string; name?: string } | unknown;
+
+interface NextStep {
+  text: string;
+  owner: string | null;
+  due_date: string | null;
+}
 
 interface MeetingDetailViewProps {
   meeting: {
@@ -13,8 +19,8 @@ interface MeetingDetailViewProps {
     summary: string | null;
     start_time: string | null;
     end_time: string | null;
-    attendees: Meeting['attendees'];
-    next_steps: Meeting['next_steps'];
+    attendees: Json | null;
+    next_steps: Json | null;
     customer_sentiment: string | null;
   };
   onClose: () => void;
@@ -66,19 +72,20 @@ export default function MeetingDetailView({ meeting, onClose }: MeetingDetailVie
   };
 
   // Parse next steps - can be array or string
-  // Note: Database type shows next_steps as string | null, but it can be JSONB in practice
-  const parseNextSteps = (nextSteps: Json | string | null): Array<{ text: string; owner: string | null; due_date: string | null }> => {
+  const parseNextSteps = (nextSteps: Json | null): NextStep[] => {
     if (!nextSteps) return [];
     if (Array.isArray(nextSteps)) {
       return nextSteps
         .filter((step: Json): step is Record<string, Json | undefined> => 
           step !== null && typeof step === 'object' && !Array.isArray(step)
         )
-        .map((step: Record<string, Json | undefined>) => ({
-          text: typeof step.text === 'string' ? step.text : '',
-          owner: typeof step.owner === 'string' ? step.owner : null,
-          due_date: typeof step.due_date === 'string' ? step.due_date : null
-        }))
+        .map((step: Record<string, Json | undefined>): NextStep => {
+          return {
+            text: typeof step.text === 'string' ? step.text : '',
+            owner: typeof step.owner === 'string' ? step.owner : null,
+            due_date: typeof step.due_date === 'string' ? step.due_date : null
+          };
+        })
         .filter(step => step.text !== '');
     } else if (typeof nextSteps === 'string') {
       return [{ text: nextSteps.trim(), owner: null, due_date: null }];
@@ -234,3 +241,4 @@ export default function MeetingDetailView({ meeting, onClose }: MeetingDetailVie
     </div>
   );
 }
+
