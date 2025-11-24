@@ -50,12 +50,14 @@ export default function MeetingDetailView({ meeting, onClose }: MeetingDetailVie
   const parseAttendees = (attendees: Json | null): string[] => {
     if (!attendees) return [];
     if (Array.isArray(attendees)) {
-      return attendees.map((attendee: Json) => {
+      return attendees.map((attendee: Json): string => {
         if (typeof attendee === 'string') {
           return attendee;
         } else if (attendee && typeof attendee === 'object' && attendee !== null && !Array.isArray(attendee)) {
-          const attendeeObj = attendee as { email?: string; name?: string };
-          return attendeeObj.email || attendeeObj.name || JSON.stringify(attendee);
+          const attendeeObj = attendee as Record<string, Json | undefined>;
+          const email = typeof attendeeObj.email === 'string' ? attendeeObj.email : undefined;
+          const name = typeof attendeeObj.name === 'string' ? attendeeObj.name : undefined;
+          return email || name || JSON.stringify(attendee);
         }
         return String(attendee);
       });
@@ -69,13 +71,13 @@ export default function MeetingDetailView({ meeting, onClose }: MeetingDetailVie
     if (!nextSteps) return [];
     if (Array.isArray(nextSteps)) {
       return nextSteps
-        .filter((step): step is { text?: string; owner?: string; due_date?: string } => 
+        .filter((step: Json): step is Record<string, Json | undefined> => 
           step !== null && typeof step === 'object' && !Array.isArray(step)
         )
-        .map(step => ({
-          text: step.text || '',
-          owner: step.owner || null,
-          due_date: step.due_date || null
+        .map((step: Record<string, Json | undefined>) => ({
+          text: typeof step.text === 'string' ? step.text : '',
+          owner: typeof step.owner === 'string' ? step.owner : null,
+          due_date: typeof step.due_date === 'string' ? step.due_date : null
         }))
         .filter(step => step.text !== '');
     } else if (typeof nextSteps === 'string') {

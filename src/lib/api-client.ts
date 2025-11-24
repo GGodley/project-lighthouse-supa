@@ -143,6 +143,8 @@ export async function apiFetchJson<T = unknown>(
   }
 
   const json: unknown = await response.json();
+  // Type assertion is necessary here as JSON.parse returns unknown
+  // The caller is responsible for ensuring T matches the actual response structure
   return json as T;
 }
 
