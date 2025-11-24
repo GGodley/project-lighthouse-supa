@@ -137,7 +137,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
       
       try {
         const functionName = `get-company-page-details?company_id=${companyId}`;
-        const { data, error } = await supabase.functions.invoke(functionName, {
+        const { data, error } = await supabase.functions.invoke<CompanyData>(functionName, {
           method: 'GET',
         });
 
