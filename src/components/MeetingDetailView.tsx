@@ -192,27 +192,27 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
                 <Calendar className="h-5 w-5 text-black dark:text-gray-400" />
                 <h4 className="font-semibold text-black">Date & Time</h4>
               </div>
-              <div className="space-y-2 text-sm">
+              <div className="space-y-2 text-sm" style={{ color: '#000000' }}>
                 <div>
-                  <span className="font-medium text-black dark:text-gray-300">Date: </span>
-                  <span className="text-black dark:text-gray-400">{formatDate(meeting.start_time)}</span>
+                  <span className="font-medium text-black dark:text-gray-300" style={{ color: '#000000' }}>Date: </span>
+                  <span className="text-black dark:text-gray-400" style={{ color: '#000000' }}>{formatDate(meeting.start_time)}</span>
                 </div>
                 <div className="flex items-center gap-4">
                   <div>
-                    <span className="font-medium text-black dark:text-gray-300">Start: </span>
-                    <span className="text-black dark:text-gray-400">{formatTime(meeting.start_time)}</span>
+                    <span className="font-medium text-black dark:text-gray-300" style={{ color: '#000000' }}>Start: </span>
+                    <span className="text-black dark:text-gray-400" style={{ color: '#000000' }}>{formatTime(meeting.start_time)}</span>
                   </div>
                   {meeting.end_time && (
                     <div>
-                      <span className="font-medium text-black dark:text-gray-300">End: </span>
-                      <span className="text-black dark:text-gray-400">{formatTime(meeting.end_time)}</span>
+                      <span className="font-medium text-black dark:text-gray-300" style={{ color: '#000000' }}>End: </span>
+                      <span className="text-black dark:text-gray-400" style={{ color: '#000000' }}>{formatTime(meeting.end_time)}</span>
                     </div>
                   )}
                 </div>
                 {meeting.start_time && meeting.end_time && (
                   <div className="flex items-center gap-2 mt-2">
-                    <Clock className="h-4 w-4 text-black dark:text-gray-400" />
-                    <span className="text-xs text-black dark:text-gray-400">
+                    <Clock className="h-4 w-4 text-black dark:text-gray-400" style={{ color: '#000000' }} />
+                    <span className="text-xs text-black dark:text-gray-400" style={{ color: '#000000' }}>
                       Duration: {Math.round((new Date(meeting.end_time).getTime() - new Date(meeting.start_time).getTime()) / 60000)} minutes
                     </span>
                   </div>
@@ -242,7 +242,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
             {meeting.summary && (
               <div className="glass-card rounded-xl p-4" style={{ color: '#000000' }}>
                 <h4 className="font-semibold text-black mb-3">Summary</h4>
-                <p className="text-sm text-black dark:text-gray-300 whitespace-pre-wrap" style={{ color: '#000000' }}>
+                <p className="text-sm text-black dark:text-gray-300 whitespace-pre-wrap" style={{ color: '#000000 !important' } as React.CSSProperties}>
                   {meeting.summary}
                 </p>
               </div>
@@ -287,7 +287,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
                       {step.completed && <CheckCircle className="w-4 h-4 text-white" />}
                     </button>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm text-black font-medium mb-2 ${step.completed ? 'line-through' : ''}`}>
+                      <p className={`text-sm text-black font-medium mb-2 ${step.completed ? 'line-through' : ''}`} style={{ color: '#000000' }}>
                         {step.text}
                       </p>
                       <div className="flex items-center gap-2 flex-wrap">
