@@ -4,7 +4,6 @@ import { useSearchParams } from 'next/navigation';
 import { AlertCircle, List, Clock, Users, Mail, ArrowLeft, CheckCircle, ChevronDown, ChevronRight, Phone } from 'lucide-react';
 import { useSupabase } from '@/components/SupabaseProvider';
 import { useCompanyThreads } from '@/hooks/useCompanyThreads';
-import ThreadListView from './ThreadListView';
 import ThreadConversationView from './ThreadConversationView';
 import HealthScoreBar from '@/components/ui/HealthScoreBar';
 import { getSentimentFromHealthScore } from '@/lib/utils';
