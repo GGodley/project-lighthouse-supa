@@ -176,7 +176,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
         </div>
         <button
           onClick={onClose}
-          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          className="text-gray-900 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
         >
           <X className="h-5 w-5" />
         </button>
@@ -189,7 +189,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
             {/* Date and Time */}
             <div className="glass-card rounded-xl p-4">
               <div className="flex items-center gap-2 mb-3">
-                <Calendar className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                <Calendar className="h-5 w-5 text-gray-900 dark:text-gray-400" />
                 <h4 className="font-semibold text-gray-900">Date & Time</h4>
               </div>
               <div className="space-y-2 text-sm">
@@ -211,8 +211,8 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
                 </div>
                 {meeting.start_time && meeting.end_time && (
                   <div className="flex items-center gap-2 mt-2">
-                    <Clock className="h-4 w-4 text-gray-500" />
-                    <span className="text-xs text-gray-500">
+                    <Clock className="h-4 w-4 text-gray-900 dark:text-gray-400" />
+                    <span className="text-xs text-gray-900 dark:text-gray-400">
                       Duration: {Math.round((new Date(meeting.end_time).getTime() - new Date(meeting.start_time).getTime()) / 60000)} minutes
                     </span>
                   </div>
@@ -224,7 +224,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
             {attendees.length > 0 && (
               <div className="glass-card rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <Users className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                  <Users className="h-5 w-5 text-gray-900 dark:text-gray-400" />
                   <h4 className="font-semibold text-gray-900">Attendees</h4>
                 </div>
                 <ul className="space-y-2">
@@ -263,7 +263,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
         {/* Next Steps Sidebar */}
         <div className="w-full lg:w-80 p-4 glass-card overflow-y-auto">
           <div className="flex items-center gap-2 mb-4">
-            <CheckCircle className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+            <CheckCircle className="h-5 w-5 text-gray-900 dark:text-gray-400" />
             <h4 className="font-semibold text-gray-900">Next Steps</h4>
           </div>
           {loadingNextSteps ? (
@@ -308,7 +308,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-500 text-center py-4">No next steps for this meeting</p>
+            <p className="text-sm text-gray-900 dark:text-gray-400 text-center py-4">No next steps for this meeting</p>
           )}
         </div>
       </div>
