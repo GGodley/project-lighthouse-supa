@@ -7,6 +7,7 @@ import { RefreshCw, Search, Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import EmailSyncManager from '@/components/EmailSyncManager'
 import { getURL } from '@/lib/utils'
+import { apiFetchJson } from '@/lib/api-client'
 
 type Email = {
   id: string;
@@ -27,12 +28,8 @@ export default function EmailsPage() {
 
   const fetchEmails = useCallback(async () => {
     try {
-      const res = await fetch('/api/emails', { cache: 'no-store' })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || `Failed to load emails (${res.status})`)
-      }
-      const json = await res.json()
+      // Use the centralized API client for automatic 401 handling
+      const json = await apiFetchJson<{ emails: Email[] }>('/api/emails', { cache: 'no-store' })
       setEmails(json.emails || [])
     } catch (error) {
       console.error('Error fetching emails:', error)

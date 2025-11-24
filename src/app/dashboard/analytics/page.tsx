@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Calendar, TrendingUp, Users, DollarSign, Percent } from 'lucide-react';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
 import { Line, Doughnut, Bar } from 'react-chartjs-2';
+import { apiFetchJson } from '@/lib/api-client';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, ArcElement);
@@ -28,9 +29,8 @@ const AnalyticsTab = () => {
   useEffect(() => {
     const fetchHealthData = async () => {
       try {
-        const response = await fetch('/api/analytics/health', { cache: 'no-store' });
-        if (!response.ok) throw new Error('Failed to fetch health data');
-        const data = await response.json();
+        // Use the centralized API client for automatic 401 handling
+        const data = await apiFetchJson<{ healthData: typeof healthData; totalCustomers: number }>('/api/analytics/health', { cache: 'no-store' });
         setHealthData(data.healthData);
         setTotalCustomers(data.totalCustomers);
       } catch (error) {
@@ -48,9 +48,8 @@ const AnalyticsTab = () => {
     const fetchFeatureRequestsData = async () => {
       try {
         setFeatureRequestsLoading(true);
-        const response = await fetch('/api/analytics/feature-requests', { cache: 'no-store' });
-        if (!response.ok) throw new Error('Failed to fetch feature requests data');
-        const data = await response.json();
+        // Use the centralized API client for automatic 401 handling
+        const data = await apiFetchJson<{ featureRequests: typeof featureRequestsData }>('/api/analytics/feature-requests', { cache: 'no-store' });
         console.log('Frontend received data:', data);
         console.log('Feature requests data:', data.featureRequests);
         setFeatureRequestsData(data.featureRequests);

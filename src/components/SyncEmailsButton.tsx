@@ -3,6 +3,7 @@
 //
 'use client';
 import { useState } from 'react';
+import { apiFetchJson } from '@/lib/api-client';
 
 export default function SyncEmailsButton() {
   const [isLoading, setIsLoading] = useState(false);
@@ -13,15 +14,10 @@ export default function SyncEmailsButton() {
     setMessage('Initiating sync...');
 
     try {
-      const response = await fetch('/api/sync-emails', {
+      // Use the centralized API client for automatic 401 handling
+      const data = await apiFetchJson<{ message: string }>('/api/sync-emails', {
         method: 'POST',
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to start sync.');
-      }
 
       setMessage(data.message);
     } catch (error) {

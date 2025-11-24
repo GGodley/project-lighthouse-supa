@@ -5,6 +5,7 @@ import { Database } from '@/types/database'
 import { Button } from '@/components/ui/Button'
 import { Plus, Search, MoreVertical } from 'lucide-react'
 import HealthScoreBar from '@/components/ui/HealthScoreBar'
+import { apiFetchJson } from '@/lib/api-client'
 
 // Create a type alias for cleaner code
 type CustomerRow = Database['public']['Tables']['customers']['Row']
@@ -18,12 +19,8 @@ export default function ClientsPage() {
 
   const fetchClients = useCallback(async () => {
     try {
-      // Use the API route that properly calls the RPC function
-      const response = await fetch('/api/customers', { cache: 'no-store' })
-      if (!response.ok) {
-        throw new Error('Failed to fetch clients')
-      }
-      const data = await response.json()
+      // Use the centralized API client for automatic 401 handling
+      const data = await apiFetchJson<{ customers: CustomerRow[] }>('/api/customers', { cache: 'no-store' })
       setClients(data.customers || [])
     } catch (error) {
       console.error('Error fetching clients:', error)

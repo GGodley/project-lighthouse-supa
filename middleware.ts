@@ -24,12 +24,19 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
   const { pathname } = request.nextUrl;
 
   // Protect dashboard routes - redirect to login if not authenticated
+  // Supabase SSR automatically handles token refresh, so if getUser() returns null,
+  // it means the token is expired and can't be refreshed
   if (!user && pathname.startsWith('/dashboard')) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    // Preserve returnUrl for post-login redirect
+    const returnUrl = pathname !== '/dashboard' ? encodeURIComponent(pathname) : undefined;
+    const loginUrl = returnUrl 
+      ? `/login?returnUrl=${returnUrl}`
+      : '/login';
+    return NextResponse.redirect(new URL(loginUrl, request.url));
   }
 
   // Redirect authenticated users away from login page

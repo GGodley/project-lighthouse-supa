@@ -10,6 +10,7 @@ import HealthScoreBar from '@/components/ui/HealthScoreBar';
 import { getSentimentFromHealthScore } from '@/lib/utils';
 import { LLMSummary } from '@/lib/types/threads';
 import { getThreadById } from '@/lib/threads/queries';
+import { apiFetchJson } from '@/lib/api-client';
 
 interface CompanyThreadPageProps {
   companyId: string;
@@ -92,19 +93,14 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
   const toggleNextStep = async (step: NextStep) => {
     setUpdatingStepId(step.id);
     try {
-      const response = await fetch(`/api/companies/${companyId}/next-steps/${step.id}`, {
+      // Use the centralized API client for automatic 401 handling
+      const updated = await apiFetchJson<NextStep>(`/api/companies/${companyId}/next-steps/${step.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ completed: !step.completed }),
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to update next step');
-      }
-
-      const updated = await response.json();
       
       // Update local state
       setNextSteps(

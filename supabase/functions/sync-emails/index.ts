@@ -10,6 +10,7 @@ const corsHeaders = {
 };
 
 // --- Helper Functions to Correctly Parse Gmail's Complex Payload ---
+// Fixed to properly decode UTF-8 characters using TextDecoder
 
 const decodeBase64Url = (data: string | undefined): string | undefined => {
   if (!data) return undefined;
@@ -18,7 +19,16 @@ const decodeBase64Url = (data: string | undefined): string | undefined => {
     while (base64.length % 4) {
       base64 += '=';
     }
-    return atob(base64);
+    // Decode base64 to binary string
+    const binaryString = atob(base64);
+    // Convert binary string to Uint8Array
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    // Decode Uint8Array to UTF-8 string using TextDecoder
+    const decoder = new TextDecoder('utf-8');
+    return decoder.decode(bytes);
   } catch (e) {
     console.error("Base64 decoding failed for data chunk.", e);
     return undefined;

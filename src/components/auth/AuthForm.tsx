@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { Button } from '@/components/ui/Button'
 import { Mail } from 'lucide-react'
@@ -9,6 +10,50 @@ import { getURL } from '@/lib/utils'
 export default function AuthForm() {
   const [loading, setLoading] = useState(false)
   const supabase = useSupabase()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Handle successful authentication and redirect to returnUrl
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        // Get returnUrl from query params
+        const returnUrl = searchParams.get('returnUrl')
+        
+        // Validate returnUrl to prevent open redirects
+        let redirectPath = '/dashboard'; // Default destination
+        
+        if (returnUrl) {
+          try {
+            // Decode the returnUrl
+            const decodedUrl = decodeURIComponent(returnUrl);
+            
+            // Validate it's a safe same-origin path
+            if (decodedUrl.startsWith('/') && !decodedUrl.startsWith('//')) {
+              // Ensure it's not an auth page (prevent loops)
+              if (!decodedUrl.startsWith('/login') && !decodedUrl.startsWith('/auth')) {
+                redirectPath = decodedUrl;
+              }
+            }
+          } catch (error) {
+            console.error('Invalid returnUrl:', error);
+            // Fall back to default dashboard
+          }
+        }
+
+        // Small delay to ensure session is fully established
+        setTimeout(() => {
+          router.push(redirectPath);
+        }, 100);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [supabase, router, searchParams]);
 
   const handleGoogleAuth = async () => {
     // Prevent double-clicking or multiple simultaneous requests
@@ -19,8 +64,14 @@ export default function AuthForm() {
     
     setLoading(true)
     try {
+      // Preserve returnUrl through OAuth flow
+      const returnUrl = searchParams.get('returnUrl');
+      const callbackUrl = returnUrl 
+        ? `${getURL()}/auth/callback?returnUrl=${encodeURIComponent(returnUrl)}`
+        : `${getURL()}/auth/callback`;
+
       const options = {
-        redirectTo: `${getURL()}/auth/callback`,
+        redirectTo: callbackUrl,
         scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly',
         queryParams: {
           access_type: 'offline',
@@ -68,10 +119,16 @@ export default function AuthForm() {
     
     setLoading(true)
     try {
+      // Preserve returnUrl through OAuth flow
+      const returnUrl = searchParams.get('returnUrl');
+      const callbackUrl = returnUrl 
+        ? `${getURL()}/auth/callback?returnUrl=${encodeURIComponent(returnUrl)}`
+        : `${getURL()}/auth/callback`;
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'azure',
         options: {
-          redirectTo: `${getURL()}/auth/callback`,
+          redirectTo: callbackUrl,
           scopes: 'email profile openid https://graph.microsoft.com/Mail.Read'
         }
       })

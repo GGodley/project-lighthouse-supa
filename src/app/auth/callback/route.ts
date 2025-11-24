@@ -24,8 +24,31 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Check for returnUrl in query params (preserved from login redirect)
+  const returnUrl = requestUrl.searchParams.get('returnUrl');
+  
+  // Validate returnUrl to prevent open redirects
+  let redirectPath = '/dashboard'; // Default destination
+  
+  if (returnUrl) {
+    try {
+      const decodedUrl = decodeURIComponent(returnUrl);
+      
+      // Validate it's a safe same-origin path
+      if (decodedUrl.startsWith('/') && !decodedUrl.startsWith('//')) {
+        // Ensure it's not an auth page (prevent loops)
+        if (!decodedUrl.startsWith('/login') && !decodedUrl.startsWith('/auth')) {
+          redirectPath = decodedUrl;
+        }
+      }
+    } catch (error) {
+      console.error('Invalid returnUrl:', error);
+      // Fall back to default dashboard
+    }
+  }
+
   // Create redirect response - standard Supabase SSR pattern for route handlers
-  const redirectUrl = `${requestUrl.origin}/dashboard`;
+  const redirectUrl = `${requestUrl.origin}${redirectPath}`;
   const response = NextResponse.redirect(redirectUrl);
 
   // Create Supabase client with request/response cookie handlers - CORRECT for route handlers

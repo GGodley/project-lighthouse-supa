@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { Database } from '@/types/database'
+import { apiFetchJson } from '@/lib/api-client'
 
 const supabase = createClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -78,11 +79,8 @@ export async function fetchCustomerProfileWithInteractions(customerId: string, r
  */
 export async function fetchCompanies() {
   try {
-    const response = await fetch('/api/customers', { cache: 'no-store' })
-    if (!response.ok) {
-      throw new Error('Failed to fetch companies')
-    }
-    const data = await response.json()
+    // Use the centralized API client for automatic 401 handling
+    const data = await apiFetchJson<{ companies: unknown[] }>('/api/customers', { cache: 'no-store' })
     return data.companies || []
   } catch (error) {
     console.error('Error in fetchCompanies:', error)
