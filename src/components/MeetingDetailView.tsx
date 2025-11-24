@@ -2,6 +2,9 @@
 
 import React from 'react';
 import { Phone, X, Calendar, Users, Clock, CheckCircle } from 'lucide-react';
+import { Database, Json } from '@/types/database';
+
+type Meeting = Database['public']['Tables']['meetings']['Row'];
 
 interface MeetingDetailViewProps {
   meeting: {
@@ -10,8 +13,8 @@ interface MeetingDetailViewProps {
     summary: string | null;
     start_time: string | null;
     end_time: string | null;
-    attendees: any;
-    next_steps: any;
+    attendees: Meeting['attendees'];
+    next_steps: Meeting['next_steps'];
     customer_sentiment: string | null;
   };
   onClose: () => void;
@@ -44,14 +47,15 @@ export default function MeetingDetailView({ meeting, onClose }: MeetingDetailVie
   };
 
   // Parse attendees - can be array of strings (emails) or array of objects
-  const parseAttendees = (attendees: any): string[] => {
+  const parseAttendees = (attendees: Json | null): string[] => {
     if (!attendees) return [];
     if (Array.isArray(attendees)) {
-      return attendees.map(attendee => {
+      return attendees.map((attendee: Json) => {
         if (typeof attendee === 'string') {
           return attendee;
-        } else if (attendee && typeof attendee === 'object') {
-          return attendee.email || attendee.name || JSON.stringify(attendee);
+        } else if (attendee && typeof attendee === 'object' && attendee !== null && !Array.isArray(attendee)) {
+          const attendeeObj = attendee as { email?: string; name?: string };
+          return attendeeObj.email || attendeeObj.name || JSON.stringify(attendee);
         }
         return String(attendee);
       });
@@ -60,7 +64,8 @@ export default function MeetingDetailView({ meeting, onClose }: MeetingDetailVie
   };
 
   // Parse next steps - can be array or string
-  const parseNextSteps = (nextSteps: any): Array<{ text: string; owner: string | null; due_date: string | null }> => {
+  // Note: Database type shows next_steps as string | null, but it can be JSONB in practice
+  const parseNextSteps = (nextSteps: Json | string | null): Array<{ text: string; owner: string | null; due_date: string | null }> => {
     if (!nextSteps) return [];
     if (Array.isArray(nextSteps)) {
       return nextSteps.map(step => ({
