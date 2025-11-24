@@ -782,6 +782,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                   next_steps: selectedMeeting.next_steps,
                   customer_sentiment: selectedMeeting.customer_sentiment,
                 }}
+                companyId={companyId}
                 onClose={() => {
                   setSelectedMeetingId(null);
                   setSelectedMeeting(null);
