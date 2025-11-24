@@ -9,6 +9,9 @@ import { LLMSummary } from '@/lib/types/threads';
 import HealthScoreBar from '@/components/ui/HealthScoreBar';
 import { getSentimentFromHealthScore } from '@/lib/utils';
 import { apiFetchJson } from '@/lib/api-client';
+import { Database } from '@/types/database';
+
+type Meeting = Database['public']['Tables']['meetings']['Row'];
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -85,7 +88,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
   
   // Meeting modal state
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
-  const [selectedMeeting, setSelectedMeeting] = useState<any | null>(null);
+  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
   const [loadingMeeting, setLoadingMeeting] = useState<boolean>(false);
   
   // Next Steps state management
@@ -730,22 +733,22 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
           >
             {loadingThread ? (
               <div className="flex items-center justify-center h-full">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                <p className="ml-4 text-gray-600">Loading thread...</p>
-              </div>
-            ) : (
-              <ThreadConversationView
-                threadId={selectedThreadId}
-                threadSummary={selectedThreadSummary}
-                onClose={() => {
-                  setSelectedThreadId(null);
-                  setSelectedThreadSummary(null);
-                }}
-              />
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <p className="ml-4 text-gray-600">Loading thread...</p>
+                  </div>
+                ) : (
+                  <ThreadConversationView
+                    threadId={selectedThreadId}
+                    threadSummary={selectedThreadSummary}
+                    onClose={() => {
+                      setSelectedThreadId(null);
+                      setSelectedThreadSummary(null);
+                    }}
+                  />
             )}
-          </div>
-        </div>
-      )}
+                  </div>
+                </div>
+              )}
 
       {/* Meeting Detail Modal Overlay */}
       {selectedMeetingId && (
@@ -767,7 +770,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                 <p className="ml-4 text-gray-600">Loading meeting...</p>
               </div>
-            ) : (
+            ) : selectedMeeting ? (
               <MeetingDetailView
                 meeting={selectedMeeting}
                 onClose={() => {
@@ -775,10 +778,14 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                   setSelectedMeeting(null);
                 }}
               />
+            ) : (
+              <div className="flex items-center justify-center h-full text-red-600">
+                <p>Failed to load meeting details</p>
+              </div>
             )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
       </div>
     </div>
   );
