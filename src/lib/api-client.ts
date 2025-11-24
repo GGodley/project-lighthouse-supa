@@ -117,7 +117,7 @@ export async function apiFetch(
  * const data = await apiFetchJson('/api/customers');
  * ```
  */
-export async function apiFetchJson<T = any>(
+export async function apiFetchJson<T = unknown>(
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<T> {

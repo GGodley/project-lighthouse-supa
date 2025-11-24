@@ -9,6 +9,9 @@ import { LLMSummary } from '@/lib/types/threads';
 import HealthScoreBar from '@/components/ui/HealthScoreBar';
 import { getSentimentFromHealthScore } from '@/lib/utils';
 import { apiFetchJson } from '@/lib/api-client';
+import { Database } from '@/types/database';
+
+type Meeting = Database['public']['Tables']['meetings']['Row'];
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -85,7 +88,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
   
   // Meeting modal state
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
-  const [selectedMeeting, setSelectedMeeting] = useState<any | null>(null);
+  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
   const [loadingMeeting, setLoadingMeeting] = useState<boolean>(false);
   
   // Next Steps state management
@@ -767,15 +770,24 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                 <p className="ml-4 text-gray-600">Loading meeting...</p>
               </div>
-            ) : (
+            ) : selectedMeeting ? (
               <MeetingDetailView
-                meeting={selectedMeeting}
+                meeting={{
+                  google_event_id: selectedMeeting.google_event_id,
+                  title: selectedMeeting.title,
+                  summary: selectedMeeting.summary,
+                  start_time: selectedMeeting.start_time,
+                  end_time: selectedMeeting.end_time,
+                  attendees: selectedMeeting.attendees,
+                  next_steps: selectedMeeting.next_steps,
+                  customer_sentiment: selectedMeeting.customer_sentiment,
+                }}
                 onClose={() => {
                   setSelectedMeetingId(null);
                   setSelectedMeeting(null);
                 }}
               />
-            )}
+            ) : null}
           </div>
         </div>
       )}

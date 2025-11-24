@@ -2,6 +2,15 @@
 
 import React from 'react';
 import { Phone, X, Calendar, Users, Clock, CheckCircle } from 'lucide-react';
+import { Json } from '@/types/database';
+
+type Attendee = string | { email?: string; name?: string } | unknown;
+
+interface NextStep {
+  text: string;
+  owner: string | null;
+  due_date: string | null;
+}
 
 interface MeetingDetailViewProps {
   meeting: {
@@ -10,29 +19,14 @@ interface MeetingDetailViewProps {
     summary: string | null;
     start_time: string | null;
     end_time: string | null;
-    attendees: any;
-    next_steps: any;
+    attendees: Json | null;
+    next_steps: Json | null;
     customer_sentiment: string | null;
   };
   onClose: () => void;
 }
 
 export default function MeetingDetailView({ meeting, onClose }: MeetingDetailViewProps) {
-  const formatDateTime = (dateString: string | null): string => {
-    if (!dateString) return 'Not available';
-    try {
-      return new Date(dateString).toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch {
-      return 'Invalid date';
-    }
-  };
-
   const formatTime = (dateString: string | null): string => {
     if (!dateString) return 'Not available';
     try {
@@ -59,14 +53,17 @@ export default function MeetingDetailView({ meeting, onClose }: MeetingDetailVie
   };
 
   // Parse attendees - can be array of strings (emails) or array of objects
-  const parseAttendees = (attendees: any): string[] => {
+  const parseAttendees = (attendees: Json | null): string[] => {
     if (!attendees) return [];
     if (Array.isArray(attendees)) {
-      return attendees.map(attendee => {
+      return attendees.map((attendee: Json): string => {
         if (typeof attendee === 'string') {
           return attendee;
-        } else if (attendee && typeof attendee === 'object') {
-          return attendee.email || attendee.name || JSON.stringify(attendee);
+        } else if (attendee && typeof attendee === 'object' && attendee !== null && !Array.isArray(attendee)) {
+          const attendeeObj = attendee as Record<string, Json | undefined>;
+          const email = typeof attendeeObj.email === 'string' ? attendeeObj.email : undefined;
+          const name = typeof attendeeObj.name === 'string' ? attendeeObj.name : undefined;
+          return email || name || JSON.stringify(attendee);
         }
         return String(attendee);
       });
@@ -75,14 +72,21 @@ export default function MeetingDetailView({ meeting, onClose }: MeetingDetailVie
   };
 
   // Parse next steps - can be array or string
-  const parseNextSteps = (nextSteps: any): Array<{ text: string; owner: string | null; due_date: string | null }> => {
+  const parseNextSteps = (nextSteps: Json | null): NextStep[] => {
     if (!nextSteps) return [];
     if (Array.isArray(nextSteps)) {
-      return nextSteps.map(step => ({
-        text: step.text || step || '',
-        owner: step.owner || null,
-        due_date: step.due_date || null
-      })).filter(step => step.text !== '');
+      return nextSteps
+        .filter((step: Json): step is Record<string, Json | undefined> => 
+          step !== null && typeof step === 'object' && !Array.isArray(step)
+        )
+        .map((step: Record<string, Json | undefined>): NextStep => {
+          return {
+            text: typeof step.text === 'string' ? step.text : '',
+            owner: typeof step.owner === 'string' ? step.owner : null,
+            due_date: typeof step.due_date === 'string' ? step.due_date : null
+          };
+        })
+        .filter(step => step.text !== '');
     } else if (typeof nextSteps === 'string') {
       return [{ text: nextSteps.trim(), owner: null, due_date: null }];
     }
