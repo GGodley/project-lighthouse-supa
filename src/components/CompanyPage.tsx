@@ -773,6 +773,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
             ) : selectedMeeting ? (
               <MeetingDetailView
                 meeting={selectedMeeting}
+                companyId={companyId}
                 onClose={() => {
                   setSelectedMeetingId(null);
                   setSelectedMeeting(null);

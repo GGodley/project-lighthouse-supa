@@ -1,17 +1,97 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Phone, X, Calendar, Users, Clock, CheckCircle } from 'lucide-react';
 import { Database, Json } from '@/types/database';
+import { useSupabase } from '@/components/SupabaseProvider';
+import { apiFetchJson } from '@/lib/api-client';
 
 type Meeting = Database['public']['Tables']['meetings']['Row'];
 
+interface NextStep {
+  id: string;
+  text: string;
+  completed: boolean;
+  owner: string | null;
+  due_date: string | null;
+  source_type: 'thread' | 'meeting';
+  created_at: string;
+}
+
 interface MeetingDetailViewProps {
   meeting: Meeting;
+  companyId: string;
   onClose: () => void;
 }
 
-export default function MeetingDetailView({ meeting, onClose }: MeetingDetailViewProps) {
+export default function MeetingDetailView({ meeting, companyId, onClose }: MeetingDetailViewProps) {
+  const supabase = useSupabase();
+  const [nextSteps, setNextSteps] = useState<NextStep[]>([]);
+  const [updatingStepId, setUpdatingStepId] = useState<string | null>(null);
+  const [loadingNextSteps, setLoadingNextSteps] = useState<boolean>(true);
+
+  // Fetch next steps from database linked to this meeting
+  useEffect(() => {
+    const fetchNextSteps = async () => {
+      if (!meeting.google_event_id) {
+        setLoadingNextSteps(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('next_steps')
+          .select('*')
+          .eq('company_id', companyId)
+          .eq('source_type', 'meeting')
+          .eq('source_id', meeting.google_event_id)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching next steps:', error);
+          setNextSteps([]);
+        } else {
+          setNextSteps(data || []);
+        }
+      } catch (err) {
+        console.error('Error fetching next steps:', err);
+        setNextSteps([]);
+      } finally {
+        setLoadingNextSteps(false);
+      }
+    };
+
+    fetchNextSteps();
+  }, [meeting.google_event_id, companyId, supabase]);
+
+  // Toggle function for next steps
+  const toggleNextStep = async (step: NextStep) => {
+    setUpdatingStepId(step.id);
+    try {
+      const updated = await apiFetchJson<NextStep>(`/api/companies/${companyId}/next-steps/${step.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ completed: !step.completed }),
+      });
+
+      setNextSteps(
+        nextSteps.map(s =>
+          s.id === step.id ? updated : s
+        )
+      );
+    } catch (err) {
+      console.error('Error updating next step:', err);
+      setNextSteps(
+        nextSteps.map(s =>
+          s.id === step.id ? { ...s, completed: step.completed } : s
+        )
+      );
+    } finally {
+      setUpdatingStepId(null);
+    }
+  };
   const formatTime = (dateString: string | null): string => {
     if (!dateString) return 'Not available';
     try {
@@ -54,32 +134,7 @@ export default function MeetingDetailView({ meeting, onClose }: MeetingDetailVie
     return [];
   };
 
-  // Parse next steps - can be array or string
-  // Note: Database type shows next_steps as string | null, but it can be JSONB in practice
-  const parseNextSteps = (nextSteps: Json | string | null): Array<{ text: string; owner: string | null; due_date: string | null }> => {
-    if (!nextSteps) return [];
-    if (Array.isArray(nextSteps)) {
-      return nextSteps.map((step: Json) => {
-        if (typeof step === 'object' && step !== null && !Array.isArray(step)) {
-          const stepObj = step as { text?: string; owner?: string; due_date?: string };
-          return {
-            text: stepObj.text || '',
-            owner: stepObj.owner || null,
-            due_date: stepObj.due_date || null
-          };
-        } else if (typeof step === 'string') {
-          return { text: step, owner: null, due_date: null };
-        }
-        return { text: '', owner: null, due_date: null };
-      }).filter(step => step.text !== '');
-    } else if (typeof nextSteps === 'string') {
-      return [{ text: nextSteps.trim(), owner: null, due_date: null }];
-    }
-    return [];
-  };
-
   const attendees = parseAttendees(meeting.attendees);
-  const nextSteps = parseNextSteps(meeting.next_steps);
 
   const getSentimentColor = (sentiment: string | null): string => {
     if (!sentiment) return 'bg-gray-50 text-gray-700 border border-gray-200';
@@ -128,18 +183,18 @@ export default function MeetingDetailView({ meeting, onClose }: MeetingDetailVie
               </div>
               <div className="space-y-2 text-sm">
                 <div>
-                  <span className="font-medium text-gray-700 dark:text-gray-300">Date: </span>
-                  <span className="text-gray-600 dark:text-gray-400">{formatDate(meeting.start_time)}</span>
+                  <span className="font-medium text-gray-900 dark:text-gray-300">Date: </span>
+                  <span className="text-gray-900 dark:text-gray-400">{formatDate(meeting.start_time)}</span>
                 </div>
                 <div className="flex items-center gap-4">
                   <div>
-                    <span className="font-medium text-gray-700 dark:text-gray-300">Start: </span>
-                    <span className="text-gray-600 dark:text-gray-400">{formatTime(meeting.start_time)}</span>
+                    <span className="font-medium text-gray-900 dark:text-gray-300">Start: </span>
+                    <span className="text-gray-900 dark:text-gray-400">{formatTime(meeting.start_time)}</span>
                   </div>
                   {meeting.end_time && (
                     <div>
-                      <span className="font-medium text-gray-700 dark:text-gray-300">End: </span>
-                      <span className="text-gray-600 dark:text-gray-400">{formatTime(meeting.end_time)}</span>
+                      <span className="font-medium text-gray-900 dark:text-gray-300">End: </span>
+                      <span className="text-gray-900 dark:text-gray-400">{formatTime(meeting.end_time)}</span>
                     </div>
                   )}
                 </div>
@@ -163,7 +218,7 @@ export default function MeetingDetailView({ meeting, onClose }: MeetingDetailVie
                 </div>
                 <ul className="space-y-2">
                   {attendees.map((attendee, index) => (
-                    <li key={index} className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                    <li key={index} className="text-sm text-gray-900 dark:text-gray-300 flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-blue-500"></div>
                       {attendee}
                     </li>
@@ -176,7 +231,7 @@ export default function MeetingDetailView({ meeting, onClose }: MeetingDetailVie
             {meeting.summary && (
               <div className="glass-card rounded-xl p-4">
                 <h4 className="font-semibold text-gray-900 mb-3">Summary</h4>
-                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                <p className="text-sm text-gray-900 dark:text-gray-300 whitespace-pre-wrap">
                   {meeting.summary}
                 </p>
               </div>
@@ -195,33 +250,56 @@ export default function MeetingDetailView({ meeting, onClose }: MeetingDetailVie
         </div>
 
         {/* Next Steps Sidebar */}
-        {nextSteps.length > 0 && (
-          <div className="w-full lg:w-80 p-4 glass-card overflow-y-auto">
-            <div className="flex items-center gap-2 mb-4">
-              <CheckCircle className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-              <h4 className="font-semibold text-gray-900">Next Steps</h4>
+        <div className="w-full lg:w-80 p-4 glass-card overflow-y-auto">
+          <div className="flex items-center gap-2 mb-4">
+            <CheckCircle className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+            <h4 className="font-semibold text-gray-900">Next Steps</h4>
+          </div>
+          {loadingNextSteps ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
             </div>
+          ) : nextSteps.length > 0 ? (
             <div className="space-y-3">
-              {nextSteps.map((step, index) => (
-                <div key={index} className="glass-bar-row p-3">
-                  <p className="text-sm text-gray-900 font-medium mb-2">{step.text}</p>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {step.owner && (
-                      <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                        Owner: {step.owner}
-                      </span>
-                    )}
-                    {step.due_date && (
-                      <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                        Due: {new Date(step.due_date).toLocaleDateString()}
-                      </span>
-                    )}
+              {nextSteps.map((step) => (
+                <div key={step.id} className={`glass-bar-row p-3 ${step.completed ? 'opacity-75' : ''}`}>
+                  <div className="flex items-start gap-3">
+                    <button
+                      onClick={() => toggleNextStep(step)}
+                      disabled={updatingStepId === step.id}
+                      className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 ${
+                        step.completed
+                          ? 'bg-green-600 border-green-600'
+                          : 'border-gray-300 hover:border-blue-600'
+                      } ${updatingStepId === step.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      {step.completed && <CheckCircle className="w-4 h-4 text-white" />}
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm text-gray-900 font-medium mb-2 ${step.completed ? 'line-through' : ''}`}>
+                        {step.text}
+                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {step.owner && (
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                            Owner: {step.owner}
+                          </span>
+                        )}
+                        {step.due_date && (
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                            Due: {new Date(step.due_date).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <p className="text-sm text-gray-500 text-center py-4">No next steps for this meeting</p>
+          )}
+        </div>
       </div>
     </div>
   );
