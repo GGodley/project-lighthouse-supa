@@ -142,7 +142,8 @@ export async function apiFetchJson<T = unknown>(
     throw new Error(errorMessage);
   }
 
-  return response.json() as Promise<T>;
+  const json: unknown = await response.json();
+  return json as T;
 }
 
 /**
