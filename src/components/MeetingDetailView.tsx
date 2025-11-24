@@ -187,7 +187,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
         <div className="flex-1 overflow-y-auto p-6 border-r border-white/20 dark:border-white/10" style={{ color: '#000000' }}>
           <div className="space-y-6">
             {/* Date and Time */}
-            <div className="glass-card rounded-xl p-4">
+            <div className="glass-card rounded-xl p-4" style={{ color: '#000000' }}>
               <div className="flex items-center gap-2 mb-3">
                 <Calendar className="h-5 w-5 text-black dark:text-gray-400" />
                 <h4 className="font-semibold text-black">Date & Time</h4>
@@ -222,7 +222,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
 
             {/* Attendees */}
             {attendees.length > 0 && (
-              <div className="glass-card rounded-xl p-4">
+              <div className="glass-card rounded-xl p-4" style={{ color: '#000000' }}>
                 <div className="flex items-center gap-2 mb-3">
                   <Users className="h-5 w-5 text-black dark:text-gray-400" />
                   <h4 className="font-semibold text-black">Attendees</h4>
@@ -240,9 +240,9 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
 
             {/* Summary */}
             {meeting.summary && (
-              <div className="glass-card rounded-xl p-4">
+              <div className="glass-card rounded-xl p-4" style={{ color: '#000000' }}>
                 <h4 className="font-semibold text-black mb-3">Summary</h4>
-                <p className="text-sm text-black dark:text-gray-300 whitespace-pre-wrap">
+                <p className="text-sm text-black dark:text-gray-300 whitespace-pre-wrap" style={{ color: '#000000' }}>
                   {meeting.summary}
                 </p>
               </div>
@@ -250,7 +250,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
 
             {/* Sentiment */}
             {meeting.customer_sentiment && (
-              <div className="glass-card rounded-xl p-4">
+              <div className="glass-card rounded-xl p-4" style={{ color: '#000000' }}>
                 <h4 className="font-semibold text-black mb-3">Customer Sentiment</h4>
                 <span className={`inline-block px-3 py-1.5 rounded-full text-xs font-semibold ${getSentimentColor(meeting.customer_sentiment)}`}>
                   {meeting.customer_sentiment}
