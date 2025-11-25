@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { Users, Calendar, Mail, TrendingUp, ArrowUp, ArrowDown } from 'lucide-react'
 import SyncEmailsButton from '@/components/SyncEmailsButton'
 import ConsiderTouchingBase from '@/components/ConsiderTouchingBase'
@@ -14,6 +15,16 @@ interface DashboardStats {
   totalCustomers: number
   customerCountChange: number | null
   customerCountTrend: 'up' | 'down' | 'neutral'
+}
+
+interface DashboardFeatureRequest {
+  id: string
+  title: string
+  company_name: string
+  company_id: string
+  requested_at: string
+  source: 'email' | 'meeting' | 'thread'
+  source_id: string | null
 }
 
 export default async function DashboardPage() {
@@ -52,6 +63,7 @@ export default async function DashboardPage() {
     customerCountTrend: 'neutral'
   }
   let recentEmails: Array<{ id: number; subject: string | null; sender: string | null; received_at: string | null; snippet: string | null }> = []
+  let featureRequests: DashboardFeatureRequest[] = []
 
   try {
     const { data: { user } } = await supabase.auth.getUser()
@@ -78,6 +90,66 @@ export default async function DashboardPage() {
         .limit(10)
 
       recentEmails = emails || []
+
+      // Fetch feature requests
+      // First, get all company IDs for this user
+      const { data: userCompanies } = await supabase
+        .from('companies')
+        .select('company_id, company_name')
+        .eq('user_id', user.id)
+
+      if (userCompanies && userCompanies.length > 0) {
+        const companyIds = userCompanies.map(c => c.company_id)
+        const companyMap = new Map(userCompanies.map(c => [c.company_id, c.company_name]))
+        
+        // Fetch feature requests
+        const { data: featureRequestsData } = await supabase
+          .from('feature_requests')
+          .select('id, company_id, feature_id, requested_at, source, email_id, meeting_id, thread_id')
+          .in('company_id', companyIds)
+          .order('requested_at', { ascending: false })
+          .limit(10)
+
+        if (featureRequestsData && featureRequestsData.length > 0) {
+          // Get unique feature IDs
+          const featureIds = [...new Set(featureRequestsData.map(fr => fr.feature_id))]
+          
+          // Fetch features
+          const { data: featuresData } = await supabase
+            .from('features')
+            .select('id, title')
+            .in('id', featureIds)
+
+          if (featuresData) {
+            const featuresMap = new Map(featuresData.map(f => [f.id, f.title]))
+            
+            // Transform feature requests data
+            featureRequests = featureRequestsData
+              .map((fr) => {
+                // Determine source_id based on source type
+                let sourceId: string | null = null
+                if (fr.source === 'thread' && fr.thread_id) {
+                  sourceId = fr.thread_id
+                } else if (fr.source === 'meeting' && fr.meeting_id) {
+                  sourceId = fr.meeting_id.toString()
+                } else if (fr.source === 'email' && fr.email_id) {
+                  sourceId = fr.email_id.toString()
+                }
+
+                return {
+                  id: fr.id,
+                  title: featuresMap.get(fr.feature_id) || 'Unknown Feature',
+                  company_name: companyMap.get(fr.company_id) || 'Unknown Company',
+                  company_id: fr.company_id,
+                  requested_at: fr.requested_at,
+                  source: (fr.source || 'thread') as 'email' | 'meeting' | 'thread',
+                  source_id: sourceId
+                }
+              })
+              .filter(fr => fr.title !== 'Unknown Feature') // Filter out any with missing features
+          }
+        }
+      }
 
       // Fetch customer count data directly from database (server-side)
       let customerData = {
@@ -164,6 +236,40 @@ export default async function DashboardPage() {
     if (change === null) return 'N/A'
     const sign = change >= 0 ? '+' : ''
     return `${sign}${change.toFixed(1)}%`
+  }
+
+  // Build navigation URL for feature request
+  const getFeatureRequestUrl = (fr: DashboardFeatureRequest): string => {
+    if (!fr.company_id) return '#'
+    
+    if (fr.source === 'thread' && fr.source_id) {
+      return `/dashboard/customer-threads/${fr.company_id}?thread=${fr.source_id}`
+    } else if (fr.source === 'meeting' && fr.source_id) {
+      // Navigate to company page - meeting will be shown in interaction timeline
+      return `/dashboard/customer-threads/${fr.company_id}`
+    } else if (fr.source === 'email') {
+      // Legacy email source - navigate to company page
+      return `/dashboard/customer-threads/${fr.company_id}`
+    }
+    
+    return `/dashboard/customer-threads/${fr.company_id}`
+  }
+
+  // Format date for display
+  const formatDate = (dateString: string): string => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  }
+
+  // Get source label
+  const getSourceLabel = (source: string): string => {
+    if (source === 'meeting') return 'Meeting'
+    if (source === 'email') return 'Mail'
+    if (source === 'thread') return 'Mail'
+    return 'Unknown'
   }
 
   const statCards = [
@@ -285,6 +391,51 @@ export default async function DashboardPage() {
                   ))
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* Feature Requests Section */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Product Feature Requests</h3>
+            <div className="space-y-4">
+              {featureRequests.length === 0 ? (
+                <div className="text-gray-500">No feature requests found.</div>
+              ) : (
+                featureRequests.map((fr) => {
+                  const url = getFeatureRequestUrl(fr)
+                  const sourceLabel = getSourceLabel(fr.source)
+                  
+                  return (
+                    <Link
+                      key={fr.id}
+                      href={url}
+                      className="block p-4 rounded-lg border border-gray-200 hover:shadow-md transition-all cursor-pointer hover:bg-gray-50"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <h4 className="font-semibold text-gray-900 text-base flex-1">{fr.title}</h4>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {/* Company Name Badge */}
+                        <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                          {fr.company_name}
+                        </span>
+                        {/* Date Badge */}
+                        <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">
+                          {formatDate(fr.requested_at)}
+                        </span>
+                        {/* Source Badge */}
+                        <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
+                          fr.source === 'meeting' 
+                            ? 'bg-green-50 text-green-700 border border-green-200'
+                            : 'bg-purple-50 text-purple-700 border border-purple-200'
+                        }`}>
+                          {sourceLabel}
+                        </span>
+                      </div>
+                    </Link>
+                  )
+                })
+              )}
             </div>
           </div>
         </div>
