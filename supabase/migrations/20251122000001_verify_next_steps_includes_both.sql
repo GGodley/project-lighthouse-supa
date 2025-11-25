@@ -105,6 +105,7 @@ BEGIN
           'owner', ns.owner,
           'due_date', ns.due_date,
           'source_type', ns.source_type,
+          'source_id', ns.source_id,
           'created_at', ns.created_at
         ) ORDER BY ns.completed ASC, ns.created_at DESC
       ), '[]'::json)

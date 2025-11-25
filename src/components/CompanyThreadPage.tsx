@@ -53,6 +53,7 @@ interface NextStep {
   owner: string | null;
   due_date: string | null;
   source_type: 'thread' | 'meeting';
+  source_id: string | null;
   created_at: string;
 }
 
@@ -127,6 +128,61 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
       );
     } finally {
       setUpdatingStepId(null);
+    }
+  };
+
+  // Function to open the source thread or meeting from a next step
+  const openNextStepSource = async (step: NextStep) => {
+    if (!step.source_id) return;
+
+    if (step.source_type === 'thread') {
+      setLoadingThread(true);
+      setSelectedThreadId(step.source_id);
+      setSelectedMeetingId(null);
+      setSelectedMeeting(null);
+      
+      try {
+        // Fetch the thread to get its summary
+        const { data: thread, error: threadError } = await getThreadById(supabase, step.source_id);
+        
+        if (threadError || !thread) {
+          console.error('Thread fetch error:', threadError);
+          setSelectedThreadSummary({ error: threadError?.message || 'Thread not found' });
+        } else {
+          setSelectedThreadSummary(thread.llm_summary);
+        }
+      } catch (err) {
+        console.error('Error fetching thread:', err);
+        setSelectedThreadSummary({ error: 'Failed to load thread' });
+      } finally {
+        setLoadingThread(false);
+      }
+    } else if (step.source_type === 'meeting') {
+      setLoadingMeeting(true);
+      setSelectedMeetingId(step.source_id);
+      setSelectedThreadId(null);
+      setSelectedThreadSummary(null);
+      
+      try {
+        // Fetch the meeting details
+        const { data: meeting, error: meetingError } = await supabase
+          .from('meetings')
+          .select('*')
+          .eq('google_event_id', step.source_id)
+          .single();
+        
+        if (meetingError || !meeting) {
+          console.error('Error fetching meeting:', meetingError);
+          setSelectedMeeting(null);
+        } else {
+          setSelectedMeeting(meeting);
+        }
+      } catch (err) {
+        console.error('Error fetching meeting:', err);
+        setSelectedMeeting(null);
+      } finally {
+        setLoadingMeeting(false);
+      }
     }
   };
 
@@ -543,11 +599,16 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                     
                     {activeExpanded && (
                     <ul className="space-y-3">
-                      {nextSteps.filter(s => !s.completed).map((step) => (
+                      {nextSteps.filter(s => !s.completed).map((step) => {
+                        const isClickable = step.source_id !== null && step.source_id !== undefined;
+                        return (
                         <li key={step.id} className="glass-bar-row p-4">
                           <div className="flex items-start gap-4">
                           <button
-                            onClick={() => toggleNextStep(step)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleNextStep(step);
+                            }}
                             disabled={updatingStepId === step.id}
                               className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 ${
                               step.completed
@@ -558,7 +619,18 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                               {step.completed && <CheckCircle className="w-4 h-4 text-white" />}
                           </button>
                           
-                          <div className="flex-1 min-w-0">
+                          <div 
+                            className={`flex-1 min-w-0 ${isClickable ? 'cursor-pointer hover:text-blue-600 transition-colors' : ''}`}
+                            onClick={() => isClickable && openNextStepSource(step)}
+                            onKeyDown={(e) => {
+                              if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
+                                e.preventDefault();
+                                openNextStepSource(step);
+                              }
+                            }}
+                            role={isClickable ? "button" : undefined}
+                            tabIndex={isClickable ? 0 : undefined}
+                          >
                               <p className="text-gray-900 font-medium mb-2">{step.text}</p>
                               <div className="flex items-center gap-2 flex-wrap">
                               {step.owner && (
@@ -575,7 +647,8 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                             </div>
                           </div>
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
                     )}
                   </div>
@@ -598,11 +671,16 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                     
                     {completedExpanded && (
                       <div className="max-h-96 overflow-y-auto space-y-3">
-                          {nextSteps.filter(s => s.completed).map((step) => (
+                          {nextSteps.filter(s => s.completed).map((step) => {
+                            const isClickable = step.source_id !== null && step.source_id !== undefined;
+                            return (
                           <div key={step.id} className="glass-bar-row p-4 opacity-75">
                             <div className="flex items-start gap-4">
                               <button
-                                onClick={() => toggleNextStep(step)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleNextStep(step);
+                                }}
                                 disabled={updatingStepId === step.id}
                                 className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 ${
                                   step.completed
@@ -613,7 +691,18 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                                 {step.completed && <CheckCircle className="w-4 h-4 text-white" />}
                               </button>
                               
-                              <div className="flex-1 min-w-0">
+                              <div 
+                                className={`flex-1 min-w-0 ${isClickable ? 'cursor-pointer hover:text-blue-600 transition-colors' : ''}`}
+                                onClick={() => isClickable && openNextStepSource(step)}
+                                onKeyDown={(e) => {
+                                  if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
+                                    e.preventDefault();
+                                    openNextStepSource(step);
+                                  }
+                                }}
+                                role={isClickable ? "button" : undefined}
+                                tabIndex={isClickable ? 0 : undefined}
+                              >
                                 <p className="text-gray-700 line-through mb-2">{step.text}</p>
                                 <div className="flex items-center gap-2 flex-wrap">
                                   {step.owner && (
@@ -630,7 +719,8 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                               </div>
                             </div>
                           </div>
-                          ))}
+                          );
+                          })}
                       </div>
                     )}
                   </div>
