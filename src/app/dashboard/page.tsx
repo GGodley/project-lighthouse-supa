@@ -368,30 +368,32 @@ export default async function DashboardPage() {
         })}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <ConsiderTouchingBase />
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <div className="lg:col-span-3">
+              <ConsiderTouchingBase />
+        </div>
 
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">10 Most Recent Emails</h3>
-              <div className="divide-y">
-                {recentEmails.length === 0 ? (
-                  <div className="text-gray-500">No emails found. Go to Emails tab to sync.</div>
-                ) : (
-                  recentEmails.map((e) => (
-                    <div key={e.id} className="py-3">
-                      <div className="flex items-center justify-between">
-                        <div className="font-medium text-gray-900 truncate">{e.subject || 'No Subject'}</div>
-                        <div className="text-xs text-gray-500 ml-4 whitespace-nowrap">
-                          {e.received_at ? new Date(e.received_at).toLocaleString() : ''}
-                        </div>
-                      </div>
-                      <div className="text-sm text-gray-600 truncate">From: {e.sender}</div>
-                      <div className="text-sm text-gray-500 line-clamp-2">{e.snippet}</div>
+            <div className="lg:col-span-2 bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">10 Most Recent Emails</h3>
+          <div className="divide-y">
+            {recentEmails.length === 0 ? (
+              <div className="text-gray-500">No emails found. Go to Emails tab to sync.</div>
+            ) : (
+              recentEmails.map((e) => (
+                <div key={e.id} className="py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="font-medium text-gray-900 truncate">{e.subject || 'No Subject'}</div>
+                    <div className="text-xs text-gray-500 ml-4 whitespace-nowrap">
+                      {e.received_at ? new Date(e.received_at).toLocaleString() : ''}
                     </div>
-                  ))
-                )}
-              </div>
-            </div>
+                  </div>
+                  <div className="text-sm text-gray-600 truncate">From: {e.sender}</div>
+                  <div className="text-sm text-gray-500 line-clamp-2">{e.snippet}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
           </div>
 
           {/* Feature Requests Section */}

@@ -119,9 +119,8 @@ const ConsiderTouchingBase: React.FC = () => {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <div className="max-h-[450px] overflow-y-auto">
-          <table className="glass-table w-full text-sm text-left rounded-xl">
+      <div className="max-h-[450px] overflow-y-auto">
+        <table className="glass-table w-full text-sm text-left rounded-xl">
             <thead className="glass-table-header sticky top-0 z-10">
               <tr className="bg-inherit">
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
@@ -194,7 +193,6 @@ const ConsiderTouchingBase: React.FC = () => {
               )}
             </tbody>
           </table>
-        </div>
       </div>
     </div>
   )
