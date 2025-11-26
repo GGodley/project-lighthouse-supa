@@ -68,16 +68,16 @@ export default function ConfirmModal({
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/20 backdrop-blur-sm" />
       
-      {/* Modal - styled exactly like glass-bar-row in rectangular popup format */}
+      {/* Modal - more solid glass rectangular popup matching app style */}
       <div className="glass-modal w-full max-w-md relative z-10">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200/50 dark:border-gray-700/50">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200/50">
+          <h2 className="text-xl font-semibold text-gray-900">
             {title}
           </h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-white/50 dark:hover:bg-gray-700/50 transition-colors text-gray-500 dark:text-gray-400"
+            className="p-1 rounded-lg hover:bg-gray-100/50 transition-colors text-gray-600"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -86,16 +86,16 @@ export default function ConfirmModal({
 
         {/* Content */}
         <div className="p-6">
-          <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          <p className="text-gray-700 leading-relaxed">
             {message}
           </p>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200/50 dark:border-gray-700/50">
+        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200/50">
           <button
             onClick={onClose}
-            className="glass-button px-4 py-2 text-sm font-medium rounded-xl transition-colors"
+            className="glass-button px-4 py-2 text-sm font-medium rounded-xl"
           >
             {cancelLabel}
           </button>
@@ -103,8 +103,8 @@ export default function ConfirmModal({
             onClick={onConfirm}
             className={`px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
               isDanger
-                ? 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-300 dark:border-red-800'
-                : 'glass-button bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-300 dark:border-blue-800'
+                ? 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200'
+                : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200'
             }`}
           >
             {confirmLabel}

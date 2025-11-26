@@ -199,9 +199,9 @@ body {
   box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.3);
 }
 
-/* Modal styling - exact copy of glass-bar-row for rectangular popup */
+/* Modal styling - more solid glass rectangular popup matching glass-bar-row */
 .glass-modal {
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.6);
@@ -212,7 +212,7 @@ body {
 }
 
 [data-theme="dark"] .glass-modal {
-  background: rgba(30, 33, 40, 0.75);
+  background: rgba(30, 33, 40, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.3), 
               0 1px 3px 0 rgba(0, 0, 0, 0.2);
