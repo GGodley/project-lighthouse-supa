@@ -68,8 +68,8 @@ export default function ConfirmModal({
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/20 backdrop-blur-sm" />
       
-      {/* Modal - styled like glass-bar-row */}
-      <div className="glass-modal w-full max-w-md relative z-10 rounded-xl">
+      {/* Modal - styled exactly like glass-bar-row in rectangular popup format */}
+      <div className="glass-modal w-full max-w-md relative z-10">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200/50 dark:border-gray-700/50">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
