@@ -199,6 +199,23 @@ body {
   box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.3);
 }
 
+/* Modal styling to match glass-bar-row */
+.glass-modal {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.06), 
+              0 1px 3px 0 rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="dark"] .glass-modal {
+  background: rgba(30, 33, 40, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.3), 
+              0 1px 3px 0 rgba(0, 0, 0, 0.2);
+}
+
 /* Glass bar row - beautiful bar element for each company */
 .glass-bar-row {
   background: rgba(255, 255, 255, 0.75);

@@ -68,16 +68,16 @@ export default function ConfirmModal({
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/20 backdrop-blur-sm" />
       
-      {/* Modal */}
-      <div className="glass-card rounded-2xl shadow-2xl w-full max-w-md relative z-10">
+      {/* Modal - styled like glass-bar-row */}
+      <div className="glass-modal w-full max-w-md relative z-10 rounded-xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200/50 dark:border-gray-700/50">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
             {title}
           </h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 dark:text-gray-400"
+            className="p-1 rounded-lg hover:bg-white/50 dark:hover:bg-gray-700/50 transition-colors text-gray-500 dark:text-gray-400"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -92,7 +92,7 @@ export default function ConfirmModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200/50 dark:border-gray-700/50">
           <button
             onClick={onClose}
             className="glass-button px-4 py-2 text-sm font-medium rounded-xl transition-colors"
