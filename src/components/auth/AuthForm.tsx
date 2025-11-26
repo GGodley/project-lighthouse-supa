@@ -158,12 +158,12 @@ export default function AuthForm() {
             <h2 className="text-2xl font-semibold text-gray-900 mb-6">Sign in</h2>
             
             {/* OAuth Buttons */}
-            <div className="space-y-3">
+            <div className="space-y-4 pb-1">
               {/* Google Sign-in Button */}
               <button
                 onClick={handleGoogleAuth}
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="oauth-button w-full flex items-center justify-center gap-3 px-5 py-3.5 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -178,7 +178,7 @@ export default function AuthForm() {
               <button
                 onClick={handleMicrosoftAuth}
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="oauth-button w-full flex items-center justify-center gap-3 px-5 py-3.5 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2"
               >
                 <svg className="w-5 h-5" viewBox="0 0 23 23" xmlns="http://www.w3.org/2000/svg">
                   <path fill="#F25022" d="M0 0h11v11H0z"/>

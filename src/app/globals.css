@@ -444,6 +444,37 @@ button:active,
   color: inherit !important;
 }
 
+/* Premium raised button style for OAuth buttons */
+.oauth-button {
+  background: white;
+  border: 1px solid rgba(229, 231, 235, 0.8);
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateY(0);
+}
+
+.oauth-button:hover:not(:disabled) {
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.12), 0 2px 4px 0 rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+  border-color: rgb(209, 213, 219);
+}
+
+.oauth-button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.1);
+}
+
+.oauth-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.oauth-button:disabled:hover {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
 /* Force dark grey text in light theme for glass-card elements - highest specificity */
 .glass-card,
 .glass-card h1,
