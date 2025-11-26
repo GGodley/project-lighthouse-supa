@@ -7,6 +7,7 @@ import { Loader2, CheckCircle2, XCircle, RefreshCw, ArrowUp, ArrowDown, Search, 
 import { useThreadSync } from '@/hooks/useThreadSync'
 import HealthScoreBar from '@/components/ui/HealthScoreBar'
 import ProgressBar from '@/components/ui/ProgressBar'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 
 
 // Company type based on exact database schema
@@ -38,6 +39,19 @@ const CustomerThreadsPage: React.FC = () => {
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    onConfirm: () => void
+    variant?: 'default' | 'danger'
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    variant: 'default'
+  })
   const supabase = useSupabase()
 
   // Get auth session for provider token and user email
@@ -328,150 +342,163 @@ const CustomerThreadsPage: React.FC = () => {
   }
 
   // Bulk action handlers
-  const handleArchiveSelected = async () => {
+  const handleArchiveSelected = () => {
     if (selectedCompanies.length === 0) return
 
-    if (window.confirm(`Are you sure you want to archive ${selectedCompanies.length} companies? They will be moved to archives and no new emails will be imported from these domains. Historical data will be preserved.`)) {
-      try {
-        // Get user ID for blocklist
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-          console.error('Not authenticated')
-          return
-        }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Archive Companies',
+      message: `Are you sure you want to archive ${selectedCompanies.length} ${selectedCompanies.length === 1 ? 'company' : 'companies'}? They will be moved to archives and no new emails will be imported from these domains. Historical data will be preserved.`,
+      variant: 'default',
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }))
+        try {
+          // Get user ID for blocklist
+          const { data: { user } } = await supabase.auth.getUser()
+          if (!user) {
+            console.error('Not authenticated')
+            return
+          }
 
-        // Get the selected companies with their domain names
-        const companiesToArchive = companies.filter(c => selectedCompanies.includes(c.company_id))
-        const domainsToBlock = companiesToArchive.map(c => c.domain_name).filter(Boolean)
+          // Get the selected companies with their domain names
+          const companiesToArchive = companies.filter(c => selectedCompanies.includes(c.company_id))
+          const domainsToBlock = companiesToArchive.map(c => c.domain_name).filter(Boolean)
 
-        // Add domains to blocklist with 'archived' status
-        if (domainsToBlock.length > 0) {
-          const blocklistEntries = domainsToBlock.map(domain => ({
-            user_id: user.id,
-            domain: domain.toLowerCase(),
-            status: 'archived'
-          }))
+          // Add domains to blocklist with 'archived' status
+          if (domainsToBlock.length > 0) {
+            const blocklistEntries = domainsToBlock.map(domain => ({
+              user_id: user.id,
+              domain: domain.toLowerCase(),
+              status: 'archived'
+            }))
 
-          const { error: blocklistError } = await supabase
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore - domain_blocklist table not yet in TypeScript types
-            .from('domain_blocklist')
-            .upsert(blocklistEntries, {
-              onConflict: 'user_id, domain',
-              ignoreDuplicates: false
-            })
+            const { error: blocklistError } = await supabase
+              // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+              // @ts-ignore - domain_blocklist table not yet in TypeScript types
+              .from('domain_blocklist')
+              .upsert(blocklistEntries, {
+                onConflict: 'user_id, domain',
+                ignoreDuplicates: false
+              })
 
-          if (blocklistError) {
-            console.error('Error adding domains to blocklist:', blocklistError)
-            // Continue with archiving even if blocklist fails
+            if (blocklistError) {
+              console.error('Error adding domains to blocklist:', blocklistError)
+              // Continue with archiving even if blocklist fails
+            } else {
+              console.log(`✅ Added ${domainsToBlock.length} domain(s) to blocklist with archived status`)
+            }
+          }
+
+          // Update companies status to 'archived'
+          const { error } = await supabase
+            .from('companies')
+            .update({ status: 'archived' })
+            .in('company_id', selectedCompanies)
+
+          if (!error) {
+            setSelectedCompanies([])
+            // Wait a moment for database to process
+            await new Promise(resolve => setTimeout(resolve, 300))
+            
+            // Refresh the list
+            const resp = await fetch('/api/customers', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
+            if (resp.ok) {
+              const json = await resp.json()
+              setCompanies((json.companies as Company[]) || [])
+              setArchivedCompanies((json.archivedCompanies as Company[]) || [])
+            }
           } else {
-            console.log(`✅ Added ${domainsToBlock.length} domain(s) to blocklist with archived status`)
+            console.error('Error archiving companies:', error)
+            // TODO: Show toast error
           }
-        }
-
-        // Update companies status to 'archived'
-        const { error } = await supabase
-          .from('companies')
-          .update({ status: 'archived' })
-          .in('company_id', selectedCompanies)
-
-        if (!error) {
-          setSelectedCompanies([])
-          // Wait a moment for database to process
-          await new Promise(resolve => setTimeout(resolve, 300))
-          
-          // Refresh the list
-          const resp = await fetch('/api/customers', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
-          if (resp.ok) {
-            const json = await resp.json()
-            setCompanies((json.companies as Company[]) || [])
-            setArchivedCompanies((json.archivedCompanies as Company[]) || [])
-          }
-        } else {
-          console.error('Error archiving companies:', error)
+        } catch (err) {
+          console.error('Error in handleArchiveSelected:', err)
           // TODO: Show toast error
         }
-      } catch (err) {
-        console.error('Error in handleArchiveSelected:', err)
-        // TODO: Show toast error
       }
-    }
+    })
   }
 
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = () => {
     if (selectedCompanies.length === 0) return
 
-    // NOTE: Replace this with a proper modal component in the future
-    if (window.confirm(`Are you sure you want to PERMANENTLY DELETE ${selectedCompanies.length} companies? Their domains will be added to the blocklist to prevent future imports. This action cannot be undone.`)) {
-      try {
-        // Get user ID for blocklist
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-          console.error('Not authenticated')
-          return
-        }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Companies',
+      message: `Are you sure you want to PERMANENTLY DELETE ${selectedCompanies.length} ${selectedCompanies.length === 1 ? 'company' : 'companies'}? Their domains will be added to the blocklist to prevent future imports. This action cannot be undone.`,
+      variant: 'danger',
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }))
+        try {
+          // Get user ID for blocklist
+          const { data: { user } } = await supabase.auth.getUser()
+          if (!user) {
+            console.error('Not authenticated')
+            return
+          }
 
-        // Get the selected companies with their domain names
-        const companiesToDelete = companies.filter(c => selectedCompanies.includes(c.company_id))
-        const domainsToBlock = companiesToDelete.map(c => c.domain_name).filter(Boolean)
+          // Get the selected companies with their domain names
+          const companiesToDelete = companies.filter(c => selectedCompanies.includes(c.company_id))
+          const domainsToBlock = companiesToDelete.map(c => c.domain_name).filter(Boolean)
 
-        // Add domains to blocklist before deleting companies
-        if (domainsToBlock.length > 0) {
-          const blocklistEntries = domainsToBlock.map(domain => ({
-            user_id: user.id,
-            domain: domain.toLowerCase(),
-            status: 'deleted'
-          }))
+          // Add domains to blocklist before deleting companies
+          if (domainsToBlock.length > 0) {
+            const blocklistEntries = domainsToBlock.map(domain => ({
+              user_id: user.id,
+              domain: domain.toLowerCase(),
+              status: 'deleted'
+            }))
 
-          const { error: blocklistError } = await supabase
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore - domain_blocklist table not yet in TypeScript types
-            .from('domain_blocklist')
-            .upsert(blocklistEntries, {
-              onConflict: 'user_id, domain',
-              ignoreDuplicates: false
-            })
+            const { error: blocklistError } = await supabase
+              // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+              // @ts-ignore - domain_blocklist table not yet in TypeScript types
+              .from('domain_blocklist')
+              .upsert(blocklistEntries, {
+                onConflict: 'user_id, domain',
+                ignoreDuplicates: false
+              })
 
-          if (blocklistError) {
-            console.error('Error adding domains to blocklist:', blocklistError)
-            // Continue with deletion even if blocklist fails
+            if (blocklistError) {
+              console.error('Error adding domains to blocklist:', blocklistError)
+              // Continue with deletion even if blocklist fails
+            } else {
+              console.log(`✅ Added ${domainsToBlock.length} domain(s) to blocklist`)
+            }
+          }
+
+          // Delete the companies
+          // This will cascade delete:
+          // - thread_company_link entries (ON DELETE CASCADE)
+          // - customers with matching company_id (ON DELETE CASCADE after migration)
+          // - thread_messages will have customer_id set to NULL (ON DELETE SET NULL)
+          const { error } = await supabase
+            .from('companies')
+            .delete()
+            .in('company_id', selectedCompanies)
+
+          if (!error) {
+            setSelectedCompanies([])
+            // Force a hard refresh to ensure deleted companies don't appear
+            // Wait a moment for database to process cascade deletes
+            await new Promise(resolve => setTimeout(resolve, 500))
+            
+            // Refresh the list
+            const resp = await fetch('/api/customers', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
+            if (resp.ok) {
+              const json = await resp.json()
+              setCompanies((json.companies as Company[]) || [])
+              setArchivedCompanies((json.archivedCompanies as Company[]) || [])
+            }
           } else {
-            console.log(`✅ Added ${domainsToBlock.length} domain(s) to blocklist`)
+            console.error('Error deleting companies:', error)
+            // TODO: Show toast error
           }
-        }
-
-        // Delete the companies
-        // This will cascade delete:
-        // - thread_company_link entries (ON DELETE CASCADE)
-        // - customers with matching company_id (ON DELETE CASCADE after migration)
-        // - thread_messages will have customer_id set to NULL (ON DELETE SET NULL)
-        const { error } = await supabase
-          .from('companies')
-          .delete()
-          .in('company_id', selectedCompanies)
-
-        if (!error) {
-          setSelectedCompanies([])
-          // Force a hard refresh to ensure deleted companies don't appear
-          // Wait a moment for database to process cascade deletes
-          await new Promise(resolve => setTimeout(resolve, 500))
-          
-          // Refresh the list
-          const resp = await fetch('/api/customers', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
-          if (resp.ok) {
-            const json = await resp.json()
-            setCompanies((json.companies as Company[]) || [])
-            setArchivedCompanies((json.archivedCompanies as Company[]) || [])
-          }
-        } else {
-          console.error('Error deleting companies:', error)
+        } catch (err) {
+          console.error('Error in handleDeleteSelected:', err)
           // TODO: Show toast error
         }
-      } catch (err) {
-        console.error('Error in handleDeleteSelected:', err)
-        // TODO: Show toast error
       }
-    }
+    })
   }
 
   return (
@@ -592,7 +619,7 @@ const CustomerThreadsPage: React.FC = () => {
           {!isMainTableCollapsed && (
             <div className="overflow-x-auto">
               <table className="glass-table w-full text-sm text-left rounded-xl">
-                <thead className="glass-table-header">
+                <thead className="glass-table-header sticky top-0 z-10">
                   <tr>
                     <th scope="col" className="p-4">
                       <input 
@@ -705,62 +732,69 @@ const CustomerThreadsPage: React.FC = () => {
                 </span>
               )}
               <button
-                onClick={async () => {
+                onClick={() => {
                   if (selectedArchivedCompanies.length === 0) return
-                  if (window.confirm(`Are you sure you want to restore ${selectedArchivedCompanies.length} companies from archives? They will be moved back to the main table and new emails will be imported.`)) {
-                    try {
-                      // Get user ID for blocklist
-                      const { data: { user } } = await supabase.auth.getUser()
-                      if (!user) {
-                        console.error('Not authenticated')
-                        return
-                      }
+                  setConfirmModal({
+                    isOpen: true,
+                    title: 'Restore Companies',
+                    message: `Are you sure you want to restore ${selectedArchivedCompanies.length} ${selectedArchivedCompanies.length === 1 ? 'company' : 'companies'} from archives? They will be moved back to the main table and new emails will be imported.`,
+                    variant: 'default',
+                    onConfirm: async () => {
+                      setConfirmModal(prev => ({ ...prev, isOpen: false }))
+                      try {
+                        // Get user ID for blocklist
+                        const { data: { user } } = await supabase.auth.getUser()
+                        if (!user) {
+                          console.error('Not authenticated')
+                          return
+                        }
 
-                      // Get the selected companies with their domain names
-                      const companiesToRestore = archivedCompanies.filter(c => selectedArchivedCompanies.includes(c.company_id))
-                      const domainsToUnblock = companiesToRestore.map(c => c.domain_name).filter(Boolean)
+                        // Get the selected companies with their domain names
+                        const companiesToRestore = archivedCompanies.filter(c => selectedArchivedCompanies.includes(c.company_id))
+                        const domainsToUnblock = companiesToRestore.map(c => c.domain_name).filter(Boolean)
 
-                      // Remove domains from blocklist (only if status is 'archived', not 'deleted')
-                      if (domainsToUnblock.length > 0) {
-                        const { error: blocklistError } = await supabase
-                          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                          // @ts-ignore - domain_blocklist table not yet in TypeScript types
-                          .from('domain_blocklist')
-                          .delete()
-                          .eq('user_id', user.id)
-                          .in('domain', domainsToUnblock.map(d => d.toLowerCase()))
-                          .eq('status', 'archived')
+                        // Remove domains from blocklist (only if status is 'archived', not 'deleted')
+                        if (domainsToUnblock.length > 0) {
+                          const { error: blocklistError } = await supabase
+                            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                            // @ts-ignore - domain_blocklist table not yet in TypeScript types
+                            .from('domain_blocklist')
+                            .delete()
+                            .eq('user_id', user.id)
+                            .in('domain', domainsToUnblock.map(d => d.toLowerCase()))
+                            .eq('status', 'archived')
 
-                        if (blocklistError) {
-                          console.error('Error removing domains from blocklist:', blocklistError)
-                          // Continue with restore even if blocklist removal fails
+                          if (blocklistError) {
+                            console.error('Error removing domains from blocklist:', blocklistError)
+                            // Continue with restore even if blocklist removal fails
+                          } else {
+                            console.log(`✅ Removed ${domainsToUnblock.length} domain(s) from blocklist`)
+                          }
+                        }
+
+                        // Update companies status to 'active'
+                        const { error } = await supabase
+                          .from('companies')
+                          .update({ status: 'active' })
+                          .in('company_id', selectedArchivedCompanies)
+                        
+                        if (!error) {
+                          setSelectedArchivedCompanies([])
+                          await new Promise(resolve => setTimeout(resolve, 300))
+                          const resp = await fetch('/api/customers', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
+                          if (resp.ok) {
+                            const json = await resp.json()
+                            setCompanies((json.companies as Company[]) || [])
+                            setArchivedCompanies((json.archivedCompanies as Company[]) || [])
+                          }
                         } else {
-                          console.log(`✅ Removed ${domainsToUnblock.length} domain(s) from blocklist`)
+                          console.error('Error restoring companies:', error)
                         }
+                      } catch (err) {
+                        console.error('Error in restore:', err)
                       }
-
-                      // Update companies status to 'active'
-                      const { error } = await supabase
-                        .from('companies')
-                        .update({ status: 'active' })
-                        .in('company_id', selectedArchivedCompanies)
-                      
-                      if (!error) {
-                        setSelectedArchivedCompanies([])
-                        await new Promise(resolve => setTimeout(resolve, 300))
-                        const resp = await fetch('/api/customers', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
-                        if (resp.ok) {
-                          const json = await resp.json()
-                          setCompanies((json.companies as Company[]) || [])
-                          setArchivedCompanies((json.archivedCompanies as Company[]) || [])
-                        }
-                      } else {
-                        console.error('Error restoring companies:', error)
-                      }
-                    } catch (err) {
-                      console.error('Error in restore:', err)
                     }
-                  }
+                  })
                 }}
                 className="glass-button px-4 py-2 text-sm font-medium rounded-xl disabled:opacity-50 disabled:cursor-not-allowed bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
                 disabled={selectedArchivedCompanies.length === 0}
@@ -773,7 +807,7 @@ const CustomerThreadsPage: React.FC = () => {
           {!isArchivedTableCollapsed && (
             <div className="overflow-x-auto">
               <table className="glass-table w-full text-sm text-left rounded-xl opacity-90">
-                <thead className="glass-table-header">
+                <thead className="glass-table-header sticky top-0 z-10">
                   <tr>
                     <th scope="col" className="p-4">
                       <input 
@@ -867,6 +901,17 @@ const CustomerThreadsPage: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Confirmation Modal */}
+        <ConfirmModal
+          isOpen={confirmModal.isOpen}
+          onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+          onConfirm={confirmModal.onConfirm}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          variant={confirmModal.variant}
+          confirmLabel={confirmModal.variant === 'danger' ? 'Delete' : 'Confirm'}
+        />
       </div>
     </div>
   )
