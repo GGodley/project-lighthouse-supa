@@ -30,10 +30,10 @@ type TimePeriod = {
 }
 
 const TIME_PERIODS: TimePeriod[] = [
-  { label: '60 Days', days: 60 },
-  { label: '30 Days', days: 30 },
-  { label: '2 Weeks', days: 14 },
   { label: '1 Week', days: 7 },
+  { label: '2 Weeks', days: 14 },
+  { label: '30 Days', days: 30 },
+  { label: '60 Days', days: 60 },
 ]
 
 const ConsiderTouchingBase: React.FC = () => {
@@ -99,10 +99,13 @@ const ConsiderTouchingBase: React.FC = () => {
         <div className="flex flex-wrap gap-2 mt-4">
           {TIME_PERIODS.map((period) => {
             const isSelected = selectedDays === period.days
+            const handleClick = () => {
+              setSelectedDays(period.days)
+            }
             return (
               <button
-                key={period.days}
-                onClick={() => setSelectedDays(period.days)}
+                key={`period-${period.days}`}
+                onClick={handleClick}
                 className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
                   isSelected
                     ? 'bg-blue-50 text-blue-700 border-blue-200'
