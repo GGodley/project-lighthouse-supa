@@ -3,8 +3,18 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
-export async function GET() {
+export async function GET(request: Request) {
   const cookieStore = await cookies();
+
+  // Get days parameter from query string, default to 30 days (1 month)
+  const { searchParams } = new URL(request.url);
+  const daysParam = searchParams.get('days');
+  const days = daysParam ? parseInt(daysParam, 10) : 30;
+
+  // Validate days parameter
+  if (isNaN(days) || days < 1) {
+    return NextResponse.json({ error: 'Invalid days parameter' }, { status: 400 });
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,13 +40,13 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Calculate the date 14 days ago
-    const twoWeeksAgo = new Date();
-    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    // Calculate the date based on the days parameter
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
 
     // Fetch companies where:
     // 1. last_interaction_at IS NULL OR
-    // 2. last_interaction_at < (NOW() - 14 days)
+    // 2. last_interaction_at < (NOW() - specified days)
     // 3. status != 'archived' (active companies only)
     // We'll fetch all companies and filter in JavaScript to handle NULL properly
     const { data: allCompanies, error: allError } = await supabase
@@ -57,13 +67,13 @@ export async function GET() {
 
     // Filter companies that need touching base:
     // - last_interaction_at is NULL OR
-    // - last_interaction_at is more than 14 days ago
+    // - last_interaction_at is more than the specified days ago
     const touchingBaseCompanies = activeCompanies.filter(company => {
       if (company.last_interaction_at === null) {
         return true; // Never had an interaction
       }
       const lastInteractionDate = new Date(company.last_interaction_at);
-      return lastInteractionDate < twoWeeksAgo;
+      return lastInteractionDate < cutoffDate;
     });
 
     // Limit to 30 results for performance

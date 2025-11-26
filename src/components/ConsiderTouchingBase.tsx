@@ -24,10 +24,23 @@ interface TouchingBaseResponse {
   totalCount: number
 }
 
+type TimePeriod = {
+  label: string
+  days: number
+}
+
+const TIME_PERIODS: TimePeriod[] = [
+  { label: '60 Days', days: 60 },
+  { label: '30 Days', days: 30 },
+  { label: '2 Weeks', days: 14 },
+  { label: '1 Week', days: 7 },
+]
+
 const ConsiderTouchingBase: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedDays, setSelectedDays] = useState<number>(30) // Default to 30 days (1 month)
 
   useEffect(() => {
     const fetchTouchingBaseCompanies = async () => {
@@ -35,7 +48,7 @@ const ConsiderTouchingBase: React.FC = () => {
         setLoading(true)
         setError(null)
 
-        const resp = await fetch('/api/customers/touching-base', { cache: 'no-store' })
+        const resp = await fetch(`/api/customers/touching-base?days=${selectedDays}`, { cache: 'no-store' })
         if (!resp.ok) {
           const msg = await resp.text()
           setError(msg || 'Failed to fetch companies')
@@ -52,7 +65,7 @@ const ConsiderTouchingBase: React.FC = () => {
     }
 
     fetchTouchingBaseCompanies()
-  }, [])
+  }, [selectedDays])
 
   const statusPillStyles: { [key: string]: string } = {
     'Healthy': 'bg-green-50 text-green-700 border border-green-200',
@@ -66,13 +79,41 @@ const ConsiderTouchingBase: React.FC = () => {
     'Very Negative': 'bg-red-50 text-red-700 border border-red-200',
   }
 
+  const getDescriptionText = (days: number) => {
+    if (days === 7) return "Companies that haven't had an interaction in 1 week"
+    if (days === 14) return "Companies that haven't had an interaction in 2+ weeks"
+    if (days === 30) return "Companies that haven't had an interaction in 1 month"
+    if (days === 60) return "Companies that haven't had an interaction in 2 months"
+    return `Companies that haven't had an interaction in ${days} days`
+  }
+
   return (
     <div className="glass-card rounded-2xl p-6">
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-gray-900">Consider Touching Base</h2>
         <p className="text-sm text-gray-600 mt-1">
-          Companies that haven&apos;t had an interaction in 2+ weeks
+          {getDescriptionText(selectedDays)}
         </p>
+        
+        {/* Time Period Pills */}
+        <div className="flex flex-wrap gap-2 mt-4">
+          {TIME_PERIODS.map((period) => {
+            const isSelected = selectedDays === period.days
+            return (
+              <button
+                key={period.days}
+                onClick={() => setSelectedDays(period.days)}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                  isSelected
+                    ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
+                    : 'bg-gray-100 text-gray-700 border-2 border-transparent hover:bg-gray-200'
+                }`}
+              >
+                {period.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       <div className="overflow-x-auto">
