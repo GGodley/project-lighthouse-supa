@@ -30,29 +30,40 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Fetch customer status data
+    // Fetch customer health_score data
+    // RLS policy ensures users can only see customers from their own companies
     const { data: customers, error: customerError } = await supabase
       .from('customers')
-      .select('status')
-      .not('status', 'is', null);
+      .select('health_score');
 
     if (customerError) {
       console.error('Supabase fetch error:', customerError.message);
       return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 
-    // Count customers by status
+    // Count customers by health classification
+    // health_score > 0 → Healthy
+    // health_score === 0 → Neutral
+    // health_score < 0 → Negative
     const statusCounts = {
       'Healthy': 0,
-      'Needs Attention': 0,
-      'At Risk': 0
+      'Neutral': 0,
+      'Negative': 0
     };
 
     customers?.forEach(customer => {
-      const status = customer.status;
-      if (status === 'Healthy') statusCounts['Healthy']++;
-      else if (status === 'Needs Attention') statusCounts['Needs Attention']++;
-      else if (status === 'At Risk') statusCounts['At Risk']++;
+      const healthScore = customer.health_score;
+      // Handle null/undefined health_score as Neutral
+      if (healthScore === null || healthScore === undefined) {
+        statusCounts['Neutral']++;
+      } else if (healthScore > 0) {
+        statusCounts['Healthy']++;
+      } else if (healthScore < 0) {
+        statusCounts['Negative']++;
+      } else {
+        // healthScore === 0
+        statusCounts['Neutral']++;
+      }
     });
 
     return NextResponse.json({ 

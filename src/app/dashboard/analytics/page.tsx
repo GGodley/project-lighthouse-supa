@@ -14,8 +14,8 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarEleme
 const AnalyticsTab = () => {
   const [healthData, setHealthData] = useState({
     'Healthy': 0,
-    'Needs Attention': 0,
-    'At Risk': 0
+    'Neutral': 0,
+    'Negative': 0
   });
   const [totalCustomers, setTotalCustomers] = useState(0);
   const [featureRequestsData, setFeatureRequestsData] = useState({
@@ -104,9 +104,9 @@ const AnalyticsTab = () => {
 
   // Use real health data from API
   const healthScoreData = {
-    labels: ['Healthy', 'Needs Attention', 'At Risk'],
+    labels: ['Healthy', 'Neutral', 'Negative'],
     datasets: [{
-      data: [healthData['Healthy'], healthData['Needs Attention'], healthData['At Risk']],
+      data: [healthData['Healthy'], healthData['Neutral'], healthData['Negative']],
       backgroundColor: ['hsl(153, 60%, 50%)', // Green
       'hsl(41, 95%, 55%)', // Amber
       'hsl(4, 85%, 60%)' // Red
