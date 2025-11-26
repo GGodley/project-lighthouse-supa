@@ -291,7 +291,7 @@ const AnalyticsTab = () => {
         <Card className="bg-white border-gray-200">
           <CardHeader>
             <CardTitle className="text-gray-900">Customer Health Distribution</CardTitle>
-            <p className="text-sm text-gray-600">Total customers: {totalCustomers}</p>
+            <p className="text-sm text-gray-600">Total companies: {totalCustomers}</p>
           </CardHeader>
           <CardContent>
             <div className="h-80">

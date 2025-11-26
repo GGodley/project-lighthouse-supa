@@ -30,45 +30,52 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Fetch customer health_score data
-    // RLS policy ensures users can only see customers from their own companies
-    const { data: customers, error: customerError } = await supabase
-      .from('customers')
-      .select('health_score');
+    // Fetch companies with overall_sentiment
+    // Get all companies first, then filter out archived in JavaScript to handle NULL properly
+    const { data: allCompanies, error: companyError } = await supabase
+      .from('companies')
+      .select('overall_sentiment, status')
+      .eq('user_id', user.id);
 
-    if (customerError) {
-      console.error('Supabase fetch error:', customerError.message);
+    if (companyError) {
+      console.error('Supabase fetch error:', companyError.message);
       return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 
-    // Count customers by health classification
-    // health_score > 0 → Healthy
-    // health_score === 0 → Neutral
-    // health_score < 0 → Negative
+    // Filter out archived companies (keep NULL and all other statuses)
+    const activeCompanies = (allCompanies || []).filter(
+      company => company.status !== 'archived'
+    );
+
+    // Count companies by overall_sentiment classification
+    // Use overall_sentiment directly: 'Healthy', 'Neutral', 'At Risk'
+    // Map 'At Risk' → 'Negative' for chart display
     const statusCounts = {
       'Healthy': 0,
       'Neutral': 0,
       'Negative': 0
     };
 
-    customers?.forEach(customer => {
-      const healthScore = customer.health_score;
-      // Handle null/undefined health_score as Neutral
-      if (healthScore === null || healthScore === undefined) {
+    activeCompanies.forEach(company => {
+      const sentiment = company.overall_sentiment;
+      // Handle null/undefined overall_sentiment as Neutral
+      if (sentiment === null || sentiment === undefined) {
         statusCounts['Neutral']++;
-      } else if (healthScore > 0) {
+      } else if (sentiment === 'Healthy') {
         statusCounts['Healthy']++;
-      } else if (healthScore < 0) {
+      } else if (sentiment === 'At Risk') {
         statusCounts['Negative']++;
+      } else if (sentiment === 'Neutral') {
+        statusCounts['Neutral']++;
       } else {
-        // healthScore === 0
+        // Unknown sentiment value, default to Neutral
         statusCounts['Neutral']++;
       }
     });
 
     return NextResponse.json({ 
       healthData: statusCounts,
-      totalCustomers: customers?.length || 0
+      totalCustomers: activeCompanies.length
     }, { status: 200 });
 
   } catch (e) {
