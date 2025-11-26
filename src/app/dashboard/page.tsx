@@ -1,9 +1,9 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import { Users, Calendar, Mail, TrendingUp, ArrowUp, ArrowDown } from 'lucide-react'
 import SyncEmailsButton from '@/components/SyncEmailsButton'
 import ConsiderTouchingBase from '@/components/ConsiderTouchingBase'
+import FeatureRequestsSection from '@/components/FeatureRequestsSection'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +25,7 @@ interface DashboardFeatureRequest {
   requested_at: string
   source: 'email' | 'meeting' | 'thread'
   source_id: string | null
+  urgency: 'Low' | 'Medium' | 'High'
 }
 
 export default async function DashboardPage() {
@@ -92,11 +93,16 @@ export default async function DashboardPage() {
       recentEmails = emails || []
 
       // Fetch feature requests
-      // First, get all company IDs for this user
-      const { data: userCompanies } = await supabase
+      // First, get all active company IDs for this user (exclude archived/deleted)
+      const { data: allUserCompanies } = await supabase
         .from('companies')
-        .select('company_id, company_name')
+        .select('company_id, company_name, status')
         .eq('user_id', user.id)
+
+      // Filter out archived and deleted companies
+      const userCompanies = (allUserCompanies || []).filter(
+        company => company.status !== 'archived' && company.status !== 'deleted'
+      )
 
       if (userCompanies && userCompanies.length > 0) {
         const companyIds = userCompanies.map(c => c.company_id)
@@ -105,10 +111,9 @@ export default async function DashboardPage() {
         // Fetch feature requests
         const { data: featureRequestsData } = await supabase
           .from('feature_requests')
-          .select('id, company_id, feature_id, requested_at, source, email_id, meeting_id, thread_id')
+          .select('id, company_id, feature_id, requested_at, source, email_id, meeting_id, thread_id, urgency')
           .in('company_id', companyIds)
-          .order('requested_at', { ascending: false })
-          .limit(10)
+          .limit(50)
 
         if (featureRequestsData && featureRequestsData.length > 0) {
           // Get unique feature IDs
@@ -143,7 +148,8 @@ export default async function DashboardPage() {
                   company_id: fr.company_id,
                   requested_at: fr.requested_at,
                   source: (fr.source || 'thread') as 'email' | 'meeting' | 'thread',
-                  source_id: sourceId
+                  source_id: sourceId,
+                  urgency: (fr.urgency || 'Low') as 'Low' | 'Medium' | 'High'
                 }
               })
               .filter(fr => fr.title !== 'Unknown Feature') // Filter out any with missing features
@@ -236,40 +242,6 @@ export default async function DashboardPage() {
     if (change === null) return 'N/A'
     const sign = change >= 0 ? '+' : ''
     return `${sign}${change.toFixed(1)}%`
-  }
-
-  // Build navigation URL for feature request
-  const getFeatureRequestUrl = (fr: DashboardFeatureRequest): string => {
-    if (!fr.company_id) return '#'
-    
-    if (fr.source === 'thread' && fr.source_id) {
-      return `/dashboard/customer-threads/${fr.company_id}?thread=${fr.source_id}`
-    } else if (fr.source === 'meeting' && fr.source_id) {
-      // Navigate to company page - meeting will be shown in interaction timeline
-      return `/dashboard/customer-threads/${fr.company_id}`
-    } else if (fr.source === 'email') {
-      // Legacy email source - navigate to company page
-      return `/dashboard/customer-threads/${fr.company_id}`
-    }
-    
-    return `/dashboard/customer-threads/${fr.company_id}`
-  }
-
-  // Format date for display
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
-  }
-
-  // Get source label
-  const getSourceLabel = (source: string): string => {
-    if (source === 'meeting') return 'Meeting'
-    if (source === 'email') return 'Mail'
-    if (source === 'thread') return 'Mail'
-    return 'Unknown'
   }
 
   const statCards = [
@@ -397,49 +369,7 @@ export default async function DashboardPage() {
           </div>
 
           {/* Feature Requests Section */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Product Feature Requests</h3>
-            <div className="space-y-4">
-              {featureRequests.length === 0 ? (
-                <div className="text-gray-500">No feature requests found.</div>
-              ) : (
-                featureRequests.map((fr) => {
-                  const url = getFeatureRequestUrl(fr)
-                  const sourceLabel = getSourceLabel(fr.source)
-                  
-                  return (
-                    <Link
-                      key={fr.id}
-                      href={url}
-                      className="block p-4 rounded-lg border border-gray-200 hover:shadow-md transition-all cursor-pointer hover:bg-gray-50"
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <h4 className="font-semibold text-gray-900 text-base flex-1">{fr.title}</h4>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {/* Company Name Badge */}
-                        <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                          {fr.company_name}
-                        </span>
-                        {/* Date Badge */}
-                        <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">
-                          {formatDate(fr.requested_at)}
-                        </span>
-                        {/* Source Badge */}
-                        <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
-                          fr.source === 'meeting' 
-                            ? 'bg-green-50 text-green-700 border border-green-200'
-                            : 'bg-purple-50 text-purple-700 border border-purple-200'
-                        }`}>
-                          {sourceLabel}
-                        </span>
-                      </div>
-                    </Link>
-                  )
-                })
-              )}
-            </div>
-          </div>
+          <FeatureRequestsSection featureRequests={featureRequests} />
         </div>
       </div>
     </div>
