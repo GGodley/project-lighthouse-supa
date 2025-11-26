@@ -45,7 +45,7 @@ export async function GET(request: Request) {
     cutoffDate.setDate(cutoffDate.getDate() - days);
 
     // Fetch companies where:
-    // 1. last_interaction_at IS NULL OR
+    // 1. last_interaction_at IS NOT NULL (exclude companies that have never had an interaction)
     // 2. last_interaction_at < (NOW() - specified days)
     // 3. status != 'archived' (active companies only)
     // We'll fetch all companies and filter in JavaScript to handle NULL properly
@@ -66,11 +66,12 @@ export async function GET(request: Request) {
     );
 
     // Filter companies that need touching base:
-    // - last_interaction_at is NULL OR
+    // - last_interaction_at is NOT NULL (exclude companies that have never had an interaction)
     // - last_interaction_at is more than the specified days ago
     const touchingBaseCompanies = activeCompanies.filter(company => {
+      // Exclude companies with NULL last_interaction_at
       if (company.last_interaction_at === null) {
-        return true; // Never had an interaction
+        return false; // Skip companies that have never had an interaction
       }
       const lastInteractionDate = new Date(company.last_interaction_at);
       return lastInteractionDate < cutoffDate;
