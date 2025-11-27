@@ -267,11 +267,6 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                     <HealthScoreBar score={company_details.health_score} showLabel={true} />
                   </div>
                 )}
-
-                {/* MRR */}
-                <span className="text-slate-600">
-                  MRR: ${company_details.mrr ? company_details.mrr.toLocaleString() : 'N/A'}
-                </span>
               </div>
             </div>
           </div>

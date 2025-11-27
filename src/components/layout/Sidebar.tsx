@@ -4,11 +4,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { 
-  Mail, 
   Settings, 
   LogOut,
   BarChart3,
-  Home,
   PieChart,
   Calendar,
   MessageSquare,
@@ -18,11 +16,9 @@ import {
 import { useTheme } from '@/contexts/ThemeContext'
 
 const navigation = [
-  { name: 'Current', href: '/dashboard', icon: BarChart3 },
-  { name: 'Home', href: '/dashboard/home', icon: Home },
+  { name: 'Dashboard', href: '/dashboard', icon: BarChart3 },
   { name: 'Customer Threads', href: '/dashboard/customer-threads', icon: MessageSquare },
   { name: 'Analytics', href: '/dashboard/analytics', icon: PieChart },
-  { name: 'Emails', href: '/dashboard/emails', icon: Mail },
   { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]

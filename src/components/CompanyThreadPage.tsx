@@ -367,11 +367,6 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                     <HealthScoreBar score={company_details.health_score} showLabel={true} />
                   </div>
                 )}
-
-                {/* MRR */}
-              <span className="text-gray-700 font-medium">
-                  MRR: ${company_details.mrr ? company_details.mrr.toLocaleString() : 'N/A'}
-                </span>
             </div>
           </div>
         </div>

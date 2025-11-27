@@ -95,16 +95,6 @@ const CustomerThreadsPage: React.FC = () => {
   }, [providerToken, userEmail, syncStatus, startSync, supabase])
 
   // Helper functions
-  const formatMRR = (mrr: number | null) => {
-    if (mrr === null || mrr === undefined) return 'Not set';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(mrr);
-  };
-
   const statusPillStyles: { [key: string]: string } = {
     'Healthy': 'bg-green-50 text-green-700 border border-green-200',
     'At Risk': 'bg-red-50 text-red-700 border border-red-200',
@@ -546,8 +536,6 @@ const CustomerThreadsPage: React.FC = () => {
                   <option value="company_name">Company Name</option>
                   <option value="health_score">Health Score</option>
                   <option value="status">Status</option>
-                  <option value="mrr">MRR</option>
-                  <option value="renewal_date">Renewal Date</option>
                   <option value="last_interaction">Last Interaction</option>
                 </select>
                 {sortColumn && (
@@ -632,24 +620,22 @@ const CustomerThreadsPage: React.FC = () => {
                     {renderSortableHeader('company_name', 'Company Name')}
                     {renderSortableHeader('health_score', 'Health Score')}
                     {renderSortableHeader('status', 'Status')}
-                    {renderSortableHeader('mrr', 'MRR')}
-                    {renderSortableHeader('renewal_date', 'Renewal Date')}
                     {renderSortableHeader('last_interaction', 'Last Interaction')}
                   </tr>
                 </thead>
                 <tbody className="space-y-2">
                   {loading ? (
-                    <tr><td colSpan={7} className="text-center p-8 text-gray-600">
+                    <tr><td colSpan={5} className="text-center p-8 text-gray-600">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                       <p>Loading companies...</p>
                     </td></tr>
                   ) : error ? (
-                    <tr><td colSpan={7} className="text-center p-8 text-red-600">
+                    <tr><td colSpan={5} className="text-center p-8 text-red-600">
                       <XCircle className="h-6 w-6 mx-auto mb-2" />
                       <p>{error}</p>
                     </td></tr>
                   ) : sortedCompanies.length === 0 ? (
-                    <tr><td colSpan={7} className="text-center p-8 text-gray-500">
+                    <tr><td colSpan={5} className="text-center p-8 text-gray-500">
                       <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                       <p className="text-lg font-medium">No companies found</p>
                       <p className="text-sm mt-2">Companies will appear here after thread sync.</p>
@@ -684,16 +670,6 @@ const CustomerThreadsPage: React.FC = () => {
                             }`}>
                               {company.overall_sentiment || 'Not set'}
                             </span>
-                          </td>
-                          <td className="px-6 py-5 text-gray-700 font-medium">
-                            <span>{formatMRR(company.mrr)}</span>
-                          </td>
-                          <td className="px-6 py-5 text-gray-600">
-                            {company.renewal_date ? (
-                              new Date(company.renewal_date).toLocaleDateString('en-CA')
-                            ) : (
-                              <span className="text-gray-400">Not set</span>
-                            )}
                           </td>
                           <td className="px-6 py-5 text-gray-600">
                             {company.last_interaction_at ? (
@@ -826,14 +802,12 @@ const CustomerThreadsPage: React.FC = () => {
                     {renderSortableHeader('company_name', 'Company Name')}
                     {renderSortableHeader('health_score', 'Health Score')}
                     {renderSortableHeader('status', 'Status')}
-                    {renderSortableHeader('mrr', 'MRR')}
-                    {renderSortableHeader('renewal_date', 'Renewal Date')}
                     {renderSortableHeader('last_interaction', 'Last Interaction')}
                   </tr>
                 </thead>
                 <tbody>
                   {sortedArchivedCompanies.length === 0 ? (
-                    <tr><td colSpan={7} className="text-center p-8 text-gray-500">
+                    <tr><td colSpan={5} className="text-center p-8 text-gray-500">
                       <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                       <p className="text-lg font-medium">No archived companies</p>
                       <p className="text-sm mt-2">Archived companies will appear here.</p>
@@ -874,16 +848,6 @@ const CustomerThreadsPage: React.FC = () => {
                             }`}>
                               {company.overall_sentiment || 'Not set'}
                             </span>
-                          </td>
-                          <td className="px-6 py-5 text-gray-700 font-medium">
-                            <span>{formatMRR(company.mrr)}</span>
-                          </td>
-                          <td className="px-6 py-5 text-gray-600">
-                            {company.renewal_date ? (
-                              new Date(company.renewal_date).toLocaleDateString('en-CA')
-                            ) : (
-                              <span className="text-gray-400">Not set</span>
-                            )}
                           </td>
                           <td className="px-6 py-5 text-gray-600">
                             {company.last_interaction_at ? (
