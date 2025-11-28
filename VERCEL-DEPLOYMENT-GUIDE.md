@@ -43,9 +43,10 @@ GOOGLE_CLIENT_SECRET=your_google_client_secret
 #### **Optional Environment Variables:**
 ```bash
 # For custom production domains (REQUIRED when using custom domain)
-# Set this to your production domain (e.g., https://www.enjoylighthouse.com)
+# Set this to your canonical production domain (use www version as canonical)
 # This ensures OAuth redirects work correctly in production
 # Priority: NEXT_PUBLIC_SITE_URL > NEXT_PUBLIC_VERCEL_URL > localhost fallback
+# Note: Both www and non-www versions must be added to Supabase redirect URLs
 NEXT_PUBLIC_SITE_URL=https://www.enjoylighthouse.com
 
 # For enhanced logging

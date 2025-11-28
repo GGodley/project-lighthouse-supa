@@ -19,7 +19,14 @@ You need to add your production and preview URLs to Supabase's allowed redirect 
 3. **Add Redirect URLs**
    Add the following URLs to the **"Redirect URLs"** list:
 
-   **For Production:**
+   **For Production (Custom Domain):**
+   ⚠️ **Important:** You must add BOTH www and non-www versions if your domain supports both:
+   ```
+   https://www.enjoylighthouse.com/auth/callback
+   https://enjoylighthouse.com/auth/callback
+   ```
+   
+   **For Production (Vercel Default):**
    ```
    https://your-production-domain.vercel.app/auth/callback
    ```
@@ -43,7 +50,11 @@ You need to add your production and preview URLs to Supabase's allowed redirect 
    ```
 
 4. **Set Site URL**
-   - In the **"Site URL"** field, set your production URL:
+   - In the **"Site URL"** field, set your canonical production URL (use www version if you have both):
+   ```
+   https://www.enjoylighthouse.com
+   ```
+   Or for Vercel default domain:
    ```
    https://your-production-domain.vercel.app
    ```
@@ -58,11 +69,24 @@ You need to add your production and preview URLs to Supabase's allowed redirect 
 - Make sure there are no trailing slashes in the URLs
 - Changes take effect immediately (no deployment needed)
 
+### Dual-Domain Setup (www and non-www):
+
+If your site is accessible via both `www.enjoylighthouse.com` and `enjoylighthouse.com`:
+
+1. **Set `NEXT_PUBLIC_SITE_URL`** to your canonical domain (recommended: `https://www.enjoylighthouse.com`)
+2. **Add both domains** to Supabase redirect URLs (as shown above)
+3. **How it works:**
+   - OAuth redirects will use the canonical domain from `NEXT_PUBLIC_SITE_URL`
+   - The callback route automatically handles both domains via `requestUrl.origin`
+   - Users visiting either domain will be able to authenticate successfully
+   - After authentication, users will be redirected to the canonical domain (www version)
+
 ### Verify Your Configuration:
 
 1. Check your production URL by looking at your Vercel deployment
-2. Ensure `NEXT_PUBLIC_SITE_URL` environment variable is set in Vercel (if using custom domain)
+2. Ensure `NEXT_PUBLIC_SITE_URL` environment variable is set in Vercel to your canonical domain (e.g., `https://www.enjoylighthouse.com`)
 3. The redirect URL in your code uses `getURL()` which should return your production URL
+4. **Important for dual-domain setup:** If you use both `www.enjoylighthouse.com` and `enjoylighthouse.com`, make sure BOTH are added to the redirect URLs list above
 
 ### Testing:
 
