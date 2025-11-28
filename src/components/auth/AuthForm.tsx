@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useSupabase } from '@/components/SupabaseProvider'
-import { getURL } from '@/lib/utils'
+import { getAuthCallbackURL } from '@/lib/utils'
 
 export default function AuthForm() {
   const [loading, setLoading] = useState(false)
@@ -65,9 +65,7 @@ export default function AuthForm() {
     try {
       // Preserve returnUrl through OAuth flow
       const returnUrl = searchParams.get('returnUrl');
-      const callbackUrl = returnUrl 
-        ? `${getURL()}/auth/callback?returnUrl=${encodeURIComponent(returnUrl)}`
-        : `${getURL()}/auth/callback`;
+      const callbackUrl = getAuthCallbackURL(returnUrl || undefined);
 
       const options = {
         redirectTo: callbackUrl,
@@ -82,7 +80,6 @@ export default function AuthForm() {
       console.log("🔍 GOOGLE OAUTH DIAGNOSTIC - Complete Options Blueprint:");
       console.log("Provider: google");
       console.log("Options:", JSON.stringify(options, null, 2));
-      console.log("Dynamic URL:", getURL());
       console.log("Full Redirect URL:", options.redirectTo);
       console.log("Requested Scopes:", options.scopes);
       console.log("Query Parameters:", options.queryParams);
@@ -119,9 +116,7 @@ export default function AuthForm() {
     try {
       // Preserve returnUrl through OAuth flow
       const returnUrl = searchParams.get('returnUrl');
-      const callbackUrl = returnUrl 
-        ? `${getURL()}/auth/callback?returnUrl=${encodeURIComponent(returnUrl)}`
-        : `${getURL()}/auth/callback`;
+      const callbackUrl = getAuthCallbackURL(returnUrl || undefined);
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'azure',

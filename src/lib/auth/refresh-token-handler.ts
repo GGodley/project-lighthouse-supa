@@ -7,7 +7,7 @@
  * with consent to obtain a new refresh token.
  */
 
-import { getURL } from '@/lib/utils'
+import { getAuthCallbackURL } from '@/lib/utils'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
@@ -30,9 +30,7 @@ export async function triggerReAuthWithConsent(
   returnUrl?: string,
   scopes: string = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly'
 ): Promise<void> {
-  const callbackUrl = returnUrl 
-    ? `${getURL()}/auth/callback?returnUrl=${encodeURIComponent(returnUrl)}`
-    : `${getURL()}/auth/callback`
+  const callbackUrl = getAuthCallbackURL(returnUrl)
 
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',

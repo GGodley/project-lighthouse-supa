@@ -18,13 +18,32 @@ const userEmailSpan = document.getElementById('userEmail');
 const loadingSpinner = document.getElementById('loadingSpinner');
 const emailList = document.getElementById('emailList');
 
-// Helper function to get the base URL for redirects
+// Helper function to get the base URL for redirects (without any path segments)
 function getRedirectBaseUrl() {
     // Use NEXT_PUBLIC_SITE_URL if available (set in Vercel env vars)
     // Fall back to current origin (works for localhost and any domain)
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
-    // Ensure no trailing slash before appending path
-    return baseUrl.replace(/\/$/, '');
+    let baseUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+    
+    // Remove any trailing slashes
+    baseUrl = baseUrl.replace(/\/+$/, '');
+    
+    // Remove any path segments (like /dashboard) - we only want the base domain
+    try {
+        const urlObj = new URL(baseUrl);
+        baseUrl = `${urlObj.protocol}//${urlObj.host}`;
+    } catch {
+        // If URL parsing fails, ensure it has protocol
+        if (!baseUrl.includes('http')) {
+            baseUrl = baseUrl.includes('localhost') ? `http://${baseUrl}` : `https://${baseUrl}`;
+        }
+    }
+    
+    return baseUrl;
+}
+
+// Helper function to get the OAuth callback URL
+function getAuthCallbackUrl() {
+    return `${getRedirectBaseUrl()}/auth/callback`;
 }
 
 // --- AUTHENTICATION ---
@@ -35,7 +54,7 @@ signInBtn.addEventListener('click', async () => {
         options: {
             // Force first-party redirect to avoid popup blockers
             preferRedirect: true,
-            redirectTo: `${getRedirectBaseUrl()}/auth/callback`,
+            redirectTo: getAuthCallbackUrl(),
             scopes: 'https://www.googleapis.com/auth/gmail.readonly',
             // Ask Google to show consent and grant offline access
             queryParams: {
@@ -129,7 +148,7 @@ syncEmailsBtn.addEventListener('click', async () => {
         const { error: signInError } = await supabaseClient.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: `${getRedirectBaseUrl()}/auth/callback`,
+                redirectTo: getAuthCallbackUrl(),
                 scopes: 'https://www.googleapis.com/auth/gmail.readonly',
             },
         });

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { RefreshCw, Search, Mail } from 'lucide-react'
 import { useRouter, usePathname } from 'next/navigation'
 import EmailSyncManager from '@/components/EmailSyncManager'
-import { getURL } from '@/lib/utils'
+import { getAuthCallbackURL } from '@/lib/utils'
 import { apiFetchJson } from '@/lib/api-client'
 import { isMissingRefreshToken, triggerReAuthWithConsent } from '@/lib/auth/refresh-token-handler'
 
@@ -82,7 +82,7 @@ export default function EmailsPage() {
         await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: `${getURL()}/auth/callback`,
+            redirectTo: getAuthCallbackURL(),
             scopes: 'https://www.googleapis.com/auth/gmail.readonly',
             queryParams: { access_type: 'offline' }
           }

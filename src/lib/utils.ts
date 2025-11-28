@@ -6,19 +6,47 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * Gets the base URL for the application
+ * Priority: NEXT_PUBLIC_SITE_URL > NEXT_PUBLIC_VERCEL_URL > localhost
+ * Returns base URL WITHOUT trailing slash to avoid double slashes when appending paths
+ */
 export const getURL = () => {
   let url =
     process.env.NEXT_PUBLIC_SITE_URL ?? // Set this to your new domain in Vercel Env Vars
     process.env.NEXT_PUBLIC_VERCEL_URL ?? // Automatically set by Vercel for previews
-    'http://localhost:3000/'
+    'http://localhost:3000'
 
-  // Make sure to include `https://` when not localhost.
-  url = url.includes('http') ? url : `https://${url}`
+  // Remove any trailing slashes
+  url = url.replace(/\/+$/, '')
 
-  // Make sure to include a trailing `/`.
-  url = url.charAt(url.length - 1) === '/' ? url : `${url}/`
+  // Remove any path segments (like /dashboard) - we only want the base domain
+  try {
+    const urlObj = new URL(url)
+    url = `${urlObj.protocol}//${urlObj.host}`
+  } catch {
+    // If URL parsing fails, ensure it has protocol
+    if (!url.includes('http')) {
+      url = url.includes('localhost') ? `http://${url}` : `https://${url}`
+    }
+  }
 
   return url
+}
+
+/**
+ * Gets the OAuth callback URL
+ * Ensures proper path construction without double slashes
+ */
+export const getAuthCallbackURL = (returnUrl?: string): string => {
+  const baseUrl = getURL()
+  const callbackPath = '/auth/callback'
+  
+  if (returnUrl) {
+    return `${baseUrl}${callbackPath}?returnUrl=${encodeURIComponent(returnUrl)}`
+  }
+  
+  return `${baseUrl}${callbackPath}`
 }
 
 export interface SentimentData {
