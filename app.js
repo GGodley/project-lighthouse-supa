@@ -18,6 +18,15 @@ const userEmailSpan = document.getElementById('userEmail');
 const loadingSpinner = document.getElementById('loadingSpinner');
 const emailList = document.getElementById('emailList');
 
+// Helper function to get the base URL for redirects
+function getRedirectBaseUrl() {
+    // Use NEXT_PUBLIC_SITE_URL if available (set in Vercel env vars)
+    // Fall back to current origin (works for localhost and any domain)
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+    // Ensure no trailing slash before appending path
+    return baseUrl.replace(/\/$/, '');
+}
+
 // --- AUTHENTICATION ---
 signInBtn.addEventListener('click', async () => {
     console.log('Starting Google sign-in redirect...');
@@ -26,7 +35,7 @@ signInBtn.addEventListener('click', async () => {
         options: {
             // Force first-party redirect to avoid popup blockers
             preferRedirect: true,
-            redirectTo: process.env.NEXT_PUBLIC_SITE_URL || window.location.origin,
+            redirectTo: `${getRedirectBaseUrl()}/auth/callback`,
             scopes: 'https://www.googleapis.com/auth/gmail.readonly',
             // Ask Google to show consent and grant offline access
             queryParams: {
@@ -120,7 +129,7 @@ syncEmailsBtn.addEventListener('click', async () => {
         const { error: signInError } = await supabaseClient.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: process.env.NEXT_PUBLIC_SITE_URL || window.location.origin,
+                redirectTo: `${getRedirectBaseUrl()}/auth/callback`,
                 scopes: 'https://www.googleapis.com/auth/gmail.readonly',
             },
         });
