@@ -66,33 +66,8 @@ const CustomerThreadsPage: React.FC = () => {
     getAuthData()
   }, [supabase])
 
-  // Thread sync hook
+  // Thread sync hook (used for status display and manual sync button)
   const { syncStatus, syncDetails, progressPercentage, startSync } = useThreadSync(providerToken, userEmail)
-
-  // Trigger sync on page load
-  useEffect(() => {
-    if (providerToken && userEmail && syncStatus === 'idle') {
-      // Check if there's already a running/pending job
-      const checkExistingJob = async () => {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (!session?.user?.id) return
-
-        const { data: existingJobs } = await supabase
-          .from('sync_jobs')
-          .select('id, status')
-          .eq('user_id', session.user.id)
-          .in('status', ['pending', 'running'])
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single()
-
-        if (!existingJobs) {
-          startSync()
-        }
-      }
-      checkExistingJob()
-    }
-  }, [providerToken, userEmail, syncStatus, startSync, supabase])
 
   // Helper functions
   const statusPillStyles: { [key: string]: string } = {

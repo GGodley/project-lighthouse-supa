@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { useRouter } from 'next/navigation'
 import Sidebar from './Sidebar'
+import DashboardSyncManager from '@/components/DashboardSyncManager'
 import { Database } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -99,6 +100,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="flex h-screen glass-bg">
+      <DashboardSyncManager />
       <Sidebar onSignOut={handleSignOut} />
       <main className="flex-1 overflow-auto relative">
         {children}

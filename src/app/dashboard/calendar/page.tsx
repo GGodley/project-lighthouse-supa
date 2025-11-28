@@ -16,6 +16,44 @@ export default function CalendarPage() {
   const [error, setError] = useState<string | null>(null)
   const supabase = useSupabase()
 
+  // Fetch meetings from database (without syncing)
+  const fetchMeetings = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+
+      const meetingsResponse = await fetch('/api/meetings')
+      
+      if (!meetingsResponse.ok) {
+        throw new Error('Failed to fetch meetings')
+      }
+
+      const meetings: Meeting[] = await meetingsResponse.json()
+      
+      // Transform meetings to FullCalendar events
+      const calendarEvents: EventInput[] = meetings.map((meeting) => ({
+        id: String(meeting.google_event_id ?? `local-${Date.now()}`),
+        title: meeting.title || 'Untitled Meeting',
+        start: (meeting as Meeting & Partial<{ start_time: string }>).start_time,
+        end: (meeting as Meeting & Partial<{ end_time: string }>).end_time ?? undefined,
+        extendedProps: {
+          description: meeting.description,
+          attendees: meeting.attendees,
+          hangoutLink: meeting.hangout_link,
+        },
+      }))
+
+      setEvents(calendarEvents)
+      
+    } catch (err) {
+      console.error('Error fetching meetings:', err)
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  // Sync and fetch calendar (for manual refresh button)
   const syncAndFetchCalendar = useCallback(async () => {
     try {
       setIsLoading(true)
@@ -50,40 +88,20 @@ export default function CalendarPage() {
       console.log('Sync completed:', syncResult)
 
       // Step 2: Fetch meetings from our database
-      const meetingsResponse = await fetch('/api/meetings')
-      
-      if (!meetingsResponse.ok) {
-        throw new Error('Failed to fetch meetings')
-      }
-
-      const meetings: Meeting[] = await meetingsResponse.json()
-      
-      // Transform meetings to FullCalendar events
-      const calendarEvents: EventInput[] = meetings.map((meeting) => ({
-        id: String(meeting.google_event_id ?? `local-${Date.now()}`),
-        title: meeting.title || 'Untitled Meeting',
-        start: (meeting as Meeting & Partial<{ start_time: string }>).start_time,
-        end: (meeting as Meeting & Partial<{ end_time: string }>).end_time ?? undefined,
-        extendedProps: {
-          description: meeting.description,
-          attendees: meeting.attendees,
-          hangoutLink: meeting.hangout_link,
-        },
-      }))
-
-      setEvents(calendarEvents)
+      await fetchMeetings()
       
     } catch (err) {
       console.error('Calendar sync error:', err)
       setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
       setIsLoading(false)
     }
-  }, [supabase])
+  }, [supabase, fetchMeetings])
 
+  // Fetch meetings on page load (without syncing)
+  // Note: Auto-sync on page load has been moved to DashboardSyncManager
   useEffect(() => {
-    syncAndFetchCalendar()
-  }, [syncAndFetchCalendar])
+    fetchMeetings()
+  }, [fetchMeetings])
 
   return (
     <div className="min-h-screen glass-bg">
