@@ -14,9 +14,49 @@
 'use client';
 
 import { createClient } from '@/lib/supabase/client';
+import { triggerReAuthWithConsent } from '@/lib/auth/refresh-token-handler';
 
 // Global flag to prevent multiple simultaneous redirects
 let redirectInProgress = false;
+let reAuthInProgress = false;
+
+/**
+ * Error code that indicates missing refresh token
+ */
+export const MISSING_REFRESH_TOKEN_ERROR = 'MISSING_REFRESH_TOKEN';
+
+/**
+ * Handles missing refresh token by triggering re-authentication with consent
+ */
+async function handleMissingRefreshToken(currentPath: string): Promise<void> {
+  // Prevent duplicate re-auth attempts
+  if (reAuthInProgress) {
+    console.log('⏭️ Re-authentication already in progress, skipping');
+    return;
+  }
+
+  // Don't trigger re-auth if already on login or auth pages
+  if (currentPath.startsWith('/login') || currentPath.startsWith('/auth')) {
+    console.log('⏭️ Already on auth page, skipping re-auth');
+    return;
+  }
+
+  reAuthInProgress = true;
+  console.log('🔄 Missing refresh token detected, triggering re-authentication with consent...');
+
+  try {
+    const supabase = createClient();
+    const returnUrl = currentPath && currentPath !== '/' 
+      ? encodeURIComponent(currentPath) 
+      : undefined;
+    
+    await triggerReAuthWithConsent(supabase, returnUrl);
+    // The OAuth flow will redirect, so we don't need to reset the flag here
+  } catch (error) {
+    console.error('Error triggering re-authentication:', error);
+    reAuthInProgress = false;
+  }
+}
 
 /**
  * Handles 401 Unauthorized responses by redirecting to login
@@ -96,6 +136,26 @@ export async function apiFetch(
       return response;
     }
 
+    // Intercept 403 Forbidden responses that indicate missing refresh token
+    if (response.status === 403) {
+      // Check if the error indicates missing refresh token
+      try {
+        const errorData = await response.clone().json();
+        if (errorData.error === MISSING_REFRESH_TOKEN_ERROR || 
+            (typeof errorData.error === 'string' && errorData.error.includes('Missing Google provider token'))) {
+          // Only handle re-auth on client side
+          if (typeof window !== 'undefined') {
+            await handleMissingRefreshToken(currentPath);
+          }
+        }
+      } catch {
+        // If JSON parsing fails, ignore and return response as-is
+      }
+      
+      // Return the response anyway so calling code can handle it if needed
+      return response;
+    }
+
     return response;
   } catch (error) {
     // Re-throw network errors and other non-401 errors
@@ -130,6 +190,19 @@ export async function apiFetchJson<T = unknown>(
       throw new Error('Unauthorized - redirecting to login');
     }
 
+    // If it's a 403 with missing refresh token, we've already handled re-auth
+    if (response.status === 403) {
+      try {
+        const errorData = await response.clone().json();
+        if (errorData.error === MISSING_REFRESH_TOKEN_ERROR || 
+            (typeof errorData.error === 'string' && errorData.error.includes('Missing Google provider token'))) {
+          throw new Error('Missing refresh token - re-authenticating');
+        }
+      } catch {
+        // If JSON parsing fails, continue to normal error handling
+      }
+    }
+
     // For other errors, try to parse error message
     let errorMessage = `Request failed with status ${response.status}`;
     try {
@@ -152,5 +225,6 @@ export async function apiFetchJson<T = unknown>(
  */
 export function resetRedirectFlag(): void {
   redirectInProgress = false;
+  reAuthInProgress = false;
 }
 

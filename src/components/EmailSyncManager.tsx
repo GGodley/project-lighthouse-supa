@@ -1,12 +1,16 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useSupabase } from './SupabaseProvider';
+import { isMissingRefreshToken, triggerReAuthWithConsent } from '@/lib/auth/refresh-token-handler';
+import { useRouter, usePathname } from 'next/navigation';
 
 export default function EmailSyncManager() {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
   const [message, setMessage] = useState('');
   const [hasSyncedThisSession, setHasSyncedThisSession] = useState(false);
   const supabase = useSupabase();
+  const router = useRouter();
+  const pathname = usePathname();
 
   // --- START OF REFACTORED LOGIC ---
 
@@ -51,12 +55,25 @@ export default function EmailSyncManager() {
     console.log("User email:", session.user?.email);
     console.log("--- END SESSION DIAGNOSTIC ---");
     
-    if (!session.provider_token) {
-        console.error("7. CRITICAL ERROR: Provider token is missing from the refreshed session.");
-        console.error("This means the OAuth flow did not properly request or receive Gmail permissions.");
-        setMessage('Missing Google provider token. Please re-authenticate with Google.');
-        setSyncStatus('failed');
-        return;
+    // Check for missing refresh token and trigger re-auth if needed
+    if (isMissingRefreshToken(session)) {
+        console.warn("7. WARNING: Provider token is missing. This indicates a missing refresh token.");
+        console.log("Triggering re-authentication with consent to obtain new refresh token...");
+        setMessage('Missing Google permissions. Re-authenticating to refresh access...');
+        setSyncStatus('running');
+        
+        try {
+          // Build return URL to come back to current page after re-auth
+          const returnUrl = pathname ? encodeURIComponent(pathname) : undefined;
+          await triggerReAuthWithConsent(supabase, returnUrl);
+          // The OAuth flow will redirect, so we don't need to do anything else here
+          return;
+        } catch (error) {
+          console.error("Error triggering re-authentication:", error);
+          setMessage('Failed to re-authenticate. Please try again.');
+          setSyncStatus('failed');
+          return;
+        }
     }
 
     try {

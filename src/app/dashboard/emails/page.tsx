@@ -4,10 +4,11 @@ import { useEffect, useState, useCallback } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { Button } from '@/components/ui/Button'
 import { RefreshCw, Search, Mail } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import EmailSyncManager from '@/components/EmailSyncManager'
 import { getURL } from '@/lib/utils'
 import { apiFetchJson } from '@/lib/api-client'
+import { isMissingRefreshToken, triggerReAuthWithConsent } from '@/lib/auth/refresh-token-handler'
 
 type Email = {
   id: string;
@@ -25,6 +26,7 @@ export default function EmailsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const supabase = useSupabase()
   const router = useRouter()
+  const pathname = usePathname()
 
   const fetchEmails = useCallback(async () => {
     try {
@@ -82,11 +84,19 @@ export default function EmailsPage() {
           options: {
             redirectTo: `${getURL()}/auth/callback`,
             scopes: 'https://www.googleapis.com/auth/gmail.readonly',
-            queryParams: { prompt: 'consent', access_type: 'offline' }
+            queryParams: { access_type: 'offline' }
           }
         })
         return
       }
+      
+      // Check for missing refresh token and trigger re-auth if needed
+      if (isMissingRefreshToken(session)) {
+        const returnUrl = pathname || '/dashboard/emails'
+        await triggerReAuthWithConsent(supabase, returnUrl, 'https://www.googleapis.com/auth/gmail.readonly')
+        return
+      }
+      
       await invokeSync(session)
       await fetchEmails()
     } catch (error) {

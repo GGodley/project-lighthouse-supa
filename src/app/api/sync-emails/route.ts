@@ -4,6 +4,7 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { MISSING_REFRESH_TOKEN_ERROR } from '@/lib/api-client';
 
 export async function POST() {
   const cookieStore = cookies();
@@ -15,7 +16,7 @@ export async function POST() {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
   if (!session.provider_token) {
-    return NextResponse.json({ error: 'Missing Google provider token. Please re-authenticate.' }, { status: 400 });
+    return NextResponse.json({ error: MISSING_REFRESH_TOKEN_ERROR }, { status: 403 });
   }
 
   try {

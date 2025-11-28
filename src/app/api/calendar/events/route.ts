@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse, type NextRequest } from 'next/server'
+import { MISSING_REFRESH_TOKEN_ERROR } from '@/lib/api-client'
 
 type GoogleAttendee = { email?: string }
 type GoogleEvent = { attendees?: GoogleAttendee[] }
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated or user email is missing' }, { status: 401 })
     }
     if (!session.provider_token) {
-      return NextResponse.json({ error: 'Missing Google provider token. Please re-authenticate.' }, { status: 400 })
+      return NextResponse.json({ error: MISSING_REFRESH_TOKEN_ERROR }, { status: 403 })
     }
 
     const userDomain = session.user.email.split('@')[1]
