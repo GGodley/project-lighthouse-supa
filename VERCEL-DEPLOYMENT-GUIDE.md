@@ -42,8 +42,11 @@ GOOGLE_CLIENT_SECRET=your_google_client_secret
 
 #### **Optional Environment Variables:**
 ```bash
-# For custom domains
-NEXT_PUBLIC_SITE_URL=https://your-domain.com
+# For custom production domains (REQUIRED when using custom domain)
+# Set this to your production domain (e.g., https://www.enjoylighthouse.com)
+# This ensures OAuth redirects work correctly in production
+# Priority: NEXT_PUBLIC_SITE_URL > NEXT_PUBLIC_VERCEL_URL > localhost fallback
+NEXT_PUBLIC_SITE_URL=https://www.enjoylighthouse.com
 
 # For enhanced logging
 NODE_ENV=production
