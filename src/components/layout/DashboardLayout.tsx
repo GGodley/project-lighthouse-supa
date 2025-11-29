@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { useRouter } from 'next/navigation'
+import { useSessionValidation } from '@/hooks/useSessionValidation'
 import Sidebar from './Sidebar'
 import DashboardSyncManager from '@/components/DashboardSyncManager'
 import { Database } from '@/types/database'
@@ -19,11 +20,33 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const supabase = useSupabase()
   const router = useRouter()
 
+  // Use session validation hook to periodically check and handle expired sessions
+  useSessionValidation({
+    checkInterval: 5 * 60 * 1000, // 5 minutes
+    checkOnVisibilityChange: true,
+    checkOnMount: false, // We'll do our own check on mount
+  })
+
   useEffect(() => {
     const getUser = async () => {
-      const { data: { user: authUser } } = await supabase.auth.getUser()
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
       
-      if (!authUser) {
+      // Check for authentication errors that indicate expired tokens
+      const isTokenExpiredError = authError && (
+        authError.message?.toLowerCase().includes('expired') ||
+        authError.message?.toLowerCase().includes('invalid jwt') ||
+        authError.message?.toLowerCase().includes('refresh_token')
+      )
+
+      if (!authUser || isTokenExpiredError) {
+        // If token is expired, let the session validation handle the redirect
+        // Otherwise, redirect immediately
+        if (isTokenExpiredError) {
+          console.log('🔄 DashboardLayout: Token expired error detected');
+          // The session validation hook will handle the redirect
+          setLoading(false)
+          return
+        }
         router.push('/login')
         return
       }
