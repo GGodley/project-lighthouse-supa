@@ -110,11 +110,26 @@ export default async function DashboardPage() {
           console.warn(`[Dashboard] Some company IDs are null/undefined:`, companyIds)
         }
         
-        // Fetch feature requests (explicitly filter out null company_ids)
-        console.log(`[Dashboard] Querying feature_requests for ${companyIds.length} companies:`, companyIds)
+        // Fetch feature requests with features JOIN (same approach as company profile)
+        // This ensures we only get feature requests that have matching features
+        console.log(`[Dashboard] Querying feature_requests with features JOIN for ${companyIds.length} companies:`, companyIds)
+        
         const { data: featureRequestsData, error: featureRequestsError } = await supabase
           .from('feature_requests')
-          .select('id, company_id, feature_id, requested_at, source, email_id, meeting_id, thread_id, urgency, completed, owner')
+          .select(`
+            id,
+            company_id,
+            feature_id,
+            requested_at,
+            source,
+            email_id,
+            meeting_id,
+            thread_id,
+            urgency,
+            completed,
+            owner,
+            features!inner(id, title, first_requested, last_requested)
+          `)
           .in('company_id', companyIds)
           .not('company_id', 'is', null)
           .limit(50)
@@ -124,89 +139,58 @@ export default async function DashboardPage() {
         }
 
         if (featureRequestsData && featureRequestsData.length > 0) {
-          console.log(`[Dashboard] Found ${featureRequestsData.length} feature requests for ${companyIds.length} companies`)
+          console.log(`[Dashboard] Found ${featureRequestsData.length} feature requests with matching features`)
           console.log(`[Dashboard] Sample feature request:`, featureRequestsData[0])
-          console.log(`[Dashboard] Feature request company_ids:`, featureRequestsData.map(fr => fr.company_id))
-          console.log(`[Dashboard] Feature request feature_ids:`, featureRequestsData.map(fr => fr.feature_id))
           
-          // Get unique feature IDs
-          const featureIds = [...new Set(featureRequestsData.map(fr => fr.feature_id))]
-          console.log(`[Dashboard] Fetching ${featureIds.length} unique features`)
-          
-          // Fetch features
-          const { data: featuresData, error: featuresError } = await supabase
-            .from('features')
-            .select('id, title, first_requested, last_requested')
-            .in('id', featureIds)
+          // Transform feature requests data (features are already joined)
+          const transformed = featureRequestsData
+            .map((fr: any) => {
+              // Determine source_id based on source type
+              let sourceId: string | null = null
+              if (fr.source === 'thread' && fr.thread_id) {
+                sourceId = fr.thread_id
+              } else if (fr.source === 'meeting' && fr.meeting_id) {
+                sourceId = fr.meeting_id.toString()
+              } else if (fr.source === 'email' && fr.email_id) {
+                sourceId = fr.email_id.toString()
+              }
 
-          if (featuresError) {
-            console.error('[Dashboard] Error fetching features:', featuresError)
-          }
-
-          if (featuresData && featuresData.length > 0) {
-            console.log(`[Dashboard] Successfully fetched ${featuresData.length} features`)
-            console.log(`[Dashboard] Feature titles:`, featuresData.map(f => ({ id: f.id, title: f.title })))
-            const featuresMap = new Map(featuresData.map(f => [f.id, {
-              title: f.title,
-              first_requested: f.first_requested,
-              last_requested: f.last_requested
-            }]))
-            
-            // Transform feature requests data
-            const transformed = featureRequestsData
-              .map((fr) => {
-                // Determine source_id based on source type
-                let sourceId: string | null = null
-                if (fr.source === 'thread' && fr.thread_id) {
-                  sourceId = fr.thread_id
-                } else if (fr.source === 'meeting' && fr.meeting_id) {
-                  sourceId = fr.meeting_id.toString()
-                } else if (fr.source === 'email' && fr.email_id) {
-                  sourceId = fr.email_id.toString()
+              // Features are joined via !inner, Supabase returns as nested object/array
+              // Handle both array and object formats
+              let feature: any = null
+              if (fr.features) {
+                if (Array.isArray(fr.features)) {
+                  feature = fr.features[0] || null
+                } else {
+                  feature = fr.features
                 }
+              }
+              
+              if (!feature) {
+                console.warn(`[Dashboard] Feature request ${fr.id} has no feature data despite inner join!`)
+              }
 
-                const feature = featuresMap.get(fr.feature_id)
-                
-                if (!feature) {
-                  console.warn(`[Dashboard] Feature request ${fr.id} has feature_id ${fr.feature_id} but feature not found in featuresMap`)
-                }
-
-                return {
-                  id: fr.id,
-                  title: feature?.title || 'Unknown Feature',
-                  company_name: companyMap.get(fr.company_id) || 'Unknown Company',
-                  company_id: fr.company_id,
-                  requested_at: fr.requested_at,
-                  source: (fr.source || 'thread') as 'email' | 'meeting' | 'thread',
-                  source_id: sourceId,
-                  urgency: (fr.urgency || 'Low') as 'Low' | 'Medium' | 'High',
-                  completed: fr.completed || false,
-                  first_requested: feature?.first_requested || null,
-                  last_requested: feature?.last_requested || null,
-                  owner: fr.owner || null,
-                  meeting_id: fr.meeting_id
-                }
-              })
+              return {
+                id: fr.id,
+                title: feature?.title || 'Unknown Feature',
+                company_name: companyMap.get(fr.company_id) || 'Unknown Company',
+                company_id: fr.company_id,
+                requested_at: fr.requested_at,
+                source: (fr.source || 'thread') as 'email' | 'meeting' | 'thread',
+                source_id: sourceId,
+                urgency: (fr.urgency || 'Low') as 'Low' | 'Medium' | 'High',
+                completed: fr.completed || false,
+                first_requested: feature?.first_requested || null,
+                last_requested: feature?.last_requested || null,
+                owner: fr.owner || null,
+                meeting_id: fr.meeting_id
+              }
+            })
             
-            // Filter out any with missing features, but log them for debugging
-            const unknownFeatures = transformed.filter(fr => fr.title === 'Unknown Feature')
-            if (unknownFeatures.length > 0) {
-              console.warn(`[Dashboard] Filtering out ${unknownFeatures.length} feature requests with missing features.`)
-              console.warn(`[Dashboard] Missing feature IDs:`, unknownFeatures.map(fr => {
-                const frData = featureRequestsData.find(f => f.id === fr.id)
-                return { feature_request_id: fr.id, feature_id: frData?.feature_id, company_id: frData?.company_id }
-              }))
-              console.warn(`[Dashboard] Available feature IDs in map:`, Array.from(featuresMap.keys()))
-            }
-            
-            featureRequests = transformed.filter(fr => fr.title !== 'Unknown Feature')
-            console.log(`[Dashboard] Final feature requests count after filtering: ${featureRequests.length}`)
-            if (featureRequests.length > 0) {
-              console.log(`[Dashboard] Sample final feature request:`, featureRequests[0])
-            }
-          } else {
-            console.warn(`[Dashboard] No features found for ${featureIds.length} feature IDs. Feature requests will not be displayed.`)
-            console.warn(`[Dashboard] Missing feature IDs:`, featureIds)
+          featureRequests = transformed
+          console.log(`[Dashboard] Final feature requests count: ${featureRequests.length}`)
+          if (featureRequests.length > 0) {
+            console.log(`[Dashboard] Sample final feature request:`, featureRequests[0])
           }
         } else {
           console.log(`[Dashboard] No feature requests found for ${companyIds.length} companies`)
