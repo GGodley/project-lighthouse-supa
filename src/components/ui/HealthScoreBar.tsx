@@ -95,7 +95,7 @@ export default function HealthScoreBar({
           background: 'rgba(255, 255, 255, 0.7)',
           backdropFilter: 'blur(20px) saturate(180%)',
           WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-          border: '1px solid rgba(255, 255, 255, 0.5)',
+          border: '1px solid rgba(0, 0, 0, 0.2)',
           boxShadow: '0 2px 8px 0 rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.8)',
         }}
       >
