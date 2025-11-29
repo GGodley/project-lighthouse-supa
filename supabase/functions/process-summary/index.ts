@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { saveFeatureRequests, FeatureRequest } from '../_shared/feature-request-utils.ts';
 import { mapFeatureRequests } from '../_shared/feature-request-mapper.ts';
+import { ensureCompanyAndCustomer } from '../_shared/company-customer-resolver.ts';
 
 Deno.serve(async (req)=>{
   try {
@@ -104,42 +105,70 @@ Deno.serve(async (req)=>{
     // Process feature requests if they exist
     if (featureRequests.length > 0) {
       try {
-        // Get meeting to find company_id and customer_id
-        const { data: meeting, error: meetingError } = await supabase
-          .from('meetings')
-          .select('customer_id, id')
-          .eq('google_event_id', job.meeting_id)
+        // Get user_id from transcription_jobs
+        const { data: jobData, error: jobDataError } = await supabase
+          .from('transcription_jobs')
+          .select('user_id')
+          .eq('id', job.id)
           .single();
 
-        if (meetingError || !meeting) {
-          console.error(`Failed to fetch meeting for feature requests: ${meetingError?.message || 'Meeting not found'}`);
+        if (jobDataError || !jobData?.user_id) {
+          console.error(`Failed to fetch user_id from transcription_jobs: ${jobDataError?.message || 'User not found'}`);
         } else {
-          // Get customer to find company_id
-          const { data: customer, error: customerError } = await supabase
-            .from('customers')
-            .select('company_id')
-            .eq('customer_id', meeting.customer_id)
+          const userId = jobData.user_id;
+
+          // Get meeting to find customer_id
+          const { data: meeting, error: meetingError } = await supabase
+            .from('meetings')
+            .select('customer_id, id')
+            .eq('google_event_id', job.meeting_id)
             .single();
 
-          if (customerError || !customer) {
-            console.error(`Failed to fetch customer for feature requests: ${customerError?.message || 'Customer not found'}`);
+          if (meetingError || !meeting) {
+            console.error(`Failed to fetch meeting for feature requests: ${meetingError?.message || 'Meeting not found'}`);
+          } else if (!meeting.customer_id) {
+            console.error(`Meeting ${meeting.id} has no customer_id, cannot save feature requests`);
           } else {
-            // Save feature requests using shared utility
-            const result = await saveFeatureRequests(
-              supabase,
-              featureRequests,
-              {
-                company_id: customer.company_id,
-                customer_id: meeting.customer_id,
-                source: 'meeting',
-                meeting_id: meeting.id
-              }
-            );
+            // Get customer email for resolver
+            const { data: customer, error: customerError } = await supabase
+              .from('customers')
+              .select('company_id, email')
+              .eq('customer_id', meeting.customer_id)
+              .single();
 
-            if (result.success) {
-              console.log(`✅ Successfully saved ${result.savedCount} feature requests from meeting ${job.meeting_id}`);
+            if (customerError || !customer) {
+              console.error(`Failed to fetch customer for feature requests: ${customerError?.message || 'Customer not found'}`);
             } else {
-              console.warn(`⚠️ Saved ${result.savedCount} feature requests with ${result.errors.length} errors`);
+              try {
+                // Use resolver to ensure company_id exists
+                const { company_id, customer_id } = await ensureCompanyAndCustomer(
+                  supabase,
+                  meeting.customer_id,
+                  customer.email,
+                  userId
+                );
+
+                // Save feature requests using shared utility
+                const result = await saveFeatureRequests(
+                  supabase,
+                  featureRequests,
+                  {
+                    company_id: company_id,
+                    customer_id: customer_id,
+                    source: 'meeting',
+                    meeting_id: meeting.id
+                  }
+                );
+
+                if (result.success) {
+                  console.log(`✅ Successfully saved ${result.savedCount} feature requests from meeting ${job.meeting_id}`);
+                } else {
+                  console.warn(`⚠️ Saved ${result.savedCount} feature requests with ${result.errors.length} errors`);
+                }
+              } catch (resolveError: any) {
+                console.error(`Failed to resolve company/customer for feature requests: ${resolveError.message}`);
+                // Don't throw - feature request processing failure shouldn't break the summary flow
+              }
             }
           }
         }

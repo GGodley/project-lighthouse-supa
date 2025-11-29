@@ -91,11 +91,12 @@ export default async function DashboardPage() {
         const companyIds = userCompanies.map(c => c.company_id)
         const companyMap = new Map(userCompanies.map(c => [c.company_id, c.company_name]))
         
-        // Fetch feature requests
+        // Fetch feature requests (explicitly filter out null company_ids)
         const { data: featureRequestsData } = await supabase
           .from('feature_requests')
           .select('id, company_id, feature_id, requested_at, source, email_id, meeting_id, thread_id, urgency, completed, owner')
           .in('company_id', companyIds)
+          .not('company_id', 'is', null)
           .limit(50)
 
         if (featureRequestsData && featureRequestsData.length > 0) {

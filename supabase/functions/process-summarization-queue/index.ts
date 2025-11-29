@@ -4,6 +4,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import OpenAI from "https://esm.sh/openai@4.20.1";
+import { ensureCompanyAndCustomer } from '../_shared/company-customer-resolver.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -81,10 +82,16 @@ serve(async (_req) => {
           ? email.body_text.substring(0, MAX_CHARS) 
           : email.body_text;
 
-        // Fetch customer_id and company_id
+        // Get user_id from email record
+        if (!email.user_id) {
+          throw new Error('Email record missing user_id');
+        }
+        const userId = email.user_id;
+
+        // Fetch customer data (including email for resolver)
         const { data: customerData, error: customerError } = await supabaseAdmin
           .from('customers')
-          .select('customer_id, company_id')
+          .select('customer_id, company_id, email')
           .eq('customer_id', email.customer_id)
           .single();
 
@@ -92,9 +99,24 @@ serve(async (_req) => {
           throw new Error(`Failed to fetch customer data: ${customerError?.message || 'Customer not found'}`);
         }
 
-        const { customer_id, company_id } = customerData;
-        if (!customer_id || !company_id) {
-          throw new Error('Missing customer_id or company_id');
+        if (!customerData.customer_id) {
+          throw new Error('Customer data missing customer_id');
+        }
+
+        // Use resolver to ensure company_id exists
+        let company_id: string;
+        let customer_id: string;
+        try {
+          const resolved = await ensureCompanyAndCustomer(
+            supabaseAdmin,
+            customerData.customer_id,
+            customerData.email,
+            userId
+          );
+          company_id = resolved.company_id;
+          customer_id = resolved.customer_id;
+        } catch (resolveError: any) {
+          throw new Error(`Failed to resolve company/customer: ${resolveError.message}`);
         }
 
         // Define the New OpenAI Prompt

@@ -48,6 +48,29 @@ export async function saveFeatureRequests(
     return result;
   }
 
+  // Validation: Ensure company_id and customer_id are valid
+  if (!context.company_id || typeof context.company_id !== 'string') {
+    const errorMsg = `Invalid company_id: ${context.company_id}`;
+    console.error(`❌ [FEATURE_REQUEST_UTILS] ${errorMsg}`);
+    result.success = false;
+    result.errors = featureRequests.map(req => ({
+      feature_title: req.feature_title || 'Unknown',
+      error: errorMsg
+    }));
+    return result;
+  }
+
+  if (!context.customer_id || typeof context.customer_id !== 'string') {
+    const errorMsg = `Invalid customer_id: ${context.customer_id}`;
+    console.error(`❌ [FEATURE_REQUEST_UTILS] ${errorMsg}`);
+    result.success = false;
+    result.errors = featureRequests.map(req => ({
+      feature_title: req.feature_title || 'Unknown',
+      error: errorMsg
+    }));
+    return result;
+  }
+
   console.log(`Saving ${featureRequests.length} feature requests for ${context.source} source`);
   
   // Log context details for debugging thread_id issues
