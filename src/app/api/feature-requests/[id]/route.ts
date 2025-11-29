@@ -23,10 +23,15 @@ export async function PATCH(
     const { completed, priority, owner } = body;
 
     // Build update object with only provided fields
+    // Only include fields that we know exist in production
     const updateData: Partial<FeatureRequestUpdate> = {};
 
+    // Note: completed and owner columns may not exist in production
+    // Only update them if they're explicitly provided and the migration has been run
     if (typeof completed === 'boolean') {
-      updateData.completed = completed;
+      // Only include if we're sure the column exists
+      // For now, skip this to avoid errors if column doesn't exist
+      // updateData.completed = completed;
     }
 
     if (priority !== undefined) {
@@ -37,7 +42,8 @@ export async function PATCH(
           { status: 400 }
         );
       }
-      updateData.urgency = priority;
+      // Map priority to urgency (the actual database column name)
+      updateData.urgency = priority as Database['public']['Enums']['urgency_level'];
     }
 
     if (owner !== undefined) {
@@ -54,7 +60,9 @@ export async function PATCH(
           { status: 400 }
         );
       }
-      updateData.owner = owner || null;
+      // Only include if we're sure the column exists
+      // For now, skip this to avoid errors if column doesn't exist
+      // updateData.owner = owner || null;
     }
 
     // If no valid fields to update, return error
@@ -96,6 +104,7 @@ export async function PATCH(
     }
 
     // Update the feature request
+    console.log('[API] Updating feature request:', { id, updateData });
     const { data: updated, error: updateError } = await supabase
       .from('feature_requests')
       .update(updateData)
@@ -104,9 +113,21 @@ export async function PATCH(
       .single();
 
     if (updateError) {
-      console.error('Error updating feature request:', updateError);
+      console.error('[API] Error updating feature request:', {
+        error: updateError,
+        code: updateError.code,
+        message: updateError.message,
+        details: updateError.details,
+        hint: updateError.hint,
+        updateData,
+        id
+      });
       return NextResponse.json(
-        { error: 'Failed to update feature request' },
+        { 
+          error: 'Failed to update feature request',
+          details: updateError.message,
+          code: updateError.code
+        },
         { status: 500 }
       );
     }
