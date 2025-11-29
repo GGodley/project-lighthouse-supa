@@ -1086,8 +1086,7 @@ serve(async (req: Request) => {
                   const companyId = company?.company_id; // This is UUID
 
                   if (companyId) {
-                    discoveredCompanyIds.set(companyId, true); // Add to our set
-                    
+                    // Don't add to discoveredCompanyIds yet - wait until customer is confirmed
                     const senderName = fromHeader.includes(email) ? (fromHeader.split('<')[0].trim().replace(/"/g, '') || email) : email;
 
                     // --- NEW ---
@@ -1280,6 +1279,8 @@ serve(async (req: Request) => {
                       continue;
                     }
                     
+                    // Only add company to discoveredCompanyIds after customer is confirmed
+                    discoveredCompanyIds.set(companyId, true);
                     discoveredCustomerIds.set(email, customerId);
                     
                     if (fromHeader.includes(email)) {
@@ -1652,17 +1653,30 @@ serve(async (req: Request) => {
                           .single();
                         
                         if (!companyError && newCompany?.company_id) {
-                          discoveredCompanyIds.set(newCompany.company_id, true);
                           console.log(`✅ [FEATURE_REQUEST_DEBUG] Created company ${newCompany.company_id} for domain ${domain}`);
                           
                           // Try to find or create a customer for this company
                           const matchingEmail = Array.from(fallbackEmails).find(e => e.split('@')[1] === domain);
                           if (matchingEmail) {
+                            // Extract customer name from email headers if available
+                            let customerName = matchingEmail;
+                            for (const msg of messages) {
+                              const msgHeaders = msg.payload?.headers || [];
+                              const fromHeader = msgHeaders.find((h: any) => h.name.toLowerCase() === 'from')?.value || '';
+                              if (fromHeader.includes(matchingEmail)) {
+                                const extractedName = fromHeader.split('<')[0].trim().replace(/"/g, '');
+                                if (extractedName && extractedName !== matchingEmail) {
+                                  customerName = extractedName;
+                                }
+                                break;
+                              }
+                            }
+                            
                             const { data: customer, error: customerError } = await supabaseAdmin
                               .from('customers')
                               .upsert({
                                 email: matchingEmail,
-                                full_name: matchingEmail,
+                                full_name: customerName,
                                 company_id: newCompany.company_id
                               }, {
                                 onConflict: 'company_id, email',
@@ -1672,9 +1686,18 @@ serve(async (req: Request) => {
                               .single();
                             
                             if (!customerError && customer?.customer_id) {
+                              // Only add company to discoveredCompanyIds after customer is confirmed
+                              discoveredCompanyIds.set(newCompany.company_id, true);
                               companyCustomerMap.set(newCompany.company_id, customer.customer_id);
-                              console.log(`✅ [FEATURE_REQUEST_DEBUG] Created customer ${customer.customer_id} for company ${newCompany.company_id}`);
+                              console.log(`✅ [FEATURE_REQUEST_DEBUG] Created customer ${customer.customer_id} (${customerName}) for company ${newCompany.company_id}`);
+                            } else {
+                              console.error(`❌ [FEATURE_REQUEST_DEBUG] Failed to create/find customer for company ${newCompany.company_id}. Error:`, customerError);
+                              console.error(`❌ [FEATURE_REQUEST_DEBUG] Company ${newCompany.company_id} will not be used for feature requests since customer creation failed`);
+                              // Don't add company to discoveredCompanyIds if customer creation fails
                             }
+                          } else {
+                            console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] No matching email found for domain ${domain}, cannot create customer`);
+                            // Don't add company to discoveredCompanyIds if no email match
                           }
                         }
                       } catch (err) {
@@ -1730,22 +1753,27 @@ serve(async (req: Request) => {
                 const customerIdForCompany = companyCustomerMap.get(companyId);
 
                 // If no customer found for this company, try to find any customer for this company
-                if (!customerIdForCompany) {
+                let finalCustomerId = customerIdForCompany;
+                if (!finalCustomerId) {
                   console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] No customer found in map for company ${companyId} in thread ${threadId}, attempting to find any customer for this company`);
                   
-                  // Try to find any customer for this company
-                  const { data: anyCustomer } = await supabaseAdmin
+                  // Try to find any customer for this company (use maybeSingle to avoid errors)
+                  const { data: anyCustomer, error: customerLookupError } = await supabaseAdmin
                     .from('customers')
                     .select('customer_id')
                     .eq('company_id', companyId)
                     .limit(1)
-                    .single();
+                    .maybeSingle();
+                  
+                  if (customerLookupError) {
+                    console.error(`❌ [FEATURE_REQUEST_DEBUG] Error looking up customer for company ${companyId}:`, customerLookupError);
+                  }
                   
                   if (anyCustomer && anyCustomer.customer_id) {
                     console.log(`✅ [FEATURE_REQUEST_DEBUG] Found customer ${anyCustomer.customer_id} for company ${companyId} via fallback query`);
-                    customerIdForCompany = anyCustomer.customer_id;
+                    finalCustomerId = anyCustomer.customer_id;
                     // Update the map for future iterations
-                    companyCustomerMap.set(companyId, customerIdForCompany);
+                    companyCustomerMap.set(companyId, finalCustomerId);
                   } else {
                     console.error(`❌ [FEATURE_REQUEST_DEBUG] No customer found for company ${companyId} in thread ${threadId}, skipping feature request save for this company`);
                     console.error(`❌ [FEATURE_REQUEST_DEBUG] Company-Customer mapping state:`, {
@@ -1758,6 +1786,12 @@ serve(async (req: Request) => {
                     continue;
                   }
                 }
+                
+                // Final validation: Ensure customer_id is valid before saving
+                if (!finalCustomerId || typeof finalCustomerId !== 'string') {
+                  console.error(`❌ [FEATURE_REQUEST_DEBUG] Cannot save feature requests for company ${companyId}: invalid customer_id (${finalCustomerId})`);
+                  continue;
+                }
 
                 // Save feature requests for this company/customer
                 // Log thread_id details for debugging
@@ -1769,13 +1803,13 @@ serve(async (req: Request) => {
                   threadIdIsUndefined: threadId === undefined,
                   threadIdLength: threadId?.length,
                   companyId: companyId,
-                  customerId: customerIdForCompany,
+                  customerId: finalCustomerId,
                   featureRequestCount: featureRequests.length
                 });
 
                 const context = {
                   company_id: companyId,
-                  customer_id: customerIdForCompany,
+                  customer_id: finalCustomerId,
                   source: 'thread' as const,
                   thread_id: threadId
                 };
