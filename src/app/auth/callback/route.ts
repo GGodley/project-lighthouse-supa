@@ -70,7 +70,25 @@ export async function GET(request: NextRequest) {
   );
 
   // Exchange code for session
+  // Note: Supabase SSR should automatically handle PKCE code verifier from cookies
+  // If the code verifier is missing, it might be because:
+  // 1. The OAuth flow was initiated on a different domain/subdomain
+  // 2. Cookies were cleared between OAuth initiation and callback
+  // 3. There's a cookie domain/path mismatch
   const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+  
+  // Log the error for debugging if exchange fails
+  if (exchangeError) {
+    console.error('Auth callback exchange error:', {
+      message: exchangeError.message,
+      status: exchangeError.status,
+      code: code ? 'present' : 'missing',
+      // Check if code verifier cookie exists
+      hasCodeVerifierCookie: request.cookies.getAll().some(c => 
+        c.name.includes('code-verifier') || c.name.includes('pkce')
+      )
+    });
+  }
 
   if (exchangeError) {
     // Check if user is already authenticated
