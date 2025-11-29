@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import { Users, Calendar, TrendingUp, ArrowUp, ArrowDown } from 'lucide-react'
+import { Users, TrendingUp, ArrowUp, ArrowDown } from 'lucide-react'
 import SyncEmailsButton from '@/components/SyncEmailsButton'
 import ConsiderTouchingBase from '@/components/ConsiderTouchingBase'
 import FeatureRequestsSection from '@/components/FeatureRequestsSection'
@@ -77,13 +77,6 @@ export default async function DashboardPage() {
         .from('customers')
         .select('*')
         .eq('user_id', user.id)
-
-      // Fetch meetings
-      const { data: meetings } = await supabase
-        .from('meetings')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('start_time', new Date().toISOString())
 
       // Fetch feature requests
       // First, get all active company IDs for this user (exclude archived/deleted)
@@ -234,10 +227,47 @@ export default async function DashboardPage() {
         console.error('Error fetching customer count data:', error)
       }
 
+      // Count healthy customers from non-archived companies
+      let healthyCustomersCount = 0
+      let atRiskCustomersCount = 0
+      try {
+        // Get active company IDs (non-archived)
+        const { data: allUserCompanies } = await supabase
+          .from('companies')
+          .select('company_id, status')
+          .eq('user_id', user.id)
+
+        const activeCompanyIds = (allUserCompanies || [])
+          .filter(company => company.status !== 'archived')
+          .map(company => company.company_id)
+
+        if (activeCompanyIds.length > 0) {
+          // Query customers with overall_sentiment = 'Healthy' from active companies
+          const { data: healthyCustomers } = await supabase
+            .from('customers')
+            .select('customer_id')
+            .in('company_id', activeCompanyIds)
+            .eq('overall_sentiment', 'Healthy')
+
+          healthyCustomersCount = healthyCustomers?.length || 0
+
+          // Query customers with overall_sentiment = 'At Risk' from active companies
+          const { data: atRiskCustomers } = await supabase
+            .from('customers')
+            .select('customer_id')
+            .in('company_id', activeCompanyIds)
+            .eq('overall_sentiment', 'At Risk')
+
+          atRiskCustomersCount = atRiskCustomers?.length || 0
+        }
+      } catch (error) {
+        console.error('Error fetching customer counts:', error)
+      }
+
       stats = {
-        totalClients: clients?.length || 0,
-        activeClients: clients?.filter(c => c.status === 'Healthy').length || 0,
-        upcomingMeetings: meetings?.length || 0,
+        totalClients: atRiskCustomersCount,
+        activeClients: healthyCustomersCount,
+        upcomingMeetings: 0,
         totalCustomers: customerData.currentCount,
         customerCountChange: customerData.percentageChange,
         customerCountTrend: customerData.trend
@@ -264,25 +294,18 @@ export default async function DashboardPage() {
       trend: stats.customerCountTrend
     },
     {
-      title: 'Total Clients',
+      title: 'At Risk Customers',
       value: stats.totalClients,
       icon: Users,
       color: 'bg-indigo-500',
       change: '+12%'
     },
     {
-      title: 'Healthy Clients',
+      title: 'Healthy Customers',
       value: stats.activeClients,
       icon: TrendingUp,
       color: 'bg-green-500',
       change: '+8%'
-    },
-    {
-      title: 'Upcoming Meetings',
-      value: stats.upcomingMeetings,
-      icon: Calendar,
-      color: 'bg-purple-500',
-      change: '+5%'
     }
   ]
 
