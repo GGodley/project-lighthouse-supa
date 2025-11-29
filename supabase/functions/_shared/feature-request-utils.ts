@@ -148,21 +148,35 @@ export async function saveFeatureRequests(
       }
 
       // Step 2: Build insert payload based on source type
-      const insertPayload: any = {
+      // IMPORTANT: The source_id_check constraint requires that only the relevant source ID is set
+      // and the others are explicitly null based on the source type
+      const insertPayload: Partial<Database['public']['Tables']['feature_requests']['Insert']> = {
         company_id: context.company_id,
         customer_id: context.customer_id,
         feature_id: featureData.id,
         request_details: req.request_details,
         urgency: req.urgency,
         source: context.source,
-        status: 'open' // Default status
+        status: 'open', // Default status
+        // Explicitly set all source IDs to null initially
+        email_id: null,
+        meeting_id: null,
+        thread_id: null
       };
 
-      // Add source-specific ID
-      if (context.source === 'email' && context.email_id) {
-        insertPayload.email_id = context.email_id;
-      } else if (context.source === 'meeting' && context.meeting_id) {
-        insertPayload.meeting_id = context.meeting_id;
+      // Set the appropriate source-specific ID based on source type
+      if (context.source === 'email') {
+        if (context.email_id) {
+          insertPayload.email_id = context.email_id;
+        } else {
+          throw new Error(`email_id is required when source is 'email'`);
+        }
+      } else if (context.source === 'meeting') {
+        if (context.meeting_id) {
+          insertPayload.meeting_id = context.meeting_id;
+        } else {
+          throw new Error(`meeting_id is required when source is 'meeting'`);
+        }
       } else if (context.source === 'thread') {
         // Fixed: Always attempt to set thread_id when source is 'thread', with validation
         if (context.thread_id && typeof context.thread_id === 'string') {
@@ -177,8 +191,7 @@ export async function saveFeatureRequests(
             feature_title: req.feature_title,
             fullContext: JSON.stringify(context, null, 2)
           });
-          // Still set it to allow debugging, but log the issue
-          insertPayload.thread_id = context.thread_id || null;
+          throw new Error(`thread_id is required when source is 'thread'`);
         }
       }
 
