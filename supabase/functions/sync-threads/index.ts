@@ -1526,13 +1526,20 @@ serve(async (req: Request) => {
               
               let companyCustomerMap = new Map<string, string>(); // Map<company_id, customer_id>
               
-              if (companyIdsArray.length > 0 && customerIdsArray.length > 0) {
-                // Fetch customers that belong to any of the discovered companies
+              if (companyIdsArray.length > 0) {
+                // Fetch ANY customers that belong to the discovered companies
+                // We don't require customer_id to be in discoveredCustomerIds because
+                // a customer might exist for the company even if their email wasn't in thread headers
                 const { data: customersData, error: customersError } = await supabaseAdmin
                   .from('customers')
                   .select('customer_id, company_id')
-                  .in('company_id', companyIdsArray)
-                  .in('customer_id', customerIdsArray);
+                  .in('company_id', companyIdsArray);
+                
+                console.log(`🔍 [FEATURE_REQUEST_DEBUG] Customer lookup query:`, {
+                  companyIds: companyIdsArray,
+                  discoveredCustomerIds: customerIdsArray,
+                  queryResult: customersData?.length || 0
+                });
                 
                 if (customersError) {
                   console.error(`❌ [FEATURE_REQUEST_DEBUG] Error fetching customers for thread ${threadId}:`, customersError);
@@ -1567,24 +1574,116 @@ serve(async (req: Request) => {
                 console.error(`❌ [FEATURE_REQUEST_DEBUG] CRITICAL: No companies discovered for thread ${threadId} but feature requests exist!`);
                 console.error(`❌ [FEATURE_REQUEST_DEBUG] Feature requests that will be lost:`, JSON.stringify(featureRequests, null, 2));
                 console.error(`❌ [FEATURE_REQUEST_DEBUG] Thread messages count: ${messages.length}, discoveredCustomerIds: ${discoveredCustomerIds.size}`);
-                // Continue to try saving anyway, but this is a critical issue
+                
+                // FALLBACK: Try to find companies from thread_links table (if thread was previously processed)
+                console.log(`🔍 [FEATURE_REQUEST_DEBUG] Attempting fallback: checking thread_links for thread ${threadId}`);
+                const { data: existingLinks } = await supabaseAdmin
+                  .from('thread_links')
+                  .select('company_id')
+                  .eq('thread_id', threadId)
+                  .eq('user_id', userId);
+                
+                if (existingLinks && existingLinks.length > 0) {
+                  console.log(`✅ [FEATURE_REQUEST_DEBUG] Found ${existingLinks.length} existing thread_links, using those companies`);
+                  for (const link of existingLinks) {
+                    discoveredCompanyIds.set(link.company_id, true);
+                  }
+                  
+                  // Try to find customers for these companies
+                  const fallbackCompanyIds = Array.from(discoveredCompanyIds.keys());
+                  const { data: fallbackCustomers } = await supabaseAdmin
+                    .from('customers')
+                    .select('customer_id, company_id')
+                    .in('company_id', fallbackCompanyIds)
+                    .limit(1);
+                  
+                  if (fallbackCustomers && fallbackCustomers.length > 0) {
+                    const fallbackCustomer = fallbackCustomers[0];
+                    discoveredCustomerIds.set('fallback', fallbackCustomer.customer_id);
+                    companyCustomerMap.set(fallbackCustomer.company_id, fallbackCustomer.customer_id);
+                    console.log(`✅ [FEATURE_REQUEST_DEBUG] Found fallback customer ${fallbackCustomer.customer_id} for company ${fallbackCustomer.company_id}`);
+                  } else {
+                    // Last resort: Get user's first active company and create a placeholder customer
+                    console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] No customers found for fallback companies. Attempting to use user's first active company.`);
+                    const { data: userCompanies } = await supabaseAdmin
+                      .from('companies')
+                      .select('company_id')
+                      .eq('user_id', userId)
+                      .neq('status', 'archived')
+                      .neq('status', 'deleted')
+                      .limit(1);
+                    
+                    if (userCompanies && userCompanies.length > 0) {
+                      const fallbackCompanyId = userCompanies[0].company_id;
+                      discoveredCompanyIds.set(fallbackCompanyId, true);
+                      console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] Using user's first active company ${fallbackCompanyId} as fallback. Feature requests will be saved but may not be linked to correct customer.`);
+                      // Note: We'll need to handle missing customer_id in saveFeatureRequests
+                    }
+                  }
+                } else {
+                  // Last resort: Use user's first active company
+                  console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] No thread_links found. Using user's first active company as fallback.`);
+                  const { data: userCompanies } = await supabaseAdmin
+                    .from('companies')
+                    .select('company_id')
+                    .eq('user_id', userId)
+                    .neq('status', 'archived')
+                    .neq('status', 'deleted')
+                    .limit(1);
+                  
+                  if (userCompanies && userCompanies.length > 0) {
+                    const fallbackCompanyId = userCompanies[0].company_id;
+                    discoveredCompanyIds.set(fallbackCompanyId, true);
+                    console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] Using user's first active company ${fallbackCompanyId} as fallback.`);
+                    
+                    // Try to get any customer for this company
+                    const { data: fallbackCustomers } = await supabaseAdmin
+                      .from('customers')
+                      .select('customer_id, company_id')
+                      .eq('company_id', fallbackCompanyId)
+                      .limit(1);
+                    
+                    if (fallbackCustomers && fallbackCustomers.length > 0) {
+                      companyCustomerMap.set(fallbackCompanyId, fallbackCustomers[0].customer_id);
+                      console.log(`✅ [FEATURE_REQUEST_DEBUG] Found customer ${fallbackCustomers[0].customer_id} for fallback company`);
+                    }
+                  }
+                }
               }
 
               // Save feature requests for each company
+              let savedAnyFeatureRequests = false;
               for (const companyId of discoveredCompanyIds.keys()) {
                 const customerIdForCompany = companyCustomerMap.get(companyId);
 
-                // If no customer found for this company, skip saving for this company
+                // If no customer found for this company, try to find any customer for this company
                 if (!customerIdForCompany) {
-                  console.error(`❌ [FEATURE_REQUEST_DEBUG] No customer found for company ${companyId} in thread ${threadId}, skipping feature request save for this company`);
-                  console.error(`❌ [FEATURE_REQUEST_DEBUG] Company-Customer mapping state:`, {
-                    companyId: companyId,
-                    companyCustomerMapSize: companyCustomerMap.size,
-                    companyCustomerMapEntries: Array.from(companyCustomerMap.entries()),
-                    discoveredCustomerIds: Array.from(discoveredCustomerIds.entries()),
-                    customerIdsArray: customerIdsArray
-                  });
-                  continue;
+                  console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] No customer found in map for company ${companyId} in thread ${threadId}, attempting to find any customer for this company`);
+                  
+                  // Try to find any customer for this company
+                  const { data: anyCustomer } = await supabaseAdmin
+                    .from('customers')
+                    .select('customer_id')
+                    .eq('company_id', companyId)
+                    .limit(1)
+                    .single();
+                  
+                  if (anyCustomer && anyCustomer.customer_id) {
+                    console.log(`✅ [FEATURE_REQUEST_DEBUG] Found customer ${anyCustomer.customer_id} for company ${companyId} via fallback query`);
+                    customerIdForCompany = anyCustomer.customer_id;
+                    // Update the map for future iterations
+                    companyCustomerMap.set(companyId, customerIdForCompany);
+                  } else {
+                    console.error(`❌ [FEATURE_REQUEST_DEBUG] No customer found for company ${companyId} in thread ${threadId}, skipping feature request save for this company`);
+                    console.error(`❌ [FEATURE_REQUEST_DEBUG] Company-Customer mapping state:`, {
+                      companyId: companyId,
+                      companyCustomerMapSize: companyCustomerMap.size,
+                      companyCustomerMapEntries: Array.from(companyCustomerMap.entries()),
+                      discoveredCustomerIds: Array.from(discoveredCustomerIds.entries()),
+                      customerIdsArray: customerIdsArray
+                    });
+                    continue;
+                  }
                 }
 
                 // Save feature requests for this company/customer
@@ -1618,9 +1717,25 @@ serve(async (req: Request) => {
 
                 if (result.success) {
                   console.log(`✅ Successfully saved ${result.savedCount} feature requests for thread ${threadId}, company ${companyId}`);
+                  savedAnyFeatureRequests = true;
                 } else {
                   console.warn(`⚠️ Saved ${result.savedCount} feature requests with ${result.errors.length} errors for thread ${threadId}, company ${companyId}`);
+                  if (result.savedCount > 0) {
+                    savedAnyFeatureRequests = true;
+                  }
                 }
+              }
+              
+              // Final check: If we still haven't saved any feature requests, log critical error
+              if (!savedAnyFeatureRequests && featureRequests.length > 0) {
+                console.error(`❌ [FEATURE_REQUEST_DEBUG] CRITICAL: Failed to save any feature requests for thread ${threadId}!`);
+                console.error(`❌ [FEATURE_REQUEST_DEBUG] Final state:`, {
+                  discoveredCompanyIdsCount: discoveredCompanyIds.size,
+                  companyCustomerMapSize: companyCustomerMap.size,
+                  featureRequestsCount: featureRequests.length,
+                  companyIds: Array.from(discoveredCompanyIds.keys()),
+                  companyCustomerMapping: Object.fromEntries(companyCustomerMap)
+                });
               }
             } else {
               console.log(`ℹ️ No valid feature requests found in thread ${threadId} (filtered out invalid entries)`);
