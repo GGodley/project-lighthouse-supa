@@ -77,15 +77,27 @@ export default async function DashboardPage() {
 
       // Fetch feature requests
       // First, get all active company IDs for this user (exclude archived/deleted)
-      const { data: allUserCompanies } = await supabase
+      console.log(`[Dashboard] Fetching companies for user: ${user.id}`)
+      const { data: allUserCompanies, error: companiesError } = await supabase
         .from('companies')
         .select('company_id, company_name, status')
         .eq('user_id', user.id)
+
+      if (companiesError) {
+        console.error(`[Dashboard] Error fetching companies:`, companiesError)
+      }
+
+      console.log(`[Dashboard] Found ${allUserCompanies?.length || 0} total companies for user`)
+      if (allUserCompanies && allUserCompanies.length > 0) {
+        console.log(`[Dashboard] Company statuses:`, allUserCompanies.map(c => ({ id: c.company_id, name: c.company_name, status: c.status })))
+      }
 
       // Filter out archived and deleted companies
       const userCompanies = (allUserCompanies || []).filter(
         company => company.status !== 'archived' && company.status !== 'deleted'
       )
+
+      console.log(`[Dashboard] Active companies (after filtering): ${userCompanies.length}`)
 
       if (userCompanies && userCompanies.length > 0) {
         const companyIds = userCompanies.map(c => c.company_id)
@@ -196,8 +208,8 @@ export default async function DashboardPage() {
           // Debug: Check if there are ANY feature requests in the database
           const { data: allFeatureRequests, error: allError } = await supabase
             .from('feature_requests')
-            .select('id, company_id, feature_id')
-            .limit(5)
+            .select('id, company_id, feature_id, source')
+            .limit(10)
           
           if (allError) {
             console.error(`[Dashboard] Error checking all feature requests:`, allError)
@@ -205,10 +217,28 @@ export default async function DashboardPage() {
             console.log(`[Dashboard] Total feature requests in database (sample):`, allFeatureRequests?.length || 0)
             if (allFeatureRequests && allFeatureRequests.length > 0) {
               console.log(`[Dashboard] Sample feature request company_ids:`, allFeatureRequests.map(fr => fr.company_id))
+              console.log(`[Dashboard] User company IDs:`, companyIds)
               console.log(`[Dashboard] Do any match user companies?`, allFeatureRequests.some(fr => companyIds.includes(fr.company_id)))
+              
+              // Check which companies have feature requests
+              const frCompanyIds = [...new Set(allFeatureRequests.map(fr => fr.company_id))]
+              console.log(`[Dashboard] Companies with feature requests:`, frCompanyIds)
+              console.log(`[Dashboard] Intersection:`, frCompanyIds.filter(id => companyIds.includes(id)))
+              
+              // Check if any feature requests belong to user's companies but weren't found
+              const matchingFRs = allFeatureRequests.filter(fr => companyIds.includes(fr.company_id))
+              if (matchingFRs.length > 0) {
+                console.error(`[Dashboard] CRITICAL: Found ${matchingFRs.length} feature requests that SHOULD have been returned!`)
+                console.error(`[Dashboard] Matching feature requests:`, matchingFRs)
+              }
+            } else {
+              console.warn(`[Dashboard] No feature requests exist in database at all`)
             }
           }
         }
+      } else {
+        console.warn(`[Dashboard] No active companies found for user ${user.id}. Cannot fetch feature requests.`)
+      }
       }
 
       // Fetch company count data directly from database (server-side)
