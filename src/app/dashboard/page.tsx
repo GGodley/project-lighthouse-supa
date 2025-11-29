@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import { Users, TrendingUp, ArrowUp, ArrowDown } from 'lucide-react'
+import { Users, ArrowUp, ArrowDown } from 'lucide-react'
+import { LucideIcon } from 'lucide-react'
 import SyncEmailsButton from '@/components/SyncEmailsButton'
 import ConsiderTouchingBase from '@/components/ConsiderTouchingBase'
 import FeatureRequestsSection from '@/components/FeatureRequestsSection'
@@ -72,11 +73,7 @@ export default async function DashboardPage() {
   try {
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      // Fetch clients
-      const { data: clients } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('user_id', user.id)
+      // Note: clients variable removed as it's no longer used
 
       // Fetch feature requests
       // First, get all active company IDs for this user (exclude archived/deleted)
@@ -297,7 +294,30 @@ export default async function DashboardPage() {
     return `${sign}${change.toFixed(1)}%`
   }
 
-  const statCards = [
+  // Define types for stat cards
+  type StatCardWithIcon = {
+    title: string
+    value: number
+    icon: LucideIcon
+    color: string
+    change: string
+    trend?: 'up' | 'down' | 'neutral'
+  }
+
+  type StatCardWithEmoji = {
+    title: string
+    value: number
+    icon: string
+    iconType: 'emoji'
+    color: string
+    iconColor: string
+    change: string
+    trend?: 'up' | 'down' | 'neutral'
+  }
+
+  type StatCard = StatCardWithIcon | StatCardWithEmoji
+
+  const statCards: StatCard[] = [
     {
       title: 'Total Customers',
       value: stats.totalCustomers,
@@ -348,11 +368,13 @@ export default async function DashboardPage() {
             <div key={stat.title} className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center">
                 <div className={`p-3 rounded-full ${stat.color}`}>
-                  {'iconType' in stat && (stat as any).iconType === 'emoji' ? (
-                    <span className={`text-2xl ${'iconColor' in stat ? (stat as any).iconColor : ''}`}>{(stat as any).icon}</span>
-                  ) : (
-                    <stat.icon className="w-6 h-6 text-white" />
-                  )}
+                  {'iconType' in stat && stat.iconType === 'emoji' ? (
+                    <span className={`text-2xl ${stat.iconColor}`}>{stat.icon}</span>
+                  ) : (() => {
+                    const iconCard = stat as StatCardWithIcon
+                    const IconComponent = iconCard.icon
+                    return <IconComponent className="w-6 h-6 text-white" />
+                  })()}
                 </div>
                 <div className="ml-4 flex-1">
                   <p className="text-sm font-medium text-gray-600">{stat.title}</p>
