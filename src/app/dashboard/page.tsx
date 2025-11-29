@@ -150,9 +150,7 @@ export default async function DashboardPage() {
             email_id,
             meeting_id,
             thread_id,
-            urgency,
-            completed,
-            owner
+            urgency
           `)
           .in('company_id', companyIds)
           .not('company_id', 'is', null)
@@ -221,11 +219,11 @@ export default async function DashboardPage() {
                 source: (fr.source || 'thread') as 'email' | 'meeting' | 'thread',
                 source_id: sourceId,
                 urgency: (fr.urgency || 'Low') as 'Low' | 'Medium' | 'High',
-                completed: fr.completed || false,
+                completed: false, // Default to false if column doesn't exist
                 first_requested: null, // Not available without features table
                 last_requested: null, // Not available without features table
-                owner: fr.owner || null,
-                meeting_id: fr.meeting_id
+                owner: null, // Default to null if column doesn't exist
+                meeting_id: fr.meeting_id || null
               }
             })
             
@@ -539,17 +537,6 @@ export default async function DashboardPage() {
           </div>
 
           {/* Feature Requests Section */}
-          {/* Debug: Log feature requests before passing to component */}
-          {(() => {
-            console.log('[Dashboard Server] About to render FeatureRequestsSection')
-            console.log('[Dashboard Server] featureRequests array length:', featureRequests.length)
-            if (featureRequests.length > 0) {
-              console.log('[Dashboard Server] First feature request:', JSON.stringify(featureRequests[0], null, 2))
-            } else {
-              console.warn('[Dashboard Server] WARNING: featureRequests array is empty!')
-            }
-            return null
-          })()}
           <FeatureRequestsSection featureRequests={featureRequests} />
         </div>
       </div>
