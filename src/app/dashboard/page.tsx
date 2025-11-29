@@ -227,11 +227,12 @@ export default async function DashboardPage() {
         console.error('Error fetching customer count data:', error)
       }
 
-      // Count healthy customers from non-archived companies
+      // Count healthy and at-risk customers from non-archived companies
+      // First get active company IDs, then query customers to ensure we exclude archived companies
       let healthyCustomersCount = 0
       let atRiskCustomersCount = 0
       try {
-        // Get active company IDs (non-archived)
+        // Get active company IDs (non-archived) for this user
         const { data: allUserCompanies } = await supabase
           .from('companies')
           .select('company_id, status')
@@ -243,22 +244,34 @@ export default async function DashboardPage() {
 
         if (activeCompanyIds.length > 0) {
           // Query customers with health_score > 0 (Healthy) from active companies
-          const { data: healthyCustomers } = await supabase
+          // Exclude NULL health_score values
+          const { data: healthyCustomers, error: healthyError } = await supabase
             .from('customers')
-            .select('customer_id')
+            .select('customer_id, health_score')
             .in('company_id', activeCompanyIds)
+            .not('health_score', 'is', null)
             .gt('health_score', 0)
 
-          healthyCustomersCount = healthyCustomers?.length || 0
+          if (healthyError) {
+            console.error('Error fetching healthy customers:', healthyError)
+          } else {
+            healthyCustomersCount = healthyCustomers?.length || 0
+          }
 
           // Query customers with health_score < 0 (At Risk) from active companies
-          const { data: atRiskCustomers } = await supabase
+          // Exclude NULL health_score values
+          const { data: atRiskCustomers, error: atRiskError } = await supabase
             .from('customers')
-            .select('customer_id')
+            .select('customer_id, health_score')
             .in('company_id', activeCompanyIds)
+            .not('health_score', 'is', null)
             .lt('health_score', 0)
 
-          atRiskCustomersCount = atRiskCustomers?.length || 0
+          if (atRiskError) {
+            console.error('Error fetching at-risk customers:', atRiskError)
+          } else {
+            atRiskCustomersCount = atRiskCustomers?.length || 0
+          }
         }
       } catch (error) {
         console.error('Error fetching customer counts:', error)
@@ -366,7 +379,7 @@ export default async function DashboardPage() {
         })}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
             <div className="lg:col-span-3">
             <ConsiderTouchingBase />
         </div>
