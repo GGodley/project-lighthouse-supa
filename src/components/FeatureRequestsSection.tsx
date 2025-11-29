@@ -41,13 +41,20 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
   const [updatingRequestId, setUpdatingRequestId] = useState<string | null>(null)
   const [localFeatureRequests, setLocalFeatureRequests] = useState<DashboardFeatureRequest[]>(featureRequests)
 
-  // Debug logging
+  // Debug logging - comprehensive
   React.useEffect(() => {
-    console.log('[FeatureRequestsSection] Received feature requests:', featureRequests.length)
+    console.log('[FeatureRequestsSection] ========== CLIENT-SIDE DEBUG ==========')
+    console.log('[FeatureRequestsSection] Received feature requests prop:', featureRequests)
+    console.log('[FeatureRequestsSection] Array length:', featureRequests.length)
+    console.log('[FeatureRequestsSection] Array type:', Array.isArray(featureRequests))
+    console.log('[FeatureRequestsSection] Full array:', JSON.stringify(featureRequests, null, 2))
+    
     if (featureRequests.length > 0) {
+      console.log('[FeatureRequestsSection] ✅ Feature requests found!')
       console.log('[FeatureRequestsSection] Sample feature request:', featureRequests[0])
       console.log('[FeatureRequestsSection] All feature request IDs:', featureRequests.map(fr => fr.id))
       console.log('[FeatureRequestsSection] Feature request titles:', featureRequests.map(fr => fr.title))
+      console.log('[FeatureRequestsSection] Feature request company IDs:', featureRequests.map(fr => fr.company_id))
       console.log('[FeatureRequestsSection] Feature request companies:', featureRequests.map(fr => fr.company_name))
       console.log('[FeatureRequestsSection] Completed count:', featureRequests.filter(fr => fr.completed).length)
       console.log('[FeatureRequestsSection] Active count:', featureRequests.filter(fr => !fr.completed).length)

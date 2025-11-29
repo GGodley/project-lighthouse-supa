@@ -539,6 +539,17 @@ export default async function DashboardPage() {
           </div>
 
           {/* Feature Requests Section */}
+          {/* Debug: Log feature requests before passing to component */}
+          {(() => {
+            console.log('[Dashboard Server] About to render FeatureRequestsSection')
+            console.log('[Dashboard Server] featureRequests array length:', featureRequests.length)
+            if (featureRequests.length > 0) {
+              console.log('[Dashboard Server] First feature request:', JSON.stringify(featureRequests[0], null, 2))
+            } else {
+              console.warn('[Dashboard Server] WARNING: featureRequests array is empty!')
+            }
+            return null
+          })()}
           <FeatureRequestsSection featureRequests={featureRequests} />
         </div>
       </div>
