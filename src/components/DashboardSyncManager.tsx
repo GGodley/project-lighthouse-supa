@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { useThreadSync } from '@/hooks/useThreadSync'
-import { SyncStatus } from '@/lib/types/threads'
 
 /**
  * DashboardSyncManager component
@@ -178,4 +177,5 @@ export default function DashboardSyncManager() {
   // This component renders nothing - it's purely for side effects
   return null
 }
+
 

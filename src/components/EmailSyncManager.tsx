@@ -2,14 +2,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSupabase } from './SupabaseProvider';
 import { isMissingRefreshToken, triggerReAuthWithConsent } from '@/lib/auth/refresh-token-handler';
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 
 export default function EmailSyncManager() {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
   const [message, setMessage] = useState('');
   const [hasSyncedThisSession, setHasSyncedThisSession] = useState(false);
   const supabase = useSupabase();
-  const router = useRouter();
   const pathname = usePathname();
 
   // --- START OF REFACTORED LOGIC ---
@@ -103,7 +102,7 @@ export default function EmailSyncManager() {
       setMessage(`An unexpected error occurred: ${error.message}`);
       setSyncStatus('failed');
     }
-  }, [supabase]);
+  }, [supabase, pathname]);
 
 
   useEffect(() => {

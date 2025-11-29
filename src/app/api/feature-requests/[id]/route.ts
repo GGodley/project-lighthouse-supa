@@ -1,5 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import type { Database } from '@/types/database';
+
+type FeatureRequestUpdate = Database['public']['Tables']['feature_requests']['Update'];
 
 export async function PATCH(
   request: Request,
@@ -20,7 +23,7 @@ export async function PATCH(
     const { completed, priority, owner } = body;
 
     // Build update object with only provided fields
-    const updateData: any = {};
+    const updateData: Partial<FeatureRequestUpdate> = {};
 
     if (typeof completed === 'boolean') {
       updateData.completed = completed;

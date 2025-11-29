@@ -215,19 +215,6 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
     { value: 'Low', label: 'Low', className: 'bg-gray-100 text-gray-800 border border-gray-200' }
   ]
 
-  // Get urgency badge styles (for read-only display)
-  const getUrgencyStyles = (urgency: 'Low' | 'Medium' | 'High'): string => {
-    switch (urgency) {
-      case 'High':
-        return 'bg-red-50 text-red-700 border border-red-200'
-      case 'Medium':
-        return 'bg-yellow-50 text-yellow-700 border border-yellow-200'
-      case 'Low':
-      default:
-        return 'bg-gray-100 text-gray-800 border border-gray-200'
-    }
-  }
-
   // Filter into active and completed
   const { activeRequests, completedRequests } = useMemo(() => {
     const active = localFeatureRequests.filter((fr) => !fr.completed)

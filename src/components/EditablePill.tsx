@@ -13,7 +13,6 @@ interface EditablePillProps {
 }
 
 const EditablePill: React.FC<EditablePillProps> = ({
-  label,
   value,
   options,
   onChange,
