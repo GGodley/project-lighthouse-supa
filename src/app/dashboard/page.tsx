@@ -92,15 +92,23 @@ export default async function DashboardPage() {
         const companyMap = new Map(userCompanies.map(c => [c.company_id, c.company_name]))
         
         // Fetch feature requests (explicitly filter out null company_ids)
-        const { data: featureRequestsData } = await supabase
+        console.log(`[Dashboard] Querying feature_requests for ${companyIds.length} companies:`, companyIds)
+        const { data: featureRequestsData, error: featureRequestsError } = await supabase
           .from('feature_requests')
           .select('id, company_id, feature_id, requested_at, source, email_id, meeting_id, thread_id, urgency, completed, owner')
           .in('company_id', companyIds)
           .not('company_id', 'is', null)
           .limit(50)
 
+        if (featureRequestsError) {
+          console.error(`[Dashboard] Error fetching feature requests:`, featureRequestsError)
+        }
+
         if (featureRequestsData && featureRequestsData.length > 0) {
           console.log(`[Dashboard] Found ${featureRequestsData.length} feature requests for ${companyIds.length} companies`)
+          console.log(`[Dashboard] Sample feature request:`, featureRequestsData[0])
+          console.log(`[Dashboard] Feature request company_ids:`, featureRequestsData.map(fr => fr.company_id))
+          console.log(`[Dashboard] Feature request feature_ids:`, featureRequestsData.map(fr => fr.feature_id))
           
           // Get unique feature IDs
           const featureIds = [...new Set(featureRequestsData.map(fr => fr.feature_id))]
@@ -118,6 +126,7 @@ export default async function DashboardPage() {
 
           if (featuresData && featuresData.length > 0) {
             console.log(`[Dashboard] Successfully fetched ${featuresData.length} features`)
+            console.log(`[Dashboard] Feature titles:`, featuresData.map(f => ({ id: f.id, title: f.title })))
             const featuresMap = new Map(featuresData.map(f => [f.id, {
               title: f.title,
               first_requested: f.first_requested,
@@ -138,6 +147,10 @@ export default async function DashboardPage() {
                 }
 
                 const feature = featuresMap.get(fr.feature_id)
+                
+                if (!feature) {
+                  console.warn(`[Dashboard] Feature request ${fr.id} has feature_id ${fr.feature_id} but feature not found in featuresMap`)
+                }
 
                 return {
                   id: fr.id,
@@ -159,20 +172,42 @@ export default async function DashboardPage() {
             // Filter out any with missing features, but log them for debugging
             const unknownFeatures = transformed.filter(fr => fr.title === 'Unknown Feature')
             if (unknownFeatures.length > 0) {
-              console.warn(`[Dashboard] Filtering out ${unknownFeatures.length} feature requests with missing features. Feature IDs:`, unknownFeatures.map(fr => {
+              console.warn(`[Dashboard] Filtering out ${unknownFeatures.length} feature requests with missing features.`)
+              console.warn(`[Dashboard] Missing feature IDs:`, unknownFeatures.map(fr => {
                 const frData = featureRequestsData.find(f => f.id === fr.id)
-                return frData?.feature_id
+                return { feature_request_id: fr.id, feature_id: frData?.feature_id, company_id: frData?.company_id }
               }))
+              console.warn(`[Dashboard] Available feature IDs in map:`, Array.from(featuresMap.keys()))
             }
             
             featureRequests = transformed.filter(fr => fr.title !== 'Unknown Feature')
-            console.log(`[Dashboard] Final feature requests count: ${featureRequests.length}`)
+            console.log(`[Dashboard] Final feature requests count after filtering: ${featureRequests.length}`)
+            if (featureRequests.length > 0) {
+              console.log(`[Dashboard] Sample final feature request:`, featureRequests[0])
+            }
           } else {
             console.warn(`[Dashboard] No features found for ${featureIds.length} feature IDs. Feature requests will not be displayed.`)
             console.warn(`[Dashboard] Missing feature IDs:`, featureIds)
           }
         } else {
           console.log(`[Dashboard] No feature requests found for ${companyIds.length} companies`)
+          console.log(`[Dashboard] Company IDs queried:`, companyIds)
+          
+          // Debug: Check if there are ANY feature requests in the database
+          const { data: allFeatureRequests, error: allError } = await supabase
+            .from('feature_requests')
+            .select('id, company_id, feature_id')
+            .limit(5)
+          
+          if (allError) {
+            console.error(`[Dashboard] Error checking all feature requests:`, allError)
+          } else {
+            console.log(`[Dashboard] Total feature requests in database (sample):`, allFeatureRequests?.length || 0)
+            if (allFeatureRequests && allFeatureRequests.length > 0) {
+              console.log(`[Dashboard] Sample feature request company_ids:`, allFeatureRequests.map(fr => fr.company_id))
+              console.log(`[Dashboard] Do any match user companies?`, allFeatureRequests.some(fr => companyIds.includes(fr.company_id)))
+            }
+          }
         }
       }
 

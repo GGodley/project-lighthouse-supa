@@ -46,6 +46,17 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
     console.log('[FeatureRequestsSection] Received feature requests:', featureRequests.length)
     if (featureRequests.length > 0) {
       console.log('[FeatureRequestsSection] Sample feature request:', featureRequests[0])
+      console.log('[FeatureRequestsSection] All feature request IDs:', featureRequests.map(fr => fr.id))
+      console.log('[FeatureRequestsSection] Feature request titles:', featureRequests.map(fr => fr.title))
+      console.log('[FeatureRequestsSection] Feature request companies:', featureRequests.map(fr => fr.company_name))
+      console.log('[FeatureRequestsSection] Completed count:', featureRequests.filter(fr => fr.completed).length)
+      console.log('[FeatureRequestsSection] Active count:', featureRequests.filter(fr => !fr.completed).length)
+    } else {
+      console.warn('[FeatureRequestsSection] WARNING: No feature requests received!')
+      console.warn('[FeatureRequestsSection] This could mean:')
+      console.warn('  1. No feature requests exist in database for user companies')
+      console.warn('  2. Feature requests are being filtered out (missing features, archived companies, etc.)')
+      console.warn('  3. Query is not finding feature requests')
     }
   }, [featureRequests])
   const supabase = useSupabase()
@@ -230,6 +241,13 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
   const { activeRequests, completedRequests } = useMemo(() => {
     const active = localFeatureRequests.filter((fr) => !fr.completed)
     const completed = localFeatureRequests.filter((fr) => fr.completed)
+    
+    console.log('[FeatureRequestsSection] Filtered requests:', {
+      total: localFeatureRequests.length,
+      active: active.length,
+      completed: completed.length
+    })
+    
     return { activeRequests: active, completedRequests: completed }
   }, [localFeatureRequests])
 
