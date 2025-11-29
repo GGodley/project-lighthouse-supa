@@ -104,13 +104,36 @@ export async function PATCH(
     }
 
     // Update the feature request
-    console.log('[API] Updating feature request:', { id, updateData });
+    console.log('[API] Updating feature request:', { id, updateData, company_id: featureRequest.company_id });
+    
+    // First, verify the row exists and we can access it
+    const { data: existingRow, error: checkError } = await supabase
+      .from('feature_requests')
+      .select('id, urgency, company_id')
+      .eq('id', id)
+      .single();
+    
+    if (checkError || !existingRow) {
+      console.error('[API] Feature request not found or not accessible:', {
+        error: checkError,
+        id,
+        company_id: featureRequest.company_id
+      });
+      return NextResponse.json(
+        { error: 'Feature request not found or not accessible' },
+        { status: 404 }
+      );
+    }
+    
+    console.log('[API] Existing row found:', existingRow);
+    
+    // Now perform the update
     const { data: updated, error: updateError } = await supabase
       .from('feature_requests')
       .update(updateData)
       .eq('id', id)
       .select()
-      .single();
+      .maybeSingle(); // Use maybeSingle() instead of single() to handle 0 rows gracefully
 
     if (updateError) {
       console.error('[API] Error updating feature request:', {
@@ -120,7 +143,8 @@ export async function PATCH(
         details: updateError.details,
         hint: updateError.hint,
         updateData,
-        id
+        id,
+        existingRow
       });
       return NextResponse.json(
         { 
@@ -129,6 +153,19 @@ export async function PATCH(
           code: updateError.code
         },
         { status: 500 }
+      );
+    }
+    
+    if (!updated) {
+      console.error('[API] Update returned no rows:', {
+        id,
+        updateData,
+        existingRow,
+        company_id: featureRequest.company_id
+      });
+      return NextResponse.json(
+        { error: 'Update did not affect any rows. The feature request may have been deleted or you may not have permission to update it.' },
+        { status: 404 }
       );
     }
 
