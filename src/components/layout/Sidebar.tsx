@@ -7,7 +7,6 @@ import {
   Settings, 
   LogOut,
   BarChart3,
-  PieChart,
   Calendar,
   MessageSquare,
   Sun,
@@ -17,8 +16,7 @@ import { useTheme } from '@/contexts/ThemeContext'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: BarChart3 },
-  { name: 'Customer Threads', href: '/dashboard/customer-threads', icon: MessageSquare },
-  { name: 'Analytics', href: '/dashboard/analytics', icon: PieChart },
+  { name: 'Customers', href: '/dashboard/customer-threads', icon: MessageSquare },
   { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
