@@ -12,6 +12,7 @@ import { LLMSummary } from '@/lib/types/threads'
 import type { Database } from '@/types/database'
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
+type FeatureRequestRow = Database['public']['Tables']['feature_requests']['Row']
 
 interface DashboardFeatureRequest {
   id: string
@@ -189,7 +190,7 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
   const updatePriority = async (fr: DashboardFeatureRequest, priority: string | null) => {
     setUpdatingRequestId(fr.id)
     try {
-      const response = await apiFetchJson<any>(
+      const response = await apiFetchJson<FeatureRequestRow>(
         `/api/feature-requests/${fr.id}`,
         {
           method: 'PATCH',
@@ -222,7 +223,7 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
   const updateOwner = async (fr: DashboardFeatureRequest, owner: string | null) => {
     setUpdatingRequestId(fr.id)
     try {
-      const response = await apiFetchJson<any>(
+      const response = await apiFetchJson<FeatureRequestRow>(
         `/api/feature-requests/${fr.id}`,
         {
           method: 'PATCH',
