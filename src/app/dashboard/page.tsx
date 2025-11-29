@@ -309,15 +309,19 @@ export default async function DashboardPage() {
     {
       title: 'At Risk Customers',
       value: stats.totalClients,
-      icon: Users,
-      color: 'bg-indigo-500',
+      icon: '😟',
+      iconType: 'emoji',
+      color: 'bg-red-50',
+      iconColor: 'text-red-600',
       change: '+12%'
     },
     {
       title: 'Healthy Customers',
       value: stats.activeClients,
-      icon: TrendingUp,
-      color: 'bg-green-500',
+      icon: '😊',
+      iconType: 'emoji',
+      color: 'bg-green-50',
+      iconColor: 'text-green-600',
       change: '+8%'
     }
   ]
@@ -344,7 +348,11 @@ export default async function DashboardPage() {
             <div key={stat.title} className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center">
                 <div className={`p-3 rounded-full ${stat.color}`}>
-                  <stat.icon className="w-6 h-6 text-white" />
+                  {'iconType' in stat && (stat as any).iconType === 'emoji' ? (
+                    <span className={`text-2xl ${'iconColor' in stat ? (stat as any).iconColor : ''}`}>{(stat as any).icon}</span>
+                  ) : (
+                    <stat.icon className="w-6 h-6 text-white" />
+                  )}
                 </div>
                 <div className="ml-4 flex-1">
                   <p className="text-sm font-medium text-gray-600">{stat.title}</p>
