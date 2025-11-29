@@ -189,7 +189,7 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
   const updatePriority = async (fr: DashboardFeatureRequest, priority: string | null) => {
     setUpdatingRequestId(fr.id)
     try {
-      const updated = await apiFetchJson<DashboardFeatureRequest>(
+      const response = await apiFetchJson<any>(
         `/api/feature-requests/${fr.id}`,
         {
           method: 'PATCH',
@@ -199,6 +199,13 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
           body: JSON.stringify({ priority }),
         }
       )
+
+      // The API returns the database record, but we need to preserve computed fields
+      // Map urgency from response to the existing feature request
+      const updated: DashboardFeatureRequest = {
+        ...fr,
+        urgency: (response.urgency || priority || 'Low') as 'Low' | 'Medium' | 'High',
+      }
 
       setLocalFeatureRequests(
         localFeatureRequests.map((r) => (r.id === fr.id ? updated : r))
@@ -215,7 +222,7 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
   const updateOwner = async (fr: DashboardFeatureRequest, owner: string | null) => {
     setUpdatingRequestId(fr.id)
     try {
-      const updated = await apiFetchJson<DashboardFeatureRequest>(
+      const response = await apiFetchJson<any>(
         `/api/feature-requests/${fr.id}`,
         {
           method: 'PATCH',
@@ -225,6 +232,12 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
           body: JSON.stringify({ owner }),
         }
       )
+
+      // The API returns the database record, but we need to preserve computed fields
+      const updated: DashboardFeatureRequest = {
+        ...fr,
+        owner: response.owner || null,
+      }
 
       setLocalFeatureRequests(
         localFeatureRequests.map((r) => (r.id === fr.id ? updated : r))
