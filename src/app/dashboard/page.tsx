@@ -242,21 +242,21 @@ export default async function DashboardPage() {
           .map(company => company.company_id)
 
         if (activeCompanyIds.length > 0) {
-          // Query customers with overall_sentiment = 'Healthy' from active companies
+          // Query customers with health_score > 0 (Healthy) from active companies
           const { data: healthyCustomers } = await supabase
             .from('customers')
             .select('customer_id')
             .in('company_id', activeCompanyIds)
-            .eq('overall_sentiment', 'Healthy')
+            .gt('health_score', 0)
 
           healthyCustomersCount = healthyCustomers?.length || 0
 
-          // Query customers with overall_sentiment = 'At Risk' from active companies
+          // Query customers with health_score < 0 (At Risk) from active companies
           const { data: atRiskCustomers } = await supabase
             .from('customers')
             .select('customer_id')
             .in('company_id', activeCompanyIds)
-            .eq('overall_sentiment', 'At Risk')
+            .lt('health_score', 0)
 
           atRiskCustomersCount = atRiskCustomers?.length || 0
         }
