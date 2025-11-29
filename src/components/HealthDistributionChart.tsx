@@ -65,10 +65,12 @@ export default function HealthDistributionChart() {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">Customer Health Distribution</h3>
-      <p className="text-sm text-gray-600 mb-4">Total companies: {totalCustomers}</p>
-      <div className="h-80">
+    <div className="bg-white rounded-lg shadow p-6 flex flex-col h-full">
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Customer Health Distribution</h3>
+        <p className="text-sm text-gray-600">Total companies: {totalCustomers}</p>
+      </div>
+      <div className="flex-1 min-h-0">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>

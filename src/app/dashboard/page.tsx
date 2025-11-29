@@ -336,12 +336,12 @@ export default async function DashboardPage() {
         })}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            <div className="lg:col-span-3">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
+            <div className="lg:col-span-3 flex">
             <ConsiderTouchingBase />
         </div>
 
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-2 flex">
               <HealthDistributionChart />
             </div>
           </div>
