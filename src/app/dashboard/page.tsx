@@ -222,7 +222,6 @@ export default async function DashboardPage() {
       } else {
         console.warn(`[Dashboard] No active companies found for user ${user.id}. Cannot fetch feature requests.`)
       }
-      }
 
       // Fetch company count data directly from database (server-side)
       // This matches the logic in the customer threads table
