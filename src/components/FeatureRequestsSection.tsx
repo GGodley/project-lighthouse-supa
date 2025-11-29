@@ -2,6 +2,8 @@
 
 import React, { useState, useMemo } from 'react'
 import Link from 'next/link'
+import { CheckCircle, ChevronDown, ChevronRight } from 'lucide-react'
+import { apiFetchJson } from '@/lib/api-client'
 
 interface DashboardFeatureRequest {
   id: string
@@ -12,6 +14,9 @@ interface DashboardFeatureRequest {
   source: 'email' | 'meeting' | 'thread'
   source_id: string | null
   urgency: 'Low' | 'Medium' | 'High'
+  completed: boolean
+  first_requested: string | null
+  last_requested: string | null
 }
 
 interface FeatureRequestsSectionProps {
@@ -22,6 +27,9 @@ type SortOption = 'company-a-z' | 'urgency' | 'date' | 'company' | 'source'
 
 const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ featureRequests }) => {
   const [selectedSort, setSelectedSort] = useState<SortOption>('company-a-z')
+  const [completedExpanded, setCompletedExpanded] = useState(false)
+  const [updatingRequestId, setUpdatingRequestId] = useState<string | null>(null)
+  const [localFeatureRequests, setLocalFeatureRequests] = useState<DashboardFeatureRequest[]>(featureRequests)
 
   // Build navigation URL for feature request
   const getFeatureRequestUrl = (fr: DashboardFeatureRequest): string => {
@@ -57,6 +65,38 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
     return 'Unknown'
   }
 
+  // Update local state when prop changes
+  React.useEffect(() => {
+    setLocalFeatureRequests(featureRequests)
+  }, [featureRequests])
+
+  // Toggle feature request completion
+  const toggleFeatureRequest = async (fr: DashboardFeatureRequest) => {
+    setUpdatingRequestId(fr.id)
+    try {
+      const updated = await apiFetchJson<DashboardFeatureRequest>(
+        `/api/feature-requests/${fr.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ completed: !fr.completed }),
+        }
+      )
+
+      // Update local state
+      setLocalFeatureRequests(
+        localFeatureRequests.map((r) => (r.id === fr.id ? updated : r))
+      )
+    } catch (err) {
+      console.error('Error updating feature request:', err)
+      // Revert on error - could show a toast notification here
+    } finally {
+      setUpdatingRequestId(null)
+    }
+  }
+
   // Get urgency badge styles
   const getUrgencyStyles = (urgency: 'Low' | 'Medium' | 'High'): string => {
     switch (urgency) {
@@ -66,13 +106,20 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
         return 'bg-yellow-50 text-yellow-700 border border-yellow-200'
       case 'Low':
       default:
-        return 'bg-gray-100 text-gray-800'
+        return 'bg-gray-100 text-gray-800 border border-gray-200'
     }
   }
 
+  // Filter into active and completed
+  const { activeRequests, completedRequests } = useMemo(() => {
+    const active = localFeatureRequests.filter((fr) => !fr.completed)
+    const completed = localFeatureRequests.filter((fr) => fr.completed)
+    return { activeRequests: active, completedRequests: completed }
+  }, [localFeatureRequests])
+
   // Sorting functions
   const sortedFeatureRequests = useMemo(() => {
-    const sorted = [...featureRequests]
+    const sorted = [...activeRequests]
     
     switch (selectedSort) {
       case 'company-a-z':
@@ -114,7 +161,14 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
       default:
         return sorted
     }
-  }, [featureRequests, selectedSort])
+  }, [activeRequests, selectedSort])
+
+  // Sort completed requests by date (most recent first)
+  const sortedCompletedRequests = useMemo(() => {
+    return [...completedRequests].sort(
+      (a, b) => new Date(b.requested_at).getTime() - new Date(a.requested_at).getTime()
+    )
+  }, [completedRequests])
 
   const sortOptions: { value: SortOption; label: string }[] = [
     { value: 'company-a-z', label: 'Company A-Z' },
@@ -151,47 +205,166 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
       </div>
 
       <div className="space-y-4">
-        {sortedFeatureRequests.length === 0 ? (
+        {sortedFeatureRequests.length === 0 && completedRequests.length === 0 ? (
           <div className="text-gray-500">No feature requests found.</div>
         ) : (
-          sortedFeatureRequests.map((fr) => {
-            const url = getFeatureRequestUrl(fr)
-            const sourceLabel = getSourceLabel(fr.source)
-            
-            return (
-              <Link
-                key={fr.id}
-                href={url}
-                className="block p-4 rounded-lg border border-gray-200 hover:shadow-md transition-all cursor-pointer hover:bg-gray-50"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <h4 className="font-semibold text-gray-900 text-base flex-1">{fr.title}</h4>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {/* Urgency Badge */}
-                  <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${getUrgencyStyles(fr.urgency)}`}>
-                    {fr.urgency}
-                  </span>
-                  {/* Company Name Badge */}
-                  <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                    {fr.company_name}
-                  </span>
-                  {/* Date Badge */}
-                  <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">
-                    {formatDate(fr.requested_at)}
-                  </span>
-                  {/* Source Badge */}
-                  <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
-                    fr.source === 'meeting' 
-                      ? 'bg-green-50 text-green-700 border border-green-200'
-                      : 'bg-purple-50 text-purple-700 border border-purple-200'
-                  }`}>
-                    {sourceLabel}
-                  </span>
-                </div>
-              </Link>
-            )
-          })
+          <>
+            {/* Active Feature Requests */}
+            {sortedFeatureRequests.length > 0 && (
+              sortedFeatureRequests.map((fr) => {
+                const url = getFeatureRequestUrl(fr)
+                const sourceLabel = getSourceLabel(fr.source)
+                
+                return (
+                  <div
+                    key={fr.id}
+                    className="block p-4 rounded-lg border border-gray-200 hover:shadow-md transition-all hover:bg-gray-50"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <Link href={url} className="flex-1">
+                        <h4 className="font-semibold text-gray-900 text-base">{fr.title}</h4>
+                      </Link>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleFeatureRequest(fr)
+                        }}
+                        disabled={updatingRequestId === fr.id}
+                        className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ml-2 ${
+                          fr.completed
+                            ? 'bg-blue-600 border-blue-600'
+                            : 'border-gray-300 hover:border-blue-600'
+                        } ${updatingRequestId === fr.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                      >
+                        {fr.completed && <CheckCircle className="w-4 h-4 text-white" />}
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {/* Urgency Badge */}
+                      <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${getUrgencyStyles(fr.urgency)}`}>
+                        {fr.urgency}
+                      </span>
+                      {/* Company Name Badge */}
+                      <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                        {fr.company_name}
+                      </span>
+                      {/* Date Badge */}
+                      <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200">
+                        {formatDate(fr.requested_at)}
+                      </span>
+                      {/* Source Badge */}
+                      <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
+                        fr.source === 'meeting' 
+                          ? 'bg-green-50 text-green-700 border border-green-200'
+                          : 'bg-purple-50 text-purple-700 border border-purple-200'
+                      }`}>
+                        {sourceLabel}
+                      </span>
+                      {/* First Requested Badge */}
+                      {fr.first_requested && (
+                        <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          First: {formatDate(fr.first_requested)}
+                        </span>
+                      )}
+                      {/* Last Requested Badge */}
+                      {fr.last_requested && (
+                        <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+                          Last: {formatDate(fr.last_requested)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })
+            )}
+
+            {/* Completed Feature Requests Section */}
+            {completedRequests.length > 0 && (
+              <div className="mt-6">
+                <button
+                  onClick={() => setCompletedExpanded(!completedExpanded)}
+                  className="flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-gray-900 transition-colors mb-3"
+                >
+                  {completedExpanded ? (
+                    <ChevronDown className="w-4 h-4" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4" />
+                  )}
+                  <span>Completed Feature Requests ({completedRequests.length})</span>
+                </button>
+                
+                {completedExpanded && (
+                  <div className="space-y-4">
+                    {sortedCompletedRequests.map((fr) => {
+                      const url = getFeatureRequestUrl(fr)
+                      const sourceLabel = getSourceLabel(fr.source)
+                      
+                      return (
+                        <div
+                          key={fr.id}
+                          className="block p-4 rounded-lg border border-gray-200 hover:shadow-md transition-all hover:bg-gray-50 opacity-75"
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <Link href={url} className="flex-1">
+                              <h4 className="font-semibold text-gray-900 text-base">{fr.title}</h4>
+                            </Link>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleFeatureRequest(fr)
+                              }}
+                              disabled={updatingRequestId === fr.id}
+                              className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ml-2 ${
+                                fr.completed
+                                  ? 'bg-blue-600 border-blue-600'
+                                  : 'border-gray-300 hover:border-blue-600'
+                              } ${updatingRequestId === fr.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                            >
+                              {fr.completed && <CheckCircle className="w-4 h-4 text-white" />}
+                            </button>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {/* Urgency Badge */}
+                            <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${getUrgencyStyles(fr.urgency)}`}>
+                              {fr.urgency}
+                            </span>
+                            {/* Company Name Badge */}
+                            <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                              {fr.company_name}
+                            </span>
+                            {/* Date Badge */}
+                            <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200">
+                              {formatDate(fr.requested_at)}
+                            </span>
+                            {/* Source Badge */}
+                            <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
+                              fr.source === 'meeting' 
+                                ? 'bg-green-50 text-green-700 border border-green-200'
+                                : 'bg-purple-50 text-purple-700 border border-purple-200'
+                            }`}>
+                              {sourceLabel}
+                            </span>
+                            {/* First Requested Badge */}
+                            {fr.first_requested && (
+                              <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                First: {formatDate(fr.first_requested)}
+                              </span>
+                            )}
+                            {/* Last Requested Badge */}
+                            {fr.last_requested && (
+                              <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+                                Last: {formatDate(fr.last_requested)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -26,6 +26,9 @@ interface DashboardFeatureRequest {
   source: 'email' | 'meeting' | 'thread'
   source_id: string | null
   urgency: 'Low' | 'Medium' | 'High'
+  completed: boolean
+  first_requested: string | null
+  last_requested: string | null
 }
 
 export default async function DashboardPage() {
@@ -111,7 +114,7 @@ export default async function DashboardPage() {
         // Fetch feature requests
         const { data: featureRequestsData } = await supabase
           .from('feature_requests')
-          .select('id, company_id, feature_id, requested_at, source, email_id, meeting_id, thread_id, urgency')
+          .select('id, company_id, feature_id, requested_at, source, email_id, meeting_id, thread_id, urgency, completed')
           .in('company_id', companyIds)
           .limit(50)
 
@@ -122,11 +125,15 @@ export default async function DashboardPage() {
           // Fetch features
           const { data: featuresData } = await supabase
             .from('features')
-            .select('id, title')
+            .select('id, title, first_requested, last_requested')
             .in('id', featureIds)
 
           if (featuresData) {
-            const featuresMap = new Map(featuresData.map(f => [f.id, f.title]))
+            const featuresMap = new Map(featuresData.map(f => [f.id, {
+              title: f.title,
+              first_requested: f.first_requested,
+              last_requested: f.last_requested
+            }]))
             
             // Transform feature requests data
             featureRequests = featureRequestsData
@@ -141,15 +148,20 @@ export default async function DashboardPage() {
                   sourceId = fr.email_id.toString()
                 }
 
+                const feature = featuresMap.get(fr.feature_id)
+
                 return {
                   id: fr.id,
-                  title: featuresMap.get(fr.feature_id) || 'Unknown Feature',
+                  title: feature?.title || 'Unknown Feature',
                   company_name: companyMap.get(fr.company_id) || 'Unknown Company',
                   company_id: fr.company_id,
                   requested_at: fr.requested_at,
                   source: (fr.source || 'thread') as 'email' | 'meeting' | 'thread',
                   source_id: sourceId,
-                  urgency: (fr.urgency || 'Low') as 'Low' | 'Medium' | 'High'
+                  urgency: (fr.urgency || 'Low') as 'Low' | 'Medium' | 'High',
+                  completed: fr.completed || false,
+                  first_requested: feature?.first_requested || null,
+                  last_requested: feature?.last_requested || null
                 }
               })
               .filter(fr => fr.title !== 'Unknown Feature') // Filter out any with missing features
@@ -342,30 +354,30 @@ export default async function DashboardPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             <div className="lg:col-span-3">
-              <ConsiderTouchingBase />
+            <ConsiderTouchingBase />
         </div>
 
             <div className="lg:col-span-2 bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">10 Most Recent Emails</h3>
-          <div className="divide-y">
-            {recentEmails.length === 0 ? (
-              <div className="text-gray-500">No emails found. Go to Emails tab to sync.</div>
-            ) : (
-              recentEmails.map((e) => (
-                <div key={e.id} className="py-3">
-                  <div className="flex items-center justify-between">
-                    <div className="font-medium text-gray-900 truncate">{e.subject || 'No Subject'}</div>
-                    <div className="text-xs text-gray-500 ml-4 whitespace-nowrap">
-                      {e.received_at ? new Date(e.received_at).toLocaleString() : ''}
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">10 Most Recent Emails</h3>
+              <div className="divide-y">
+                {recentEmails.length === 0 ? (
+                  <div className="text-gray-500">No emails found. Go to Emails tab to sync.</div>
+                ) : (
+                  recentEmails.map((e) => (
+                    <div key={e.id} className="py-3">
+                      <div className="flex items-center justify-between">
+                        <div className="font-medium text-gray-900 truncate">{e.subject || 'No Subject'}</div>
+                        <div className="text-xs text-gray-500 ml-4 whitespace-nowrap">
+                          {e.received_at ? new Date(e.received_at).toLocaleString() : ''}
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-600 truncate">From: {e.sender}</div>
+                      <div className="text-sm text-gray-500 line-clamp-2">{e.snippet}</div>
                     </div>
-                  </div>
-                  <div className="text-sm text-gray-600 truncate">From: {e.sender}</div>
-                  <div className="text-sm text-gray-500 line-clamp-2">{e.snippet}</div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Feature Requests Section */}

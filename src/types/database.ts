@@ -216,6 +216,7 @@ export type Database = {
       feature_requests: {
         Row: {
           company_id: string | null
+          completed: boolean
           customer_id: string
           email_id: number | null
           feature_id: string
@@ -231,6 +232,7 @@ export type Database = {
         }
         Insert: {
           company_id?: string | null
+          completed?: boolean
           customer_id: string
           email_id?: number | null
           feature_id: string
@@ -246,6 +248,7 @@ export type Database = {
         }
         Update: {
           company_id?: string | null
+          completed?: boolean
           customer_id?: string
           email_id?: number | null
           feature_id?: string
@@ -288,8 +291,10 @@ export type Database = {
           category: string | null
           created_at: string
           description: string | null
+          first_requested: string | null
           high_urgency_count: number
           id: string
+          last_requested: string | null
           low_urgency_count: number
           medium_urgency_count: number
           request_count: number
@@ -299,8 +304,10 @@ export type Database = {
           category?: string | null
           created_at?: string
           description?: string | null
+          first_requested?: string | null
           high_urgency_count?: number
           id?: string
+          last_requested?: string | null
           low_urgency_count?: number
           medium_urgency_count?: number
           request_count?: number
@@ -310,8 +317,10 @@ export type Database = {
           category?: string | null
           created_at?: string
           description?: string | null
+          first_requested?: string | null
           high_urgency_count?: number
           id?: string
+          last_requested?: string | null
           low_urgency_count?: number
           medium_urgency_count?: number
           request_count?: number

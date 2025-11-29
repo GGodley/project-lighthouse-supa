@@ -62,15 +62,51 @@ export async function saveFeatureRequests(
         throw new Error(`Invalid urgency value: ${req.urgency}. Must be Low, Medium, or High`);
       }
 
-      // Step 1: Upsert Feature (create if doesn't exist, update if exists)
-      const { data: featureData, error: featureError } = await supabaseClient
+      // Step 1: Check if feature exists by title (case-sensitive exact match)
+      const { data: existingFeature, error: checkError } = await supabaseClient
         .from('features')
-        .upsert({ title: req.feature_title }, { onConflict: 'title' })
-        .select('id')
-        .single();
+        .select('id, first_requested, last_requested')
+        .eq('title', req.feature_title)
+        .maybeSingle();
 
-      if (featureError || !featureData) {
-        throw new Error(`Failed to upsert feature: ${featureError?.message || 'No data returned'}`);
+      if (checkError) {
+        throw new Error(`Failed to check for existing feature: ${checkError.message}`);
+      }
+
+      let featureData;
+      const now = new Date().toISOString();
+
+      if (existingFeature) {
+        // Feature exists - update last_requested, keep existing first_requested
+        const { data: updatedFeature, error: updateError } = await supabaseClient
+          .from('features')
+          .update({ last_requested: now })
+          .eq('id', existingFeature.id)
+          .select('id')
+          .single();
+
+        if (updateError || !updatedFeature) {
+          throw new Error(`Failed to update feature: ${updateError?.message || 'No data returned'}`);
+        }
+
+        featureData = updatedFeature;
+      } else {
+        // New feature - create with both first_requested and last_requested set to now
+        const { data: newFeature, error: insertError } = await supabaseClient
+          .from('features')
+          .insert({ 
+            title: req.feature_title,
+            first_requested: now,
+            last_requested: now
+          })
+          .select('id')
+          .single();
+
+        if (insertError || !newFeature) {
+          throw new Error(`Failed to create feature: ${insertError?.message || 'No data returned'}`);
+        }
+
+        featureData = newFeature;
       }
 
       // Step 2: Build insert payload based on source type
