@@ -75,44 +75,30 @@ export default async function DashboardPage() {
     if (user) {
       // Note: clients variable removed as it's no longer used
 
-      // Fetch feature requests
-      // First, get all active company IDs for this user (exclude archived/deleted)
-      console.log(`[Dashboard] Fetching companies for user: ${user.id}`)
-      const { data: allUserCompanies, error: companiesError } = await supabase
+      // Fetch feature requests for this user
+      // Query ALL feature_requests for the user's companies (excluding archived/deleted)
+      // This query runs on every page load to get the latest data
+      console.log(`[Dashboard] Querying feature_requests for user: ${user.id}`)
+      
+      // First get active company IDs for filtering (exclude archived/deleted)
+      const { data: allUserCompanies } = await supabase
         .from('companies')
         .select('company_id, company_name, status')
         .eq('user_id', user.id)
-
-      if (companiesError) {
-        console.error(`[Dashboard] Error fetching companies:`, companiesError)
-      }
-
-      console.log(`[Dashboard] Found ${allUserCompanies?.length || 0} total companies for user`)
-      if (allUserCompanies && allUserCompanies.length > 0) {
-        console.log(`[Dashboard] Company statuses:`, allUserCompanies.map(c => ({ id: c.company_id, name: c.company_name, status: c.status })))
-      }
-
+      
       // Filter out archived and deleted companies
-      const userCompanies = (allUserCompanies || []).filter(
+      const activeCompanies = (allUserCompanies || []).filter(
         company => company.status !== 'archived' && company.status !== 'deleted'
       )
-
-      console.log(`[Dashboard] Active companies (after filtering): ${userCompanies.length}`)
-
-      if (userCompanies && userCompanies.length > 0) {
-        const companyIds = userCompanies.map(c => c.company_id)
-        const companyMap = new Map(userCompanies.map(c => [c.company_id, c.company_name]))
-        
-        // Validate company IDs
-        if (companyIds.length === 0) {
-          console.warn(`[Dashboard] No company IDs to query!`)
-        } else if (companyIds.some(id => !id)) {
-          console.warn(`[Dashboard] Some company IDs are null/undefined:`, companyIds)
-        }
-        
-        // Fetch feature requests directly (no JOIN with features table)
-        console.log(`[Dashboard] Querying feature_requests for ${companyIds.length} companies:`, companyIds)
-        
+      
+      const companyIds = activeCompanies.map(c => c.company_id)
+      const companyMap = new Map(activeCompanies.map(c => [c.company_id, c.company_name]))
+      
+      console.log(`[Dashboard] Found ${companyIds.length} active companies for user (out of ${allUserCompanies?.length || 0} total)`)
+      
+      if (companyIds.length === 0) {
+        console.warn(`[Dashboard] No active companies found for user ${user.id}. Cannot fetch feature requests.`)
+      } else {
         const { data: featureRequestsData, error: featureRequestsError } = await supabase
           .from('feature_requests')
           .select(`
@@ -139,7 +125,7 @@ export default async function DashboardPage() {
         }
 
         if (featureRequestsData && featureRequestsData.length > 0) {
-          console.log(`[Dashboard] Found ${featureRequestsData.length} feature requests`)
+          console.log(`[Dashboard] Found ${featureRequestsData.length} feature requests for user ${user.id}`)
           console.log(`[Dashboard] Sample feature request:`, featureRequestsData[0])
           
           // Transform feature requests data
@@ -185,42 +171,8 @@ export default async function DashboardPage() {
             console.log(`[Dashboard] Sample final feature request:`, featureRequests[0])
           }
         } else {
-          console.log(`[Dashboard] No feature requests found for ${companyIds.length} companies`)
-          console.log(`[Dashboard] Company IDs queried:`, companyIds)
-          
-          // Debug: Check if there are ANY feature requests in the database
-          const { data: allFeatureRequests, error: allError } = await supabase
-            .from('feature_requests')
-            .select('id, company_id, feature_id, source')
-            .limit(10)
-          
-          if (allError) {
-            console.error(`[Dashboard] Error checking all feature requests:`, allError)
-          } else {
-            console.log(`[Dashboard] Total feature requests in database (sample):`, allFeatureRequests?.length || 0)
-            if (allFeatureRequests && allFeatureRequests.length > 0) {
-              console.log(`[Dashboard] Sample feature request company_ids:`, allFeatureRequests.map(fr => fr.company_id))
-              console.log(`[Dashboard] User company IDs:`, companyIds)
-              console.log(`[Dashboard] Do any match user companies?`, allFeatureRequests.some(fr => companyIds.includes(fr.company_id)))
-              
-              // Check which companies have feature requests
-              const frCompanyIds = [...new Set(allFeatureRequests.map(fr => fr.company_id))]
-              console.log(`[Dashboard] Companies with feature requests:`, frCompanyIds)
-              console.log(`[Dashboard] Intersection:`, frCompanyIds.filter(id => companyIds.includes(id)))
-              
-              // Check if any feature requests belong to user's companies but weren't found
-              const matchingFRs = allFeatureRequests.filter(fr => companyIds.includes(fr.company_id))
-              if (matchingFRs.length > 0) {
-                console.error(`[Dashboard] CRITICAL: Found ${matchingFRs.length} feature requests that SHOULD have been returned!`)
-                console.error(`[Dashboard] Matching feature requests:`, matchingFRs)
-              }
-            } else {
-              console.warn(`[Dashboard] No feature requests exist in database at all`)
-            }
-          }
+          console.log(`[Dashboard] No feature requests found for user ${user.id} in ${companyIds.length} active companies`)
         }
-      } else {
-        console.warn(`[Dashboard] No active companies found for user ${user.id}. Cannot fetch feature requests.`)
       }
 
       // Fetch company count data directly from database (server-side)
