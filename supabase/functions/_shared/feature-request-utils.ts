@@ -150,39 +150,43 @@ export async function saveFeatureRequests(
       // Step 2: Build insert payload based on source type
       // IMPORTANT: The source_id_check constraint requires that only the relevant source ID is set
       // and the others are explicitly null based on the source type
-      const insertPayload: Partial<Database['public']['Tables']['feature_requests']['Insert']> = {
-        company_id: context.company_id,
-        customer_id: context.customer_id,
-        feature_id: featureData.id,
-        request_details: req.request_details,
-        urgency: req.urgency,
-        source: context.source,
-        status: 'open', // Default status
-        // Explicitly set all source IDs to null initially
-        email_id: null,
-        meeting_id: null,
-        thread_id: null
+      // We use an explicit type (not Partial) to ensure all source IDs are always present (never undefined)
+      type FeatureRequestInsert = {
+        company_id: string;
+        customer_id: string;
+        feature_id: string;
+        request_details: string | null;
+        urgency: 'Low' | 'Medium' | 'High';
+        source: 'email' | 'meeting' | 'thread';
+        status: string;
+        // CRITICAL: All three source IDs must always be present (never undefined)
+        // The constraint requires explicit NULL values for non-relevant source IDs
+        email_id: number | null;
+        meeting_id: number | null;
+        thread_id: string | null;
+        completed?: boolean;
+        owner?: string | null;
+        requested_at?: string;
+        updated_at?: string | null;
       };
 
-      // Set the appropriate source-specific ID based on source type
+      // Validate that the required source ID is present before building payload
+      let email_id: number | null = null;
+      let meeting_id: number | null = null;
+      let thread_id: string | null = null;
+
       if (context.source === 'email') {
-        if (context.email_id) {
-          insertPayload.email_id = context.email_id;
-        } else {
+        if (!context.email_id) {
           throw new Error(`email_id is required when source is 'email'`);
         }
+        email_id = context.email_id;
       } else if (context.source === 'meeting') {
-        if (context.meeting_id) {
-          insertPayload.meeting_id = context.meeting_id;
-        } else {
+        if (!context.meeting_id) {
           throw new Error(`meeting_id is required when source is 'meeting'`);
         }
+        meeting_id = context.meeting_id;
       } else if (context.source === 'thread') {
-        // Fixed: Always attempt to set thread_id when source is 'thread', with validation
-        if (context.thread_id && typeof context.thread_id === 'string') {
-          insertPayload.thread_id = context.thread_id;
-          console.log(`✅ [FEATURE_REQUEST_DEBUG] Set thread_id: ${context.thread_id} for feature "${req.feature_title}"`);
-        } else {
+        if (!context.thread_id || typeof context.thread_id !== 'string') {
           console.error(`⚠️ [FEATURE_REQUEST_DEBUG] CRITICAL: thread_id is missing or invalid for thread source!`, {
             thread_id: context.thread_id,
             thread_idType: typeof context.thread_id,
@@ -193,9 +197,37 @@ export async function saveFeatureRequests(
           });
           throw new Error(`thread_id is required when source is 'thread'`);
         }
+        thread_id = context.thread_id;
+        console.log(`✅ [FEATURE_REQUEST_DEBUG] Set thread_id: ${context.thread_id} for feature "${req.feature_title}"`);
+      }
+
+      // Build payload with all required fields
+      // All three source IDs are explicitly set (relevant one has value, others are null)
+      // This satisfies the source_id_check constraint which requires explicit NULL values
+      const insertPayload: FeatureRequestInsert = {
+        company_id: context.company_id,
+        customer_id: context.customer_id,
+        feature_id: featureData.id,
+        request_details: req.request_details,
+        urgency: req.urgency,
+        source: context.source,
+        status: 'open', // Default status
+        // CRITICAL: All three source IDs must be explicitly set (never undefined)
+        // The constraint requires explicit NULL values for non-relevant source IDs
+        email_id: email_id,
+        meeting_id: meeting_id,
+        thread_id: thread_id,
+      };
+
+      // Validate all source IDs are explicitly set (not undefined)
+      if (insertPayload.email_id === undefined || 
+          insertPayload.meeting_id === undefined || 
+          insertPayload.thread_id === undefined) {
+        throw new Error('All source IDs must be explicitly set (null or value). This should never happen.');
       }
 
       // Log insertPayload before database insert
+      // Log both the object and the JSON string to verify all fields are present
       console.log(`🔍 [FEATURE_REQUEST_DEBUG] Insert payload for "${req.feature_title}":`, {
         company_id: insertPayload.company_id,
         customer_id: insertPayload.customer_id,
@@ -206,6 +238,9 @@ export async function saveFeatureRequests(
         meeting_id: insertPayload.meeting_id,
         urgency: insertPayload.urgency
       });
+      
+      // Log the actual JSON being sent to verify all fields (including nulls) are included
+      console.log(`🔍 [FEATURE_REQUEST_DEBUG] Final payload JSON:`, JSON.stringify(insertPayload));
 
       // Step 3: Insert Feature Request
       const { data: insertedData, error: requestError } = await supabaseClient
