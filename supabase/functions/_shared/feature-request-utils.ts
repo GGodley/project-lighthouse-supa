@@ -49,6 +49,21 @@ export async function saveFeatureRequests(
   }
 
   console.log(`Saving ${featureRequests.length} feature requests for ${context.source} source`);
+  
+  // Log context details for debugging thread_id issues
+  if (context.source === 'thread') {
+    console.log(`🔍 [FEATURE_REQUEST_DEBUG] Received context for thread source:`, {
+      source: context.source,
+      thread_id: context.thread_id,
+      thread_idType: typeof context.thread_id,
+      thread_idIsString: typeof context.thread_id === 'string',
+      thread_idIsNull: context.thread_id === null,
+      thread_idIsUndefined: context.thread_id === undefined,
+      thread_idTruthy: !!context.thread_id,
+      company_id: context.company_id,
+      customer_id: context.customer_id
+    });
+  }
 
   for (const req of featureRequests) {
     try {
@@ -125,14 +140,60 @@ export async function saveFeatureRequests(
         insertPayload.email_id = context.email_id;
       } else if (context.source === 'meeting' && context.meeting_id) {
         insertPayload.meeting_id = context.meeting_id;
-      } else if (context.source === 'thread' && context.thread_id) {
-        insertPayload.thread_id = context.thread_id;
+      } else if (context.source === 'thread') {
+        // Fixed: Always attempt to set thread_id when source is 'thread', with validation
+        if (context.thread_id && typeof context.thread_id === 'string') {
+          insertPayload.thread_id = context.thread_id;
+          console.log(`✅ [FEATURE_REQUEST_DEBUG] Set thread_id: ${context.thread_id} for feature "${req.feature_title}"`);
+        } else {
+          console.error(`⚠️ [FEATURE_REQUEST_DEBUG] CRITICAL: thread_id is missing or invalid for thread source!`, {
+            thread_id: context.thread_id,
+            thread_idType: typeof context.thread_id,
+            thread_idIsNull: context.thread_id === null,
+            thread_idIsUndefined: context.thread_id === undefined,
+            feature_title: req.feature_title,
+            fullContext: JSON.stringify(context, null, 2)
+          });
+          // Still set it to allow debugging, but log the issue
+          insertPayload.thread_id = context.thread_id || null;
+        }
       }
 
+      // Log insertPayload before database insert
+      console.log(`🔍 [FEATURE_REQUEST_DEBUG] Insert payload for "${req.feature_title}":`, {
+        company_id: insertPayload.company_id,
+        customer_id: insertPayload.customer_id,
+        feature_id: insertPayload.feature_id,
+        source: insertPayload.source,
+        thread_id: insertPayload.thread_id,
+        email_id: insertPayload.email_id,
+        meeting_id: insertPayload.meeting_id,
+        urgency: insertPayload.urgency
+      });
+
       // Step 3: Insert Feature Request
-      const { error: requestError } = await supabaseClient
+      const { data: insertedData, error: requestError } = await supabaseClient
         .from('feature_requests')
-        .insert(insertPayload);
+        .insert(insertPayload)
+        .select('id, thread_id, source');
+
+      // Log database response
+      if (requestError) {
+        console.error(`❌ [FEATURE_REQUEST_DEBUG] Database insert error:`, {
+          error: requestError.message,
+          code: requestError.code,
+          details: requestError.details,
+          hint: requestError.hint,
+          insertPayload: JSON.stringify(insertPayload, null, 2)
+        });
+      } else if (insertedData && insertedData.length > 0) {
+        console.log(`✅ [FEATURE_REQUEST_DEBUG] Database insert successful:`, {
+          inserted_id: insertedData[0].id,
+          inserted_thread_id: insertedData[0].thread_id,
+          inserted_source: insertedData[0].source,
+          expected_thread_id: insertPayload.thread_id
+        });
+      }
 
       if (requestError) {
         throw new Error(`Failed to insert feature request: ${requestError.message}`);

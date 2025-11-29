@@ -40,6 +40,14 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
   const [completedExpanded, setCompletedExpanded] = useState(false)
   const [updatingRequestId, setUpdatingRequestId] = useState<string | null>(null)
   const [localFeatureRequests, setLocalFeatureRequests] = useState<DashboardFeatureRequest[]>(featureRequests)
+
+  // Debug logging
+  React.useEffect(() => {
+    console.log('[FeatureRequestsSection] Received feature requests:', featureRequests.length)
+    if (featureRequests.length > 0) {
+      console.log('[FeatureRequestsSection] Sample feature request:', featureRequests[0])
+    }
+  }, [featureRequests])
   const supabase = useSupabase()
 
   // Modal state for thread/meeting views
@@ -73,20 +81,21 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
       } finally {
         setLoadingThread(false)
       }
-    } else if (fr.source === 'meeting' && fr.source_id) {
+    } else if (fr.source === 'meeting' && fr.meeting_id) {
       setLoadingMeeting(true)
-      // source_id for meetings is the meeting_id converted to string
-      // We need to use it to find the meeting by google_event_id
-      setSelectedMeetingId(fr.source_id)
+      // Use meeting_id (database ID) to fetch the meeting
+      // This matches the same meeting that appears in the interaction timeline
+      setSelectedMeetingId(fr.meeting_id.toString())
       setSelectedThreadId(null)
       setSelectedThreadSummary(null)
       
       try {
-        // Fetch meeting by google_event_id (source_id is the meeting identifier)
+        // Fetch meeting by database ID (id field, not google_event_id)
+        // The meeting_id in feature_requests is the database ID
         const { data: meeting, error: meetingError } = await supabase
           .from('meetings')
           .select('*')
-          .eq('google_event_id', fr.source_id)
+          .eq('id', fr.meeting_id)
           .single()
         
         if (meetingError || !meeting) {
@@ -94,6 +103,8 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
           setSelectedMeeting(null)
         } else {
           setSelectedMeeting(meeting)
+          // Store google_event_id for consistency with interaction timeline
+          setSelectedMeetingId(meeting.google_event_id)
         }
       } catch (err) {
         console.error('Error fetching meeting:', err)
@@ -560,7 +571,12 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
             ) : selectedMeeting ? (
               <MeetingDetailView
                 meeting={selectedMeeting}
-                companyId={localFeatureRequests.find(fr => fr.source === 'meeting' && fr.source_id === selectedMeetingId)?.company_id || ''}
+                companyId={localFeatureRequests.find(fr => {
+                  if (fr.source !== 'meeting' || !fr.meeting_id) return false
+                  // Match by meeting_id (database ID) or google_event_id
+                  const meeting = selectedMeeting as any
+                  return fr.meeting_id === meeting.id || fr.source_id === meeting.google_event_id
+                })?.company_id || ''}
                 onClose={() => {
                   setSelectedMeetingId(null)
                   setSelectedMeeting(null)

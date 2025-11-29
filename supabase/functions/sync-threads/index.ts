@@ -1422,7 +1422,10 @@ serve(async (req: Request) => {
             const messagesToSummarize = isIncremental ? newMessages : messages;
             
             if (isIncremental) {
-              console.log(`🔄 Incremental summarization: updating summary with ${newMessages.length} new message(s)`);
+              console.log(`🔄 Incremental summarization: updating summary with ${newMessages.length} new message(s) for thread ${threadId}`);
+              if (previousSummary && previousSummary.feature_requests) {
+                console.log(`🔍 [FEATURE_REQUEST_DEBUG] Previous summary has ${previousSummary.feature_requests.length} feature requests`);
+              }
             } else if (existingThread && !previousSummary) {
               console.log(`📝 Full summarization: thread exists but no previous summary, summarizing all ${messages.length} messages`);
             } else {
@@ -1435,6 +1438,15 @@ serve(async (req: Request) => {
               previousSummary,
               isIncremental
             );
+            
+            // Log feature requests from incremental summarization
+            if (isIncremental && summaryJson && !summaryJson.error) {
+              const featureRequestCount = Array.isArray(summaryJson.feature_requests) ? summaryJson.feature_requests.length : 0;
+              console.log(`🔍 [FEATURE_REQUEST_DEBUG] Incremental summary for thread ${threadId} returned ${featureRequestCount} feature requests`);
+              if (featureRequestCount > 0) {
+                console.log(`🔍 [FEATURE_REQUEST_DEBUG] Incremental feature requests:`, JSON.stringify(summaryJson.feature_requests, null, 2));
+              }
+            }
           }
 
           // --- NEW ---
@@ -1485,8 +1497,19 @@ serve(async (req: Request) => {
           // --- NEW ---
           // Extract and save feature requests from summaryJson
           if (summaryJson && !summaryJson.error && Array.isArray(summaryJson.feature_requests) && summaryJson.feature_requests.length > 0) {
+            console.log(`🔍 [FEATURE_REQUEST_DEBUG] Raw feature_requests from LLM for thread ${threadId}:`, {
+              count: summaryJson.feature_requests.length,
+              rawData: JSON.stringify(summaryJson.feature_requests, null, 2)
+            });
+
             // Map new format to old format using shared utility (supports backward compatibility)
             const featureRequests = mapFeatureRequests(summaryJson.feature_requests);
+
+            console.log(`🔍 [FEATURE_REQUEST_DEBUG] Mapped feature requests for thread ${threadId}:`, {
+              rawCount: summaryJson.feature_requests.length,
+              mappedCount: featureRequests.length,
+              mappedData: JSON.stringify(featureRequests, null, 2)
+            });
 
             if (featureRequests.length > 0) {
               // Save feature requests for each company associated with the thread
@@ -1494,24 +1517,57 @@ serve(async (req: Request) => {
               const companyIdsArray = Array.from(discoveredCompanyIds.keys());
               const customerIdsArray = Array.from(discoveredCustomerIds.values());
               
+              console.log(`🔍 [FEATURE_REQUEST_DEBUG] Company/Customer discovery for thread ${threadId}:`, {
+                discoveredCompanyIdsCount: discoveredCompanyIds.size,
+                discoveredCustomerIdsCount: discoveredCustomerIds.size,
+                companyIdsArray: companyIdsArray,
+                customerIdsArray: customerIdsArray
+              });
+              
               let companyCustomerMap = new Map<string, string>(); // Map<company_id, customer_id>
               
               if (companyIdsArray.length > 0 && customerIdsArray.length > 0) {
                 // Fetch customers that belong to any of the discovered companies
-                const { data: customersData } = await supabaseAdmin
+                const { data: customersData, error: customersError } = await supabaseAdmin
                   .from('customers')
                   .select('customer_id, company_id')
                   .in('company_id', companyIdsArray)
                   .in('customer_id', customerIdsArray);
                 
+                if (customersError) {
+                  console.error(`❌ [FEATURE_REQUEST_DEBUG] Error fetching customers for thread ${threadId}:`, customersError);
+                }
+                
                 if (customersData) {
+                  console.log(`🔍 [FEATURE_REQUEST_DEBUG] Fetched ${customersData.length} customers for thread ${threadId}`);
+                  
                   // Build a map of company_id -> first customer_id found
                   for (const customer of customersData) {
                     if (!companyCustomerMap.has(customer.company_id)) {
                       companyCustomerMap.set(customer.company_id, customer.customer_id);
                     }
                   }
+                } else {
+                  console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] No customers data returned for thread ${threadId}, companyIds: ${companyIdsArray.join(', ')}, customerIds: ${customerIdsArray.join(', ')}`);
                 }
+              } else {
+                console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] Cannot build company-customer map for thread ${threadId}:`, {
+                  companyIdsArrayLength: companyIdsArray.length,
+                  customerIdsArrayLength: customerIdsArray.length
+                });
+              }
+
+              console.log(`🔍 [FEATURE_REQUEST_DEBUG] Company-Customer mapping for thread ${threadId}:`, {
+                companyCustomerMapSize: companyCustomerMap.size,
+                mapping: Object.fromEntries(companyCustomerMap)
+              });
+
+              // Critical validation: Check if companies were discovered
+              if (discoveredCompanyIds.size === 0) {
+                console.error(`❌ [FEATURE_REQUEST_DEBUG] CRITICAL: No companies discovered for thread ${threadId} but feature requests exist!`);
+                console.error(`❌ [FEATURE_REQUEST_DEBUG] Feature requests that will be lost:`, JSON.stringify(featureRequests, null, 2));
+                console.error(`❌ [FEATURE_REQUEST_DEBUG] Thread messages count: ${messages.length}, discoveredCustomerIds: ${discoveredCustomerIds.size}`);
+                // Continue to try saving anyway, but this is a critical issue
               }
 
               // Save feature requests for each company
@@ -1520,20 +1576,44 @@ serve(async (req: Request) => {
 
                 // If no customer found for this company, skip saving for this company
                 if (!customerIdForCompany) {
-                  console.warn(`⚠️ No customer found for company ${companyId} in thread ${threadId}, skipping feature request save for this company`);
+                  console.error(`❌ [FEATURE_REQUEST_DEBUG] No customer found for company ${companyId} in thread ${threadId}, skipping feature request save for this company`);
+                  console.error(`❌ [FEATURE_REQUEST_DEBUG] Company-Customer mapping state:`, {
+                    companyId: companyId,
+                    companyCustomerMapSize: companyCustomerMap.size,
+                    companyCustomerMapEntries: Array.from(companyCustomerMap.entries()),
+                    discoveredCustomerIds: Array.from(discoveredCustomerIds.entries()),
+                    customerIdsArray: customerIdsArray
+                  });
                   continue;
                 }
 
                 // Save feature requests for this company/customer
+                // Log thread_id details for debugging
+                console.log(`🔍 [FEATURE_REQUEST_DEBUG] Preparing to save feature requests for thread:`, {
+                  threadId: threadId,
+                  threadIdType: typeof threadId,
+                  threadIdIsString: typeof threadId === 'string',
+                  threadIdIsNull: threadId === null,
+                  threadIdIsUndefined: threadId === undefined,
+                  threadIdLength: threadId?.length,
+                  companyId: companyId,
+                  customerId: customerIdForCompany,
+                  featureRequestCount: featureRequests.length
+                });
+
+                const context = {
+                  company_id: companyId,
+                  customer_id: customerIdForCompany,
+                  source: 'thread' as const,
+                  thread_id: threadId
+                };
+
+                console.log(`🔍 [FEATURE_REQUEST_DEBUG] Context object being passed:`, JSON.stringify(context, null, 2));
+
                 const result = await saveFeatureRequests(
                   supabaseAdmin,
                   featureRequests,
-                  {
-                    company_id: companyId,
-                    customer_id: customerIdForCompany,
-                    source: 'thread',
-                    thread_id: threadId
-                  }
+                  context
                 );
 
                 if (result.success) {

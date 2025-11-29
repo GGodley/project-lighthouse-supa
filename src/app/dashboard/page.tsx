@@ -99,16 +99,24 @@ export default async function DashboardPage() {
           .limit(50)
 
         if (featureRequestsData && featureRequestsData.length > 0) {
+          console.log(`[Dashboard] Found ${featureRequestsData.length} feature requests for ${companyIds.length} companies`)
+          
           // Get unique feature IDs
           const featureIds = [...new Set(featureRequestsData.map(fr => fr.feature_id))]
+          console.log(`[Dashboard] Fetching ${featureIds.length} unique features`)
           
           // Fetch features
-          const { data: featuresData } = await supabase
+          const { data: featuresData, error: featuresError } = await supabase
             .from('features')
             .select('id, title, first_requested, last_requested')
             .in('id', featureIds)
 
-          if (featuresData) {
+          if (featuresError) {
+            console.error('[Dashboard] Error fetching features:', featuresError)
+          }
+
+          if (featuresData && featuresData.length > 0) {
+            console.log(`[Dashboard] Successfully fetched ${featuresData.length} features`)
             const featuresMap = new Map(featuresData.map(f => [f.id, {
               title: f.title,
               first_requested: f.first_requested,
@@ -116,7 +124,7 @@ export default async function DashboardPage() {
             }]))
             
             // Transform feature requests data
-            featureRequests = featureRequestsData
+            const transformed = featureRequestsData
               .map((fr) => {
                 // Determine source_id based on source type
                 let sourceId: string | null = null
@@ -146,8 +154,24 @@ export default async function DashboardPage() {
                   meeting_id: fr.meeting_id
                 }
               })
-              .filter(fr => fr.title !== 'Unknown Feature') // Filter out any with missing features
+            
+            // Filter out any with missing features, but log them for debugging
+            const unknownFeatures = transformed.filter(fr => fr.title === 'Unknown Feature')
+            if (unknownFeatures.length > 0) {
+              console.warn(`[Dashboard] Filtering out ${unknownFeatures.length} feature requests with missing features. Feature IDs:`, unknownFeatures.map(fr => {
+                const frData = featureRequestsData.find(f => f.id === fr.id)
+                return frData?.feature_id
+              }))
+            }
+            
+            featureRequests = transformed.filter(fr => fr.title !== 'Unknown Feature')
+            console.log(`[Dashboard] Final feature requests count: ${featureRequests.length}`)
+          } else {
+            console.warn(`[Dashboard] No features found for ${featureIds.length} feature IDs. Feature requests will not be displayed.`)
+            console.warn(`[Dashboard] Missing feature IDs:`, featureIds)
           }
+        } else {
+          console.log(`[Dashboard] No feature requests found for ${companyIds.length} companies`)
         }
       }
 
