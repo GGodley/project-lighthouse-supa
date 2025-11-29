@@ -204,13 +204,23 @@ export async function saveFeatureRequests(
       // Build payload with all required fields
       // All three source IDs are explicitly set (relevant one has value, others are null)
       // This satisfies the source_id_check constraint which requires explicit NULL values
+      // IMPORTANT: Ensure source is lowercase to match enum values exactly
+      // The enum has: 'email', 'meeting', 'manual', 'Email', 'thread'
+      // We use lowercase to match the constraint expectations
+      const normalizedSource = context.source.toLowerCase() as 'email' | 'meeting' | 'thread';
+      
+      // Validate source is one of the expected values
+      if (!['email', 'meeting', 'thread'].includes(normalizedSource)) {
+        throw new Error(`Invalid source value: ${context.source}. Must be 'email', 'meeting', or 'thread'`);
+      }
+      
       const insertPayload: FeatureRequestInsert = {
         company_id: context.company_id,
         customer_id: context.customer_id,
         feature_id: featureData.id,
         request_details: req.request_details,
         urgency: req.urgency,
-        source: context.source,
+        source: normalizedSource, // Use normalized lowercase source to match enum
         status: 'open', // Default status
         // CRITICAL: All three source IDs must be explicitly set (never undefined)
         // The constraint requires explicit NULL values for non-relevant source IDs
@@ -255,7 +265,13 @@ export async function saveFeatureRequests(
           code: requestError.code,
           details: requestError.details,
           hint: requestError.hint,
-          insertPayload: JSON.stringify(insertPayload, null, 2)
+          insertPayload: JSON.stringify(insertPayload, null, 2),
+          sourceValue: insertPayload.source,
+          sourceType: typeof insertPayload.source,
+          threadIdValue: insertPayload.thread_id,
+          threadIdType: typeof insertPayload.thread_id,
+          threadIdIsNull: insertPayload.thread_id === null,
+          threadIdIsUndefined: insertPayload.thread_id === undefined
         });
       } else if (insertedData && insertedData.length > 0) {
         console.log(`✅ [FEATURE_REQUEST_DEBUG] Database insert successful:`, {
