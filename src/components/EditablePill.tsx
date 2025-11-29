@@ -120,13 +120,42 @@ const EditablePill: React.FC<EditablePillProps> = ({
     return `${baseClasses} cursor-pointer hover:shadow-md bg-purple-50 text-purple-700 border-purple-200`
   }
 
-  // Calculate popup position (above the pill)
+  // Calculate popup position (below the pill, centered)
+  // Since parent is relative, we can use simple positioning
   const getPopupPosition = () => {
     if (!pillRef.current) return {}
+    
+    // Position below the pill, centered horizontally
+    // We'll use CSS to center it, but need to check if it goes off-screen
     const rect = pillRef.current.getBoundingClientRect()
+    const popupWidth = 200
+    const pillCenterX = rect.left + rect.width / 2
+    const viewportWidth = window.innerWidth
+    const padding = 8
+    
+    // Calculate if we need to adjust for screen edges
+    let leftOffset = 0
+    if (pillCenterX - popupWidth / 2 < padding) {
+      // Too far left, align to left edge
+      leftOffset = padding - rect.left
+    } else if (pillCenterX + popupWidth / 2 > viewportWidth - padding) {
+      // Too far right, align to right edge
+      leftOffset = viewportWidth - padding - popupWidth - rect.left
+    } else {
+      // Centered, use transform to center
+      return {
+        top: '100%',
+        left: '50%',
+        marginTop: '4px',
+        transform: 'translateX(-50%)',
+      }
+    }
+    
+    // If we need to adjust for screen edges, position explicitly
     return {
-      bottom: `${window.innerHeight - rect.top + 8}px`,
-      left: `${rect.left}px`
+      top: '100%',
+      left: `${leftOffset}px`,
+      marginTop: '4px',
     }
   }
 
