@@ -30,9 +30,22 @@ export function useThreadSync(provider_token: string | null | undefined, user_em
   }, []);
 
   const startSync = useCallback(async () => {
-    if (!provider_token || !user_email) {
+    // Get the latest session to check for provider_token
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    // Use provider_token from session if available, otherwise use prop
+    const currentProviderToken = session?.provider_token || provider_token;
+    const currentUserEmail = session?.user?.email || user_email;
+    
+    if (!currentProviderToken || !currentUserEmail) {
       setSyncStatus('failed');
       setSyncDetails('Missing provider token or user email');
+      console.error('Missing provider token or user email', {
+        hasProviderToken: !!currentProviderToken,
+        hasUserEmail: !!currentUserEmail,
+        sessionHasProviderToken: !!session?.provider_token,
+        sessionHasUser: !!session?.user
+      });
       return;
     }
 
@@ -40,17 +53,23 @@ export function useThreadSync(provider_token: string | null | undefined, user_em
       setSyncStatus('creating_job');
       setSyncDetails('Creating sync job...');
 
-      // Get current user
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id) {
+      // Use the session we already fetched, or get it again
+      const currentSession = session || (await supabase.auth.getSession()).data.session;
+      if (!currentSession?.user?.id) {
         throw new Error('No authenticated user found');
+      }
+      
+      // Use the provider_token from session (it's more up-to-date)
+      const tokenToUse = currentSession.provider_token || currentProviderToken;
+      if (!tokenToUse) {
+        throw new Error('Provider token not available in session');
       }
 
       // Create job in sync_jobs table
       const { data: job, error: jobError } = await supabase
         .from('sync_jobs')
         .insert({ 
-          user_id: session.user.id, 
+          user_id: currentSession.user.id, 
           status: 'pending'
         })
         .select()
@@ -68,7 +87,7 @@ export function useThreadSync(provider_token: string | null | undefined, user_em
       const { data: invokeData, error: invokeError } = await supabase.functions.invoke('sync-threads', {
         body: { 
           jobId: newJobId, 
-          provider_token 
+          provider_token: tokenToUse
         }
       });
 

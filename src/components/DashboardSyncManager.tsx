@@ -32,15 +32,19 @@ export default function DashboardSyncManager() {
     }
     getAuthData()
 
-    // Listen for auth state changes (e.g., on login)
+    // Listen for auth state changes (e.g., on login, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
+      // Update provider token and email on sign in or token refresh
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
         setProviderToken(session.provider_token || null)
         setUserEmail(session.user?.email || null)
-        // Reset flags on new sign-in
-        hasInitiatedSyncsRef.current = false
-        calendarSyncInitiatedRef.current = false
-        threadSyncStartedRef.current = false
+        
+        // Reset flags on new sign-in (but not on token refresh)
+        if (event === 'SIGNED_IN') {
+          hasInitiatedSyncsRef.current = false
+          calendarSyncInitiatedRef.current = false
+          threadSyncStartedRef.current = false
+        }
       }
     })
 
@@ -98,8 +102,28 @@ export default function DashboardSyncManager() {
 
   // Main sync orchestration logic
   useEffect(() => {
+    // Before checking, refresh session data to ensure we have the latest provider_token
+    const refreshSessionData = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        // Update state if session has provider_token but state doesn't
+        if (session.provider_token && !providerToken) {
+          setProviderToken(session.provider_token)
+        }
+        if (session.user?.email && !userEmail) {
+          setUserEmail(session.user.email)
+        }
+      }
+    }
+    
     // Only proceed if we have the required tokens and haven't already initiated syncs
-    if (!providerToken || !userEmail || hasInitiatedSyncsRef.current) {
+    if (!providerToken || !userEmail) {
+      // Try refreshing session data once before giving up
+      refreshSessionData()
+      return
+    }
+    
+    if (hasInitiatedSyncsRef.current) {
       return
     }
 
