@@ -1,9 +1,17 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import Link from 'next/link'
 import { CheckCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import { apiFetchJson } from '@/lib/api-client'
+import EditablePill from './EditablePill'
+import { useSupabase } from '@/components/SupabaseProvider'
+import { getThreadById } from '@/lib/threads/queries'
+import ThreadConversationView from './ThreadConversationView'
+import MeetingDetailView from './MeetingDetailView'
+import { LLMSummary } from '@/lib/types/threads'
+import type { Database } from '@/types/database'
+
+type Meeting = Database['public']['Tables']['meetings']['Row']
 
 interface DashboardFeatureRequest {
   id: string
@@ -17,6 +25,8 @@ interface DashboardFeatureRequest {
   completed: boolean
   first_requested: string | null
   last_requested: string | null
+  owner: string | null
+  meeting_id: number | null
 }
 
 interface FeatureRequestsSectionProps {
@@ -30,22 +40,71 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
   const [completedExpanded, setCompletedExpanded] = useState(false)
   const [updatingRequestId, setUpdatingRequestId] = useState<string | null>(null)
   const [localFeatureRequests, setLocalFeatureRequests] = useState<DashboardFeatureRequest[]>(featureRequests)
+  const supabase = useSupabase()
 
-  // Build navigation URL for feature request
-  const getFeatureRequestUrl = (fr: DashboardFeatureRequest): string => {
-    if (!fr.company_id) return '#'
-    
+  // Modal state for thread/meeting views
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
+  const [selectedThreadSummary, setSelectedThreadSummary] = useState<LLMSummary | { error: string } | null>(null)
+  const [loadingThread, setLoadingThread] = useState<boolean>(false)
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null)
+  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null)
+  const [loadingMeeting, setLoadingMeeting] = useState<boolean>(false)
+
+  // Open source modal (thread or meeting)
+  const openSourceModal = async (fr: DashboardFeatureRequest) => {
     if (fr.source === 'thread' && fr.source_id) {
-      return `/dashboard/customer-threads/${fr.company_id}?thread=${fr.source_id}`
+      setLoadingThread(true)
+      setSelectedThreadId(fr.source_id)
+      setSelectedMeetingId(null)
+      setSelectedMeeting(null)
+      
+      try {
+        const { data: thread, error: threadError } = await getThreadById(supabase, fr.source_id)
+        
+        if (threadError || !thread) {
+          console.error('Thread fetch error:', threadError)
+          setSelectedThreadSummary({ error: threadError?.message || 'Thread not found' })
+        } else {
+          setSelectedThreadSummary(thread.llm_summary)
+        }
+      } catch (err) {
+        console.error('Error fetching thread:', err)
+        setSelectedThreadSummary({ error: 'Failed to load thread' })
+      } finally {
+        setLoadingThread(false)
+      }
     } else if (fr.source === 'meeting' && fr.source_id) {
-      // Navigate to company page - meeting will be shown in interaction timeline
-      return `/dashboard/customer-threads/${fr.company_id}`
+      setLoadingMeeting(true)
+      // source_id for meetings is the meeting_id converted to string
+      // We need to use it to find the meeting by google_event_id
+      setSelectedMeetingId(fr.source_id)
+      setSelectedThreadId(null)
+      setSelectedThreadSummary(null)
+      
+      try {
+        // Fetch meeting by google_event_id (source_id is the meeting identifier)
+        const { data: meeting, error: meetingError } = await supabase
+          .from('meetings')
+          .select('*')
+          .eq('google_event_id', fr.source_id)
+          .single()
+        
+        if (meetingError || !meeting) {
+          console.error('Error fetching meeting:', meetingError)
+          setSelectedMeeting(null)
+        } else {
+          setSelectedMeeting(meeting)
+        }
+      } catch (err) {
+        console.error('Error fetching meeting:', err)
+        setSelectedMeeting(null)
+      } finally {
+        setLoadingMeeting(false)
+      }
     } else if (fr.source === 'email') {
-      // Legacy email source - navigate to company page
-      return `/dashboard/customer-threads/${fr.company_id}`
+      // Legacy email source - show message or handle appropriately
+      alert('Email source feature requests are not yet supported in the modal view.')
     }
-    
-    return `/dashboard/customer-threads/${fr.company_id}`
   }
 
   // Format date for display
@@ -97,7 +156,66 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
     }
   }
 
-  // Get urgency badge styles
+  // Update priority (urgency)
+  const updatePriority = async (fr: DashboardFeatureRequest, priority: string | null) => {
+    setUpdatingRequestId(fr.id)
+    try {
+      const updated = await apiFetchJson<DashboardFeatureRequest>(
+        `/api/feature-requests/${fr.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ priority }),
+        }
+      )
+
+      setLocalFeatureRequests(
+        localFeatureRequests.map((r) => (r.id === fr.id ? updated : r))
+      )
+    } catch (err) {
+      console.error('Error updating priority:', err)
+      throw err
+    } finally {
+      setUpdatingRequestId(null)
+    }
+  }
+
+  // Update owner
+  const updateOwner = async (fr: DashboardFeatureRequest, owner: string | null) => {
+    setUpdatingRequestId(fr.id)
+    try {
+      const updated = await apiFetchJson<DashboardFeatureRequest>(
+        `/api/feature-requests/${fr.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ owner }),
+        }
+      )
+
+      setLocalFeatureRequests(
+        localFeatureRequests.map((r) => (r.id === fr.id ? updated : r))
+      )
+    } catch (err) {
+      console.error('Error updating owner:', err)
+      throw err
+    } finally {
+      setUpdatingRequestId(null)
+    }
+  }
+
+  // Priority options for EditablePill
+  const priorityOptions = [
+    { value: 'High', label: 'High', className: 'bg-red-50 text-red-700 border border-red-200' },
+    { value: 'Medium', label: 'Medium', className: 'bg-yellow-50 text-yellow-700 border border-yellow-200' },
+    { value: 'Low', label: 'Low', className: 'bg-gray-100 text-gray-800 border border-gray-200' }
+  ]
+
+  // Get urgency badge styles (for read-only display)
   const getUrgencyStyles = (urgency: 'Low' | 'Medium' | 'High'): string => {
     switch (urgency) {
       case 'High':
@@ -212,7 +330,6 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
             {/* Active Feature Requests */}
             {sortedFeatureRequests.length > 0 && (
               sortedFeatureRequests.map((fr) => {
-                const url = getFeatureRequestUrl(fr)
                 const sourceLabel = getSourceLabel(fr.source)
                 
                 return (
@@ -221,9 +338,12 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
                     className="block p-4 rounded-lg border border-gray-200 hover:shadow-md transition-all hover:bg-gray-50"
                   >
                     <div className="flex items-start justify-between mb-3">
-                      <Link href={url} className="flex-1">
-                        <h4 className="font-semibold text-gray-900 text-base">{fr.title}</h4>
-                      </Link>
+                      <button
+                        onClick={() => openSourceModal(fr)}
+                        className="flex-1 text-left"
+                      >
+                        <h4 className="font-semibold text-gray-900 text-base hover:text-blue-600 transition-colors">{fr.title}</h4>
+                      </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
@@ -240,33 +360,47 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
                       </button>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {/* Urgency Badge */}
-                      <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${getUrgencyStyles(fr.urgency)}`}>
-                        {fr.urgency}
-                      </span>
-                      {/* Company Name Badge */}
+                      {/* Priority Pill (Editable) */}
+                      <EditablePill
+                        label="Priority"
+                        value={fr.urgency}
+                        options={priorityOptions}
+                        onChange={(value) => updatePriority(fr, value)}
+                        isLoading={updatingRequestId === fr.id}
+                      />
+                      {/* Owner Pill (Editable) */}
+                      <EditablePill
+                        label="Owner"
+                        value={fr.owner}
+                        onChange={(value) => updateOwner(fr, value)}
+                        isLoading={updatingRequestId === fr.id}
+                      />
+                      {/* Company Name Badge (Read-only) */}
                       <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                         {fr.company_name}
                       </span>
-                      {/* Date Badge */}
+                      {/* Date Badge (Read-only) */}
                       <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200">
                         {formatDate(fr.requested_at)}
                       </span>
-                      {/* Source Badge */}
-                      <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
-                        fr.source === 'meeting' 
-                          ? 'bg-green-50 text-green-700 border border-green-200'
-                          : 'bg-purple-50 text-purple-700 border border-purple-200'
-                      }`}>
+                      {/* Source Badge (Read-only, clickable for modal) */}
+                      <button
+                        onClick={() => openSourceModal(fr)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer hover:shadow-md transition-all ${
+                          fr.source === 'meeting' 
+                            ? 'bg-green-50 text-green-700 border border-green-200'
+                            : 'bg-purple-50 text-purple-700 border border-purple-200'
+                        }`}
+                      >
                         {sourceLabel}
-                      </span>
-                      {/* First Requested Badge */}
+                      </button>
+                      {/* First Requested Badge (Read-only) */}
                       {fr.first_requested && (
                         <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
                           First: {formatDate(fr.first_requested)}
                         </span>
                       )}
-                      {/* Last Requested Badge */}
+                      {/* Last Requested Badge (Read-only) */}
                       {fr.last_requested && (
                         <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
                           Last: {formatDate(fr.last_requested)}
@@ -296,7 +430,6 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
                 {completedExpanded && (
                   <div className="space-y-4">
                     {sortedCompletedRequests.map((fr) => {
-                      const url = getFeatureRequestUrl(fr)
                       const sourceLabel = getSourceLabel(fr.source)
                       
                       return (
@@ -305,9 +438,12 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
                           className="block p-4 rounded-lg border border-gray-200 hover:shadow-md transition-all hover:bg-gray-50 opacity-75"
                         >
                           <div className="flex items-start justify-between mb-3">
-                            <Link href={url} className="flex-1">
-                              <h4 className="font-semibold text-gray-900 text-base">{fr.title}</h4>
-                            </Link>
+                            <button
+                              onClick={() => openSourceModal(fr)}
+                              className="flex-1 text-left"
+                            >
+                              <h4 className="font-semibold text-gray-900 text-base hover:text-blue-600 transition-colors">{fr.title}</h4>
+                            </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -324,33 +460,47 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
                             </button>
                           </div>
                           <div className="flex flex-wrap gap-2">
-                            {/* Urgency Badge */}
-                            <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${getUrgencyStyles(fr.urgency)}`}>
-                              {fr.urgency}
-                            </span>
-                            {/* Company Name Badge */}
+                            {/* Priority Pill (Editable) */}
+                            <EditablePill
+                              label="Priority"
+                              value={fr.urgency}
+                              options={priorityOptions}
+                              onChange={(value) => updatePriority(fr, value)}
+                              isLoading={updatingRequestId === fr.id}
+                            />
+                            {/* Owner Pill (Editable) */}
+                            <EditablePill
+                              label="Owner"
+                              value={fr.owner}
+                              onChange={(value) => updateOwner(fr, value)}
+                              isLoading={updatingRequestId === fr.id}
+                            />
+                            {/* Company Name Badge (Read-only) */}
                             <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                               {fr.company_name}
                             </span>
-                            {/* Date Badge */}
+                            {/* Date Badge (Read-only) */}
                             <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200">
                               {formatDate(fr.requested_at)}
                             </span>
-                            {/* Source Badge */}
-                            <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
-                              fr.source === 'meeting' 
-                                ? 'bg-green-50 text-green-700 border border-green-200'
-                                : 'bg-purple-50 text-purple-700 border border-purple-200'
-                            }`}>
+                            {/* Source Badge (Read-only, clickable for modal) */}
+                            <button
+                              onClick={() => openSourceModal(fr)}
+                              className={`px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer hover:shadow-md transition-all ${
+                                fr.source === 'meeting' 
+                                  ? 'bg-green-50 text-green-700 border border-green-200'
+                                  : 'bg-purple-50 text-purple-700 border border-purple-200'
+                              }`}
+                            >
                               {sourceLabel}
-                            </span>
-                            {/* First Requested Badge */}
+                            </button>
+                            {/* First Requested Badge (Read-only) */}
                             {fr.first_requested && (
                               <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
                                 First: {formatDate(fr.first_requested)}
                               </span>
                             )}
-                            {/* Last Requested Badge */}
+                            {/* Last Requested Badge (Read-only) */}
                             {fr.last_requested && (
                               <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
                                 Last: {formatDate(fr.last_requested)}
@@ -367,6 +517,76 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
           </>
         )}
       </div>
+
+      {/* Thread Conversation Modal Overlay */}
+      {selectedThreadId && (
+        <div 
+          className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedThreadId(null)
+              setSelectedThreadSummary(null)
+            }
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl h-full max-h-[90vh] overflow-hidden flex flex-col"
+          >
+            {loadingThread ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <p className="ml-4 text-gray-600">Loading thread...</p>
+              </div>
+            ) : (
+              <ThreadConversationView
+                threadId={selectedThreadId}
+                threadSummary={selectedThreadSummary}
+                onClose={() => {
+                  setSelectedThreadId(null)
+                  setSelectedThreadSummary(null)
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Meeting Detail Modal Overlay */}
+      {selectedMeetingId && (
+        <div 
+          className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedMeetingId(null)
+              setSelectedMeeting(null)
+            }
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl h-full max-h-[90vh] overflow-hidden flex flex-col"
+          >
+            {loadingMeeting ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <p className="ml-4 text-gray-600">Loading meeting...</p>
+              </div>
+            ) : selectedMeeting ? (
+              <MeetingDetailView
+                meeting={selectedMeeting}
+                companyId={localFeatureRequests.find(fr => fr.source === 'meeting' && fr.source_id === selectedMeetingId)?.company_id || ''}
+                onClose={() => {
+                  setSelectedMeetingId(null)
+                  setSelectedMeeting(null)
+                }}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-red-600">
+                <p>Failed to load meeting details</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

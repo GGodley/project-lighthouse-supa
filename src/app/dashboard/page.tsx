@@ -29,6 +29,8 @@ interface DashboardFeatureRequest {
   completed: boolean
   first_requested: string | null
   last_requested: string | null
+  owner: string | null
+  meeting_id: number | null
 }
 
 export default async function DashboardPage() {
@@ -114,7 +116,7 @@ export default async function DashboardPage() {
         // Fetch feature requests
         const { data: featureRequestsData } = await supabase
           .from('feature_requests')
-          .select('id, company_id, feature_id, requested_at, source, email_id, meeting_id, thread_id, urgency, completed')
+          .select('id, company_id, feature_id, requested_at, source, email_id, meeting_id, thread_id, urgency, completed, owner')
           .in('company_id', companyIds)
           .limit(50)
 
@@ -161,7 +163,9 @@ export default async function DashboardPage() {
                   urgency: (fr.urgency || 'Low') as 'Low' | 'Medium' | 'High',
                   completed: fr.completed || false,
                   first_requested: feature?.first_requested || null,
-                  last_requested: feature?.last_requested || null
+                  last_requested: feature?.last_requested || null,
+                  owner: fr.owner || null,
+                  meeting_id: fr.meeting_id
                 }
               })
               .filter(fr => fr.title !== 'Unknown Feature') // Filter out any with missing features

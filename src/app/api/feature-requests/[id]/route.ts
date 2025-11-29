@@ -17,11 +17,47 @@ export async function PATCH(
 
     // Parse request body
     const body = await request.json();
-    const { completed } = body;
+    const { completed, priority, owner } = body;
 
-    if (typeof completed !== 'boolean') {
+    // Build update object with only provided fields
+    const updateData: any = {};
+
+    if (typeof completed === 'boolean') {
+      updateData.completed = completed;
+    }
+
+    if (priority !== undefined) {
+      // Validate priority values
+      if (!['Low', 'Medium', 'High'].includes(priority)) {
+        return NextResponse.json(
+          { error: 'Invalid priority value. Must be Low, Medium, or High' },
+          { status: 400 }
+        );
+      }
+      updateData.urgency = priority;
+    }
+
+    if (owner !== undefined) {
+      // Validate owner is a string and not too long
+      if (typeof owner !== 'string' && owner !== null) {
+        return NextResponse.json(
+          { error: 'Invalid owner value. Must be a string or null' },
+          { status: 400 }
+        );
+      }
+      if (owner && owner.length > 255) {
+        return NextResponse.json(
+          { error: 'Owner value is too long. Maximum 255 characters' },
+          { status: 400 }
+        );
+      }
+      updateData.owner = owner || null;
+    }
+
+    // If no valid fields to update, return error
+    if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
-        { error: 'Invalid request body. completed must be a boolean' },
+        { error: 'No valid fields to update. Provide completed, priority, or owner' },
         { status: 400 }
       );
     }
@@ -59,7 +95,7 @@ export async function PATCH(
     // Update the feature request
     const { data: updated, error: updateError } = await supabase
       .from('feature_requests')
-      .update({ completed })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();

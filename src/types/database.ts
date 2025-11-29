@@ -222,6 +222,7 @@ export type Database = {
           feature_id: string
           id: string
           meeting_id: number | null
+          owner: string | null
           request_details: string | null
           requested_at: string
           source: Database["public"]["Enums"]["feature_request_source"] | null
@@ -238,6 +239,7 @@ export type Database = {
           feature_id: string
           id?: string
           meeting_id?: number | null
+          owner?: string | null
           request_details?: string | null
           requested_at?: string
           source?: Database["public"]["Enums"]["feature_request_source"] | null
@@ -254,6 +256,7 @@ export type Database = {
           feature_id?: string
           id?: string
           meeting_id?: number | null
+          owner?: string | null
           request_details?: string | null
           requested_at?: string
           source?: Database["public"]["Enums"]["feature_request_source"] | null
