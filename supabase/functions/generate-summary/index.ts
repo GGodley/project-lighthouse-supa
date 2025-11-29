@@ -62,11 +62,34 @@ Deno.serve(async (req) => {
       - "Negative" (Score: -2): Frustrated, confused, mentioned blockers, unhappy with a feature or price.
       - "Frustrated" (Score: -3): Explicitly angry, threatening to churn, multiple major issues.
 
-      Feature Request Urgency:
-      If you find a feature request, assign an urgency:
-      - "Low": A "nice to have" suggestion.
-      - "Medium": A feature that would provide significant value.
-      - "High": A critical request, blocker, or deal-breaker.
+      Feature Request Detection & Extraction:
+
+      1. Detect Feature Requests
+
+      Identify any sentence or paragraph where the customer is:
+      • Requesting a new feature
+      • Suggesting an improvement
+      • Reporting a limitation that implies a feature is missing
+      • Asking for a capability that doesn't exist yet
+
+      If no feature requests exist, return an empty array [].
+
+      2. Extract & Summarize Each Feature Request
+
+      For every feature request found:
+      • Title (generic, short): A brief name that represents the feature conceptually (e.g., "Bulk User Editing", "API Export for Reports").
+      • Customer Description (raw meaning): A 1–2 sentence summary of what the customer is asking for, in your own words. Keep it specific enough to understand the context, but generic enough to compare across customers.
+      • Use Case / Problem: Why the customer wants it; what problem they are trying to solve.
+      • Urgency Level: Categorize as:
+        * High – Blocking workflows, time-sensitive, critical pain.
+        * Medium – Important but not blocking.
+        * Low – Nice-to-have or long-term improvement.
+      • Signals that justify the urgency rating: Quote or paraphrase the phrasing that indicates priority (e.g. "we need this before Q1 launch," "this is causing delays," "not urgent but useful").
+      • Customer Impact: Who is affected and how (1 sentence).
+
+      3. Additional Rules
+      • Make all titles and descriptions general enough that similar requests across customers can be grouped later.
+      • Be consistent in naming patterns so clustering will work well.
 
       Response Format:
       Return a valid JSON object with exactly five keys:
@@ -87,10 +110,13 @@ Deno.serve(async (req) => {
       
       "sentiment_score": The numeric score (e.g., 2, -2) that corresponds to the chosen sentiment.
 
-      "feature_requests": An array of objects. Each object must have three keys:
-        - "feature_title": A concise, generic title for the feature (e.g., "API Rate Limiting", "Mobile App Improvements").
-        - "request_details": A string summary of the specific feature being requested.
-        - "urgency": A string chosen from the Urgency levels ('Low', 'Medium', 'High'). 
+      "feature_requests": An array of objects. Each object must have these keys:
+        - "title": A brief name that represents the feature conceptually (e.g., "Bulk User Editing", "API Export for Reports")
+        - "customer_description": A 1–2 sentence summary of what the customer is asking for, in your own words
+        - "use_case": Why the customer wants it; what problem they are trying to solve
+        - "urgency": A string chosen from the Urgency levels ('Low', 'Medium', 'High')
+        - "urgency_signals": Quote or paraphrase the phrasing that indicates priority
+        - "customer_impact": Who is affected and how (1 sentence)
       If no feature requests are found, return an empty array [].
     `;
 

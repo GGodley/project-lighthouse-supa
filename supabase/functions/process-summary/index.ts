@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { saveFeatureRequests, FeatureRequest } from '../_shared/feature-request-utils.ts';
+import { mapFeatureRequests } from '../_shared/feature-request-mapper.ts';
 
 Deno.serve(async (req)=>{
   try {
@@ -54,19 +55,9 @@ Deno.serve(async (req)=>{
       const score = parsed.sentiment_score;
       sentimentScore = typeof score === 'number' && score >= -3 && score <= 3 ? score : 0;
 
-      // Parse feature requests with validation
+      // Parse feature requests with validation (supports both new and old format)
       if (Array.isArray(parsed.feature_requests)) {
-        featureRequests = parsed.feature_requests.filter((req: any) => 
-          typeof req === 'object' && 
-          req !== null &&
-          typeof req.feature_title === 'string' &&
-          typeof req.request_details === 'string' &&
-          ['Low', 'Medium', 'High'].includes(req.urgency)
-        ).map((req: any) => ({
-          feature_title: req.feature_title.trim(),
-          request_details: req.request_details.trim(),
-          urgency: req.urgency as 'Low' | 'Medium' | 'High'
-        }));
+        featureRequests = mapFeatureRequests(parsed.feature_requests);
       }
 
     } catch (e) {
