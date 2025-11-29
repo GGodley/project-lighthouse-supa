@@ -88,7 +88,7 @@ const ConsiderTouchingBase: React.FC = () => {
   }
 
   return (
-    <div className="glass-card rounded-2xl p-6 flex flex-col h-full">
+    <div className="glass-card rounded-2xl p-6">
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-gray-900">Consider Touching Base</h2>
         <p className="text-sm text-gray-600 mt-1">
@@ -119,7 +119,7 @@ const ConsiderTouchingBase: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="max-h-[450px] overflow-y-auto">
         <table className="glass-table w-full text-sm text-left rounded-xl">
             <thead className="glass-table-header sticky top-0 z-10">
               <tr className="bg-inherit">
