@@ -161,7 +161,8 @@ export default async function DashboardPage() {
         }
       }
 
-      // Fetch customer count data directly from database (server-side)
+      // Fetch company count data directly from database (server-side)
+      // This matches the logic in the customer threads table
       let customerData = {
         currentCount: 0,
         percentageChange: null as number | null,
@@ -169,14 +170,20 @@ export default async function DashboardPage() {
       }
 
       try {
-        // Get current active customer count from profiles table (fast lookup)
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('active_customer_count')
-          .eq('id', user.id)
-          .single()
+        // Get current active company count (excluding archived/deleted)
+        // This matches the customer threads table which filters out archived companies
+        const { data: allCompanies } = await supabase
+          .from('companies')
+          .select('company_id, status')
+          .eq('user_id', user.id)
 
-        const currentCount = profile?.active_customer_count ?? 0
+        // Filter out archived companies (keep NULL and all other statuses)
+        // This matches the logic in /api/customers route
+        const activeCompanies = (allCompanies || []).filter(
+          company => company.status !== 'archived'
+        )
+
+        const currentCount = activeCompanies.length
 
         // Get previous month's count
         const now = new Date()
