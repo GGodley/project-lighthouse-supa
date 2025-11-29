@@ -78,13 +78,46 @@ export default async function DashboardPage() {
       // Fetch feature requests for this user
       // Query ALL feature_requests for the user's companies (excluding archived/deleted)
       // This query runs on every page load to get the latest data
-      console.log(`[Dashboard] Querying feature_requests for user: ${user.id}`)
+      console.log(`[Dashboard] ========== FEATURE REQUESTS QUERY START ==========`)
+      console.log(`[Dashboard] User ID: ${user.id}`)
+      
+      // Target feature request from user's example
+      const targetFeatureRequestId = '23ee4593-ed26-4a00-963b-46ad252ef86b'
+      const targetCompanyId = '0209c036-58ab-48ee-8f8b-301bab92fe89'
       
       // First get active company IDs for filtering (exclude archived/deleted)
-      const { data: allUserCompanies } = await supabase
+      console.log(`[Dashboard] Step 1: Fetching all companies for user...`)
+      const { data: allUserCompanies, error: companiesError } = await supabase
         .from('companies')
-        .select('company_id, company_name, status')
+        .select('company_id, company_name, status, user_id')
         .eq('user_id', user.id)
+      
+      if (companiesError) {
+        console.error(`[Dashboard] Step 1 ERROR:`, companiesError)
+      }
+      
+      console.log(`[Dashboard] Step 1 Result: Found ${allUserCompanies?.length || 0} total companies`)
+      if (allUserCompanies && allUserCompanies.length > 0) {
+        console.log(`[Dashboard] Step 1 Details:`, allUserCompanies.map(c => ({
+          company_id: c.company_id,
+          company_name: c.company_name,
+          status: c.status,
+          user_id: c.user_id
+        })))
+      }
+      
+      // Check if target company exists and belongs to user
+      const targetCompany = allUserCompanies?.find(c => c.company_id === targetCompanyId)
+      console.log(`[Dashboard] Step 1.5: Checking target company ${targetCompanyId}:`, {
+        found: !!targetCompany,
+        company: targetCompany ? {
+          company_id: targetCompany.company_id,
+          company_name: targetCompany.company_name,
+          status: targetCompany.status,
+          user_id: targetCompany.user_id
+        } : null,
+        belongsToUser: targetCompany?.user_id === user.id
+      })
       
       // Filter out archived and deleted companies
       const activeCompanies = (allUserCompanies || []).filter(
@@ -94,11 +127,17 @@ export default async function DashboardPage() {
       const companyIds = activeCompanies.map(c => c.company_id)
       const companyMap = new Map(activeCompanies.map(c => [c.company_id, c.company_name]))
       
-      console.log(`[Dashboard] Found ${companyIds.length} active companies for user (out of ${allUserCompanies?.length || 0} total)`)
+      console.log(`[Dashboard] Step 2: Filtered to ${companyIds.length} active companies (excluded archived/deleted)`)
+      console.log(`[Dashboard] Step 2 Active Company IDs:`, companyIds)
+      console.log(`[Dashboard] Step 2 Company Map:`, Array.from(companyMap.entries()))
+      console.log(`[Dashboard] Step 2.5: Target company ${targetCompanyId} is active:`, companyIds.includes(targetCompanyId))
       
       if (companyIds.length === 0) {
-        console.warn(`[Dashboard] No active companies found for user ${user.id}. Cannot fetch feature requests.`)
+        console.warn(`[Dashboard] Step 2 Result: No active companies found for user ${user.id}. Cannot fetch feature requests.`)
       } else {
+        console.log(`[Dashboard] Step 3: Querying feature_requests for ${companyIds.length} company IDs...`)
+        console.log(`[Dashboard] Step 3 Query: SELECT * FROM feature_requests WHERE company_id IN (${companyIds.join(', ')}) AND company_id IS NOT NULL`)
+        
         const { data: featureRequestsData, error: featureRequestsError } = await supabase
           .from('feature_requests')
           .select(`
@@ -120,15 +159,40 @@ export default async function DashboardPage() {
           .order('requested_at', { ascending: false })
           .limit(50)
 
+        console.log(`[Dashboard] Step 3 Query executed`)
+        
         if (featureRequestsError) {
-          console.error(`[Dashboard] Error fetching feature requests:`, featureRequestsError)
+          console.error(`[Dashboard] Step 3 ERROR:`, featureRequestsError)
+          console.error(`[Dashboard] Step 3 ERROR Details:`, JSON.stringify(featureRequestsError, null, 2))
+        } else {
+          console.log(`[Dashboard] Step 3 Success: Query returned ${featureRequestsData?.length || 0} rows`)
         }
 
         if (featureRequestsData && featureRequestsData.length > 0) {
-          console.log(`[Dashboard] Found ${featureRequestsData.length} feature requests for user ${user.id}`)
-          console.log(`[Dashboard] Sample feature request:`, featureRequestsData[0])
+          console.log(`[Dashboard] Step 4: Found ${featureRequestsData.length} feature requests`)
+          console.log(`[Dashboard] Step 4 Raw Data (first 3):`, featureRequestsData.slice(0, 3).map(fr => ({
+            id: fr.id,
+            company_id: fr.company_id,
+            request_details: fr.request_details?.substring(0, 50) + '...',
+            requested_at: fr.requested_at,
+            source: fr.source
+          })))
+          
+          // Check if the specific feature request from user's example is in the results
+          const targetFeatureRequest = featureRequestsData.find(fr => fr.id === targetFeatureRequestId)
+          console.log(`[Dashboard] Step 4.5: Checking target feature request ${targetFeatureRequestId}:`, {
+            found: !!targetFeatureRequest,
+            featureRequest: targetFeatureRequest ? {
+              id: targetFeatureRequest.id,
+              company_id: targetFeatureRequest.company_id,
+              source: targetFeatureRequest.source,
+              request_details: targetFeatureRequest.request_details?.substring(0, 50) + '...'
+            } : null,
+            allIds: featureRequestsData.map(fr => fr.id)
+          })
           
           // Transform feature requests data
+          console.log(`[Dashboard] Step 5: Transforming feature requests data...`)
           const transformed = featureRequestsData
             .map((fr) => {
               // Determine source_id based on source type
@@ -166,14 +230,45 @@ export default async function DashboardPage() {
             })
             
           featureRequests = transformed
-          console.log(`[Dashboard] Final feature requests count: ${featureRequests.length}`)
+          console.log(`[Dashboard] Step 6: Transformation complete. Final count: ${featureRequests.length}`)
           if (featureRequests.length > 0) {
-            console.log(`[Dashboard] Sample final feature request:`, featureRequests[0])
+            console.log(`[Dashboard] Step 6 Sample (first):`, {
+              id: featureRequests[0].id,
+              title: featureRequests[0].title?.substring(0, 50),
+              company_name: featureRequests[0].company_name,
+              company_id: featureRequests[0].company_id
+            })
           }
         } else {
-          console.log(`[Dashboard] No feature requests found for user ${user.id} in ${companyIds.length} active companies`)
+          console.log(`[Dashboard] Step 4: No feature requests found in query results`)
+          console.log(`[Dashboard] Step 4 Debug: Query returned ${featureRequestsData?.length || 0} rows`)
+          
+          // Additional debug: Check if feature requests exist for the target company
+          console.log(`[Dashboard] Step 4.5: Debugging - Checking feature requests for target company ${targetCompanyId}...`)
+          const { data: debugFeatureRequests, error: debugError } = await supabase
+            .from('feature_requests')
+            .select('id, company_id, request_details, requested_at, source')
+            .eq('company_id', targetCompanyId)
+            .limit(5)
+          
+          if (debugError) {
+            console.error(`[Dashboard] Step 4.5 ERROR:`, debugError)
+          } else {
+            console.log(`[Dashboard] Step 4.5 Result: Found ${debugFeatureRequests?.length || 0} feature requests for target company`)
+            if (debugFeatureRequests && debugFeatureRequests.length > 0) {
+              console.log(`[Dashboard] Step 4.5 Details:`, debugFeatureRequests.map(fr => ({
+                id: fr.id,
+                company_id: fr.company_id,
+                source: fr.source,
+                request_details: fr.request_details?.substring(0, 50) + '...'
+              })))
+            }
+          }
         }
       }
+      
+      console.log(`[Dashboard] ========== FEATURE REQUESTS QUERY END ==========`)
+      console.log(`[Dashboard] Final featureRequests array length: ${featureRequests.length}`)
 
       // Fetch company count data directly from database (server-side)
       // This matches the logic in the customer threads table
