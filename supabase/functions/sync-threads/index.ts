@@ -1633,6 +1633,68 @@ serve(async (req: Request) => {
                       }
                       console.log(`✅ [FEATURE_REQUEST_DEBUG] Found ${fallbackCustomers.length} customers for fallback companies`);
                     }
+                    
+                    // For companies without customers, create customers from fallbackEmails
+                    for (const comp of domainCompanies) {
+                      if (!companyCustomerMap.has(comp.company_id)) {
+                        console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] Company ${comp.company_id} has no customers, creating one from thread emails`);
+                        
+                        // Find matching email for this company's domain
+                        const matchingEmail = Array.from(fallbackEmails).find(e => e.split('@')[1] === comp.domain_name);
+                        const emailToUse = matchingEmail || Array.from(fallbackEmails)[0];
+                        
+                        if (emailToUse) {
+                          // Extract customer name from email headers if available
+                          let customerName = emailToUse;
+                          for (const msg of messages) {
+                            const msgHeaders = msg.payload?.headers || [];
+                            const fromHeader = msgHeaders.find((h: any) => h.name.toLowerCase() === 'from')?.value || '';
+                            if (fromHeader.includes(emailToUse)) {
+                              const extractedName = fromHeader.split('<')[0].trim().replace(/"/g, '');
+                              if (extractedName && extractedName !== emailToUse) {
+                                customerName = extractedName;
+                              }
+                              break;
+                            }
+                          }
+                          
+                          const { data: newCustomer, error: customerError } = await supabaseAdmin
+                            .from('customers')
+                            .upsert({
+                              email: emailToUse,
+                              full_name: customerName,
+                              company_id: comp.company_id
+                            }, {
+                              onConflict: 'company_id, email',
+                              ignoreDuplicates: false
+                            })
+                            .select('customer_id')
+                            .single();
+                          
+                          if (!customerError && newCustomer?.customer_id) {
+                            companyCustomerMap.set(comp.company_id, newCustomer.customer_id);
+                            console.log(`✅ [FEATURE_REQUEST_DEBUG] Created customer ${newCustomer.customer_id} (${customerName}) for existing company ${comp.company_id}`);
+                          } else {
+                            // Try to find existing customer after failed upsert (duplicate key scenario)
+                            const { data: existingCustomer } = await supabaseAdmin
+                              .from('customers')
+                              .select('customer_id')
+                              .eq('company_id', comp.company_id)
+                              .eq('email', emailToUse)
+                              .maybeSingle();
+                            
+                            if (existingCustomer?.customer_id) {
+                              companyCustomerMap.set(comp.company_id, existingCustomer.customer_id);
+                              console.log(`✅ [FEATURE_REQUEST_DEBUG] Found existing customer ${existingCustomer.customer_id} after upsert failure`);
+                            } else {
+                              console.error(`❌ [FEATURE_REQUEST_DEBUG] Failed to create/find customer for company ${comp.company_id}:`, customerError);
+                            }
+                          }
+                        } else {
+                          console.error(`❌ [FEATURE_REQUEST_DEBUG] No emails available to create customer for company ${comp.company_id}`);
+                        }
+                      }
+                    }
                   } else {
                     // Companies don't exist yet - create them now from domains
                     console.log(`🔍 [FEATURE_REQUEST_DEBUG] Companies don't exist for domains, creating them now`);
