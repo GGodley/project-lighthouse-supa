@@ -1,9 +1,10 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import { Users, Calendar, Mail, TrendingUp, ArrowUp, ArrowDown } from 'lucide-react'
+import { Users, Calendar, TrendingUp, ArrowUp, ArrowDown } from 'lucide-react'
 import SyncEmailsButton from '@/components/SyncEmailsButton'
 import ConsiderTouchingBase from '@/components/ConsiderTouchingBase'
 import FeatureRequestsSection from '@/components/FeatureRequestsSection'
+import HealthDistributionChart from '@/components/HealthDistributionChart'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +12,6 @@ interface DashboardStats {
   totalClients: number
   activeClients: number
   upcomingMeetings: number
-  recentEmails: number
   totalCustomers: number
   customerCountChange: number | null
   customerCountTrend: 'up' | 'down' | 'neutral'
@@ -63,12 +63,10 @@ export default async function DashboardPage() {
     totalClients: 0,
     activeClients: 0,
     upcomingMeetings: 0,
-    recentEmails: 0,
     totalCustomers: 0,
     customerCountChange: null,
     customerCountTrend: 'neutral'
   }
-  let recentEmails: Array<{ id: number; subject: string | null; sender: string | null; received_at: string | null; snippet: string | null }> = []
   let featureRequests: DashboardFeatureRequest[] = []
 
   try {
@@ -86,16 +84,6 @@ export default async function DashboardPage() {
         .select('*')
         .eq('user_id', user.id)
         .gte('start_time', new Date().toISOString())
-
-      // Fetch recent emails
-      const { data: emails } = await supabase
-        .from('emails')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('received_at', { ascending: false })
-        .limit(10)
-
-      recentEmails = emails || []
 
       // Fetch feature requests
       // First, get all active company IDs for this user (exclude archived/deleted)
@@ -243,7 +231,6 @@ export default async function DashboardPage() {
         totalClients: clients?.length || 0,
         activeClients: clients?.filter(c => c.status === 'Healthy').length || 0,
         upcomingMeetings: meetings?.length || 0,
-        recentEmails: (emails || []).length,
         totalCustomers: customerData.currentCount,
         customerCountChange: customerData.percentageChange,
         customerCountTrend: customerData.trend
@@ -289,13 +276,6 @@ export default async function DashboardPage() {
       icon: Calendar,
       color: 'bg-purple-500',
       change: '+5%'
-    },
-    {
-      title: 'Recent Emails',
-      value: stats.recentEmails,
-      icon: Mail,
-      color: 'bg-red-500',
-      change: '+15%'
     }
   ]
 
@@ -361,26 +341,8 @@ export default async function DashboardPage() {
             <ConsiderTouchingBase />
         </div>
 
-            <div className="lg:col-span-2 bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">10 Most Recent Emails</h3>
-              <div className="divide-y">
-                {recentEmails.length === 0 ? (
-                  <div className="text-gray-500">No emails found. Go to Emails tab to sync.</div>
-                ) : (
-                  recentEmails.map((e) => (
-                    <div key={e.id} className="py-3">
-                      <div className="flex items-center justify-between">
-                        <div className="font-medium text-gray-900 truncate">{e.subject || 'No Subject'}</div>
-                        <div className="text-xs text-gray-500 ml-4 whitespace-nowrap">
-                          {e.received_at ? new Date(e.received_at).toLocaleString() : ''}
-                        </div>
-                      </div>
-                      <div className="text-sm text-gray-600 truncate">From: {e.sender}</div>
-                      <div className="text-sm text-gray-500 line-clamp-2">{e.snippet}</div>
-                    </div>
-                  ))
-                )}
-              </div>
+            <div className="lg:col-span-2">
+              <HealthDistributionChart />
             </div>
           </div>
 
