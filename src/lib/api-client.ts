@@ -103,100 +103,24 @@ async function handleUnauthorized(currentPath: string): Promise<void> {
 }
 
 /**
- * Validates the current session before making an API call
- * Returns true if session is valid, false if expired/invalid
- */
-async function validateSessionBeforeCall(): Promise<boolean> {
-  if (typeof window === 'undefined') {
-    // Server-side, skip validation
-    return true;
-  }
-
-  try {
-    const supabase = createClient();
-    
-    // Check if we have a session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (!session || sessionError) {
-      console.log('🔄 apiFetch: No session found, will redirect on 401');
-      return false;
-    }
-
-    // Check if session is expired
-    if (session.expires_at) {
-      const expiresAt = new Date(session.expires_at * 1000); // expires_at is in seconds
-      const now = new Date();
-      const timeUntilExpiry = expiresAt.getTime() - now.getTime();
-
-      // If expired or expiring within 1 minute, treat as expired
-      if (timeUntilExpiry <= 60 * 1000) {
-        console.log('🔄 apiFetch: Session expired or expiring soon');
-        return false;
-      }
-    }
-
-    // Validate session by calling getUser()
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (!user || userError) {
-      console.log('🔄 apiFetch: Session validation failed', userError?.message);
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error('Error validating session in apiFetch:', error);
-    return false;
-  }
-}
-
-/**
- * Options for apiFetch and apiFetchJson
- */
-export interface ApiFetchOptions {
-  /** Whether to validate session before making the API call (default: false) */
-  validateSession?: boolean;
-}
-
-/**
  * Custom fetch wrapper that intercepts 401 responses
  * 
  * @param input - Same as native fetch() input parameter
  * @param init - Same as native fetch() init parameter
- * @param options - Optional configuration for session validation
  * @returns Promise<Response>
  * 
  * @example
  * ```ts
  * const response = await apiFetch('/api/customers');
  * const data = await response.json();
- * 
- * // With session validation before call
- * const response = await apiFetch('/api/customers', {}, { validateSession: true });
  * ```
  */
 export async function apiFetch(
   input: RequestInfo | URL,
-  init?: RequestInit,
-  options?: ApiFetchOptions
+  init?: RequestInit
 ): Promise<Response> {
   // Get current pathname for returnUrl
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/';
-
-  // Optionally validate session before making the call
-  if (options?.validateSession) {
-    const isValid = await validateSessionBeforeCall();
-    if (!isValid) {
-      // Session is invalid, trigger redirect immediately
-      await handleUnauthorized(currentPath);
-      // Return a 401 response so calling code can handle it
-      return new Response(JSON.stringify({ error: 'Unauthorized - session expired' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-  }
 
   try {
     const response = await fetch(input, init);
@@ -246,23 +170,18 @@ export async function apiFetch(
  * 
  * @param input - Same as native fetch() input parameter
  * @param init - Same as native fetch() init parameter
- * @param options - Optional configuration for session validation
  * @returns Promise with parsed JSON data
  * 
  * @example
  * ```ts
  * const data = await apiFetchJson('/api/customers');
- * 
- * // With session validation before call
- * const data = await apiFetchJson('/api/customers', {}, { validateSession: true });
  * ```
  */
 export async function apiFetchJson<T = unknown>(
   input: RequestInfo | URL,
-  init?: RequestInit,
-  options?: ApiFetchOptions
+  init?: RequestInit
 ): Promise<T> {
-  const response = await apiFetch(input, init, options);
+  const response = await apiFetch(input, init);
 
   if (!response.ok) {
     // If it's a 401, we've already handled the redirect

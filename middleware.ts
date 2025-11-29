@@ -27,50 +27,15 @@ export async function middleware(request: NextRequest) {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   const { pathname } = request.nextUrl;
 
-  // Check for authentication errors that indicate expired or invalid tokens
-  // Common error messages: "JWT expired", "Invalid JWT", "refresh_token_not_found"
-  const isTokenExpiredError = authError && (
-    authError.message?.toLowerCase().includes('expired') ||
-    authError.message?.toLowerCase().includes('invalid jwt') ||
-    authError.message?.toLowerCase().includes('refresh_token')
-  );
-
-  // Also check session expiration if available
-  let isSessionExpired = false;
-  if (!isTokenExpiredError && !authError) {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.expires_at) {
-        const expiresAt = new Date(session.expires_at * 1000); // expires_at is in seconds
-        const now = new Date();
-        // If expired or expiring within 1 minute, treat as expired
-        isSessionExpired = expiresAt.getTime() - now.getTime() <= 60 * 1000;
-      }
-    } catch (error) {
-      // If we can't check the session, assume it might be expired
-      console.error('Error checking session expiration in middleware:', error);
-    }
-  }
-
-  // Protect dashboard routes - redirect to login if not authenticated or token expired
+  // Protect dashboard routes - redirect to login if not authenticated
   // Supabase SSR automatically handles token refresh, so if getUser() returns null,
-  // or if there's an auth error indicating expired token, redirect to login
-  if ((!user || isTokenExpiredError || isSessionExpired) && pathname.startsWith('/dashboard')) {
+  // it means the token is expired and can't be refreshed
+  if (!user && pathname.startsWith('/dashboard')) {
     // Preserve returnUrl for post-login redirect
     const returnUrl = pathname !== '/dashboard' ? encodeURIComponent(pathname) : undefined;
     const loginUrl = returnUrl 
       ? `/login?returnUrl=${returnUrl}`
       : '/login';
-    
-    // Log the reason for redirect for debugging
-    if (isTokenExpiredError) {
-      console.log('🔄 Middleware: Token expired error detected, redirecting to login');
-    } else if (isSessionExpired) {
-      console.log('🔄 Middleware: Session expired, redirecting to login');
-    } else if (!user) {
-      console.log('🔄 Middleware: No user found, redirecting to login');
-    }
-    
     return NextResponse.redirect(new URL(loginUrl, request.url));
   }
 
