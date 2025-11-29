@@ -572,10 +572,12 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
               <MeetingDetailView
                 meeting={selectedMeeting}
                 companyId={localFeatureRequests.find(fr => {
-                  if (fr.source !== 'meeting' || !fr.meeting_id) return false
+                  if (fr.source !== 'meeting' || !fr.meeting_id || !selectedMeeting) return false
                   // Match by meeting_id (database ID) or google_event_id
-                  const meeting = selectedMeeting as any
-                  return fr.meeting_id === meeting.id || fr.source_id === meeting.google_event_id
+                  // The meetings table has an 'id' field (BIGINT primary key) that may not be in the type definition
+                  // We use type assertion to access it safely
+                  const meetingWithId = selectedMeeting as Meeting & { id: number }
+                  return fr.meeting_id === meetingWithId.id || fr.source_id === selectedMeeting.google_event_id
                 })?.company_id || ''}
                 onClose={() => {
                   setSelectedMeetingId(null)
