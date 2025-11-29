@@ -103,6 +103,13 @@ export default async function DashboardPage() {
         const companyIds = userCompanies.map(c => c.company_id)
         const companyMap = new Map(userCompanies.map(c => [c.company_id, c.company_name]))
         
+        // Validate company IDs
+        if (companyIds.length === 0) {
+          console.warn(`[Dashboard] No company IDs to query!`)
+        } else if (companyIds.some(id => !id)) {
+          console.warn(`[Dashboard] Some company IDs are null/undefined:`, companyIds)
+        }
+        
         // Fetch feature requests (explicitly filter out null company_ids)
         console.log(`[Dashboard] Querying feature_requests for ${companyIds.length} companies:`, companyIds)
         const { data: featureRequestsData, error: featureRequestsError } = await supabase
