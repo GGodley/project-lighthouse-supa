@@ -1691,13 +1691,97 @@ serve(async (req: Request) => {
                               companyCustomerMap.set(newCompany.company_id, customer.customer_id);
                               console.log(`✅ [FEATURE_REQUEST_DEBUG] Created customer ${customer.customer_id} (${customerName}) for company ${newCompany.company_id}`);
                             } else {
-                              console.error(`❌ [FEATURE_REQUEST_DEBUG] Failed to create/find customer for company ${newCompany.company_id}. Error:`, customerError);
-                              console.error(`❌ [FEATURE_REQUEST_DEBUG] Company ${newCompany.company_id} will not be used for feature requests since customer creation failed`);
-                              // Don't add company to discoveredCompanyIds if customer creation fails
+                              // Customer creation failed - try fallback approaches
+                              console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] Customer creation failed for ${matchingEmail}, attempting fallbacks`);
+                              
+                              // Fallback 1: Try to find any existing customer for this company
+                              const { data: existingCustomer } = await supabaseAdmin
+                                .from('customers')
+                                .select('customer_id')
+                                .eq('company_id', newCompany.company_id)
+                                .limit(1)
+                                .maybeSingle();
+                              
+                              if (existingCustomer?.customer_id) {
+                                discoveredCompanyIds.set(newCompany.company_id, true);
+                                companyCustomerMap.set(newCompany.company_id, existingCustomer.customer_id);
+                                console.log(`✅ [FEATURE_REQUEST_DEBUG] Found existing customer ${existingCustomer.customer_id} for company ${newCompany.company_id}`);
+                              } else {
+                                // Fallback 2: Create customer with first email from fallbackEmails (even if domain doesn't match exactly)
+                                const firstEmail = Array.from(fallbackEmails)[0];
+                                if (firstEmail) {
+                                  console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] Creating customer with first available email ${firstEmail} for company ${newCompany.company_id}`);
+                                  const fallbackCustomerName = firstEmail.split('@')[0].split('.').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                                  
+                                  const { data: fallbackCustomer, error: fallbackError } = await supabaseAdmin
+                                    .from('customers')
+                                    .upsert({
+                                      email: firstEmail,
+                                      full_name: fallbackCustomerName,
+                                      company_id: newCompany.company_id
+                                    }, {
+                                      onConflict: 'company_id, email',
+                                      ignoreDuplicates: false
+                                    })
+                                    .select('customer_id')
+                                    .single();
+                                  
+                                  if (!fallbackError && fallbackCustomer?.customer_id) {
+                                    discoveredCompanyIds.set(newCompany.company_id, true);
+                                    companyCustomerMap.set(newCompany.company_id, fallbackCustomer.customer_id);
+                                    console.log(`✅ [FEATURE_REQUEST_DEBUG] Created fallback customer ${fallbackCustomer.customer_id} for company ${newCompany.company_id}`);
+                                  } else {
+                                    console.error(`❌ [FEATURE_REQUEST_DEBUG] All customer creation attempts failed for company ${newCompany.company_id}`);
+                                  }
+                                } else {
+                                  console.error(`❌ [FEATURE_REQUEST_DEBUG] No emails available to create customer for company ${newCompany.company_id}`);
+                                }
+                              }
                             }
                           } else {
-                            console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] No matching email found for domain ${domain}, cannot create customer`);
-                            // Don't add company to discoveredCompanyIds if no email match
+                            // No matching email found - use first email from fallbackEmails
+                            const firstEmail = Array.from(fallbackEmails)[0];
+                            if (firstEmail) {
+                              console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] No exact domain match, creating customer with first available email ${firstEmail} for company ${newCompany.company_id}`);
+                              const customerName = firstEmail.split('@')[0].split('.').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                              
+                              const { data: fallbackCustomer, error: fallbackError } = await supabaseAdmin
+                                .from('customers')
+                                .upsert({
+                                  email: firstEmail,
+                                  full_name: customerName,
+                                  company_id: newCompany.company_id
+                                }, {
+                                  onConflict: 'company_id, email',
+                                  ignoreDuplicates: false
+                                })
+                                .select('customer_id')
+                                .single();
+                              
+                              if (!fallbackError && fallbackCustomer?.customer_id) {
+                                discoveredCompanyIds.set(newCompany.company_id, true);
+                                companyCustomerMap.set(newCompany.company_id, fallbackCustomer.customer_id);
+                                console.log(`✅ [FEATURE_REQUEST_DEBUG] Created customer ${fallbackCustomer.customer_id} with first email for company ${newCompany.company_id}`);
+                              } else {
+                                // Try to find any existing customer for this company
+                                const { data: existingCustomer } = await supabaseAdmin
+                                  .from('customers')
+                                  .select('customer_id')
+                                  .eq('company_id', newCompany.company_id)
+                                  .limit(1)
+                                  .maybeSingle();
+                                
+                                if (existingCustomer?.customer_id) {
+                                  discoveredCompanyIds.set(newCompany.company_id, true);
+                                  companyCustomerMap.set(newCompany.company_id, existingCustomer.customer_id);
+                                  console.log(`✅ [FEATURE_REQUEST_DEBUG] Found existing customer ${existingCustomer.customer_id} for company ${newCompany.company_id}`);
+                                } else {
+                                  console.error(`❌ [FEATURE_REQUEST_DEBUG] Cannot create customer for company ${newCompany.company_id} - all attempts failed`);
+                                }
+                              }
+                            } else {
+                              console.error(`❌ [FEATURE_REQUEST_DEBUG] No emails available to create customer for company ${newCompany.company_id}`);
+                            }
                           }
                         }
                       } catch (err) {
