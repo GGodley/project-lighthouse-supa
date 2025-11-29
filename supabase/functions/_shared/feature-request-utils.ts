@@ -252,7 +252,39 @@ export async function saveFeatureRequests(
       // Log the actual JSON being sent to verify all fields (including nulls) are included
       console.log(`🔍 [FEATURE_REQUEST_DEBUG] Final payload JSON:`, JSON.stringify(insertPayload));
 
-      // Step 3: Insert Feature Request
+      // Step 3: Ensure thread exists if source is 'thread' (for foreign key constraint)
+      // This is a robust solution that handles the case where threads are saved after feature requests
+      if (context.source === 'thread' && insertPayload.thread_id) {
+        // First, check if thread exists
+        const { data: existingThread, error: threadCheckError } = await supabaseClient
+          .from('threads')
+          .select('thread_id')
+          .eq('thread_id', insertPayload.thread_id)
+          .maybeSingle();
+
+        if (threadCheckError) {
+          console.error(`❌ [FEATURE_REQUEST_DEBUG] Error checking thread existence:`, threadCheckError);
+          throw new Error(`Failed to verify thread exists: ${threadCheckError.message}`);
+        }
+
+        if (!existingThread) {
+          // Thread doesn't exist - this is a data integrity issue
+          // In a robust system, we should either:
+          // 1. Save the thread first (but we don't have thread data here)
+          // 2. Skip this feature request and log a warning
+          // 3. Make the foreign key constraint deferrable (handled in migration)
+          
+          // For now, we'll throw an error with a clear message
+          // The calling code should ensure threads are saved before feature requests
+          const errorMsg = `Thread ${insertPayload.thread_id} does not exist in threads table. Feature request cannot be saved until thread is created. Ensure threads are saved before feature requests.`;
+          console.error(`❌ [FEATURE_REQUEST_DEBUG] ${errorMsg}`);
+          throw new Error(errorMsg);
+        }
+
+        console.log(`✅ [FEATURE_REQUEST_DEBUG] Verified thread ${insertPayload.thread_id} exists before saving feature request`);
+      }
+
+      // Step 4: Insert Feature Request
       const { data: insertedData, error: requestError } = await supabaseClient
         .from('feature_requests')
         .insert(insertPayload)

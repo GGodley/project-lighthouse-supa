@@ -1940,6 +1940,52 @@ serve(async (req: Request) => {
                 }
 
                 // Save feature requests for this company/customer
+                // IMPORTANT: Ensure thread exists in database before saving feature requests
+                // This is necessary because threads are saved in batch later, but feature requests need the foreign key
+                const { data: existingThread, error: threadCheckError } = await supabaseAdmin
+                  .from('threads')
+                  .select('thread_id')
+                  .eq('thread_id', threadId)
+                  .maybeSingle();
+
+                if (threadCheckError) {
+                  console.error(`❌ [FEATURE_REQUEST_DEBUG] Error checking thread existence:`, threadCheckError);
+                  console.error(`❌ [FEATURE_REQUEST_DEBUG] Skipping feature requests for thread ${threadId} due to thread check error`);
+                  continue;
+                }
+
+                if (!existingThread) {
+                  // Thread doesn't exist yet - find it in threadsToStore and save it immediately
+                  const threadToSave = threadsToStore.find(t => t.thread_id === threadId);
+                  
+                  if (threadToSave) {
+                    console.log(`🔍 [FEATURE_REQUEST_DEBUG] Thread ${threadId} not in database yet, saving it immediately before feature requests`);
+                    
+                    // Save thread immediately
+                    const { error: threadSaveError, data: savedThread } = await supabaseAdmin
+                      .from('threads')
+                      .upsert(threadToSave, {
+                        onConflict: 'thread_id',
+                        ignoreDuplicates: false
+                      })
+                      .select('thread_id')
+                      .single();
+
+                    if (threadSaveError || !savedThread) {
+                      console.error(`❌ [FEATURE_REQUEST_DEBUG] Failed to save thread ${threadId} immediately:`, threadSaveError);
+                      console.error(`❌ [FEATURE_REQUEST_DEBUG] Skipping feature requests for thread ${threadId}`);
+                      continue;
+                    }
+
+                    console.log(`✅ [FEATURE_REQUEST_DEBUG] Successfully saved thread ${threadId} immediately before feature requests`);
+                  } else {
+                    console.error(`❌ [FEATURE_REQUEST_DEBUG] Thread ${threadId} not found in threadsToStore and not in database. Cannot save feature requests.`);
+                    continue;
+                  }
+                } else {
+                  console.log(`✅ [FEATURE_REQUEST_DEBUG] Thread ${threadId} already exists in database`);
+                }
+
                 // Log thread_id details for debugging
                 console.log(`🔍 [FEATURE_REQUEST_DEBUG] Preparing to save feature requests for thread:`, {
                   threadId: threadId,
