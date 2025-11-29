@@ -110,9 +110,8 @@ export default async function DashboardPage() {
           console.warn(`[Dashboard] Some company IDs are null/undefined:`, companyIds)
         }
         
-        // Fetch feature requests with features JOIN (same approach as company profile)
-        // This ensures we only get feature requests that have matching features
-        console.log(`[Dashboard] Querying feature_requests with features JOIN for ${companyIds.length} companies:`, companyIds)
+        // Fetch feature requests directly (no JOIN with features table)
+        console.log(`[Dashboard] Querying feature_requests for ${companyIds.length} companies:`, companyIds)
         
         const { data: featureRequestsData, error: featureRequestsError } = await supabase
           .from('feature_requests')
@@ -120,6 +119,7 @@ export default async function DashboardPage() {
             id,
             company_id,
             feature_id,
+            request_details,
             requested_at,
             source,
             email_id,
@@ -127,11 +127,11 @@ export default async function DashboardPage() {
             thread_id,
             urgency,
             completed,
-            owner,
-            features!inner(id, title, first_requested, last_requested)
+            owner
           `)
           .in('company_id', companyIds)
           .not('company_id', 'is', null)
+          .order('requested_at', { ascending: false })
           .limit(50)
 
         if (featureRequestsError) {
@@ -139,12 +139,12 @@ export default async function DashboardPage() {
         }
 
         if (featureRequestsData && featureRequestsData.length > 0) {
-          console.log(`[Dashboard] Found ${featureRequestsData.length} feature requests with matching features`)
+          console.log(`[Dashboard] Found ${featureRequestsData.length} feature requests`)
           console.log(`[Dashboard] Sample feature request:`, featureRequestsData[0])
           
-          // Transform feature requests data (features are already joined)
+          // Transform feature requests data
           const transformed = featureRequestsData
-            .map((fr: any) => {
+            .map((fr) => {
               // Determine source_id based on source type
               let sourceId: string | null = null
               if (fr.source === 'thread' && fr.thread_id) {
@@ -155,24 +155,16 @@ export default async function DashboardPage() {
                 sourceId = fr.email_id.toString()
               }
 
-              // Features are joined via !inner, Supabase returns as nested object/array
-              // Handle both array and object formats
-              let feature: any = null
-              if (fr.features) {
-                if (Array.isArray(fr.features)) {
-                  feature = fr.features[0] || null
-                } else {
-                  feature = fr.features
-                }
-              }
-              
-              if (!feature) {
-                console.warn(`[Dashboard] Feature request ${fr.id} has no feature data despite inner join!`)
-              }
+              // Use request_details as title, or truncate if too long
+              const title = fr.request_details 
+                ? (fr.request_details.length > 100 
+                    ? fr.request_details.substring(0, 100) + '...' 
+                    : fr.request_details)
+                : 'Feature Request'
 
               return {
                 id: fr.id,
-                title: feature?.title || 'Unknown Feature',
+                title: title,
                 company_name: companyMap.get(fr.company_id) || 'Unknown Company',
                 company_id: fr.company_id,
                 requested_at: fr.requested_at,
@@ -180,8 +172,8 @@ export default async function DashboardPage() {
                 source_id: sourceId,
                 urgency: (fr.urgency || 'Low') as 'Low' | 'Medium' | 'High',
                 completed: fr.completed || false,
-                first_requested: feature?.first_requested || null,
-                last_requested: feature?.last_requested || null,
+                first_requested: null, // Not available without features table
+                last_requested: null, // Not available without features table
                 owner: fr.owner || null,
                 meeting_id: fr.meeting_id
               }
