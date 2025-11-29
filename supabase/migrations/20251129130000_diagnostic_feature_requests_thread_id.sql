@@ -30,13 +30,13 @@ WHERE fr.source = 'thread'
 ORDER BY fr.requested_at DESC
 LIMIT 20;
 
--- 3. Check if we can backfill thread_id from thread_links table
+-- 3. Check if we can backfill thread_id from thread_company_link table
 -- This query finds feature_requests that might be linkable to threads via company_id
 SELECT 
   fr.id as feature_request_id,
   fr.company_id,
   fr.requested_at,
-  tl.thread_id,
+  tcl.thread_id,
   t.last_message_date,
   CASE 
     WHEN ABS(EXTRACT(EPOCH FROM (fr.requested_at::timestamp - t.last_message_date::timestamp))) < 86400 
@@ -46,8 +46,8 @@ SELECT
     ELSE 'More than 7 days'
   END as time_proximity
 FROM feature_requests fr
-INNER JOIN thread_links tl ON fr.company_id = tl.company_id
-INNER JOIN threads t ON tl.thread_id = t.thread_id
+INNER JOIN thread_company_link tcl ON fr.company_id = tcl.company_id
+INNER JOIN threads t ON tcl.thread_id = t.thread_id
 WHERE fr.source = 'thread' 
   AND fr.thread_id IS NULL
   AND ABS(EXTRACT(EPOCH FROM (fr.requested_at::timestamp - t.last_message_date::timestamp))) < 604800  -- Within 7 days

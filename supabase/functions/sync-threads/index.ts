@@ -1575,79 +1575,152 @@ serve(async (req: Request) => {
                 console.error(`❌ [FEATURE_REQUEST_DEBUG] Feature requests that will be lost:`, JSON.stringify(featureRequests, null, 2));
                 console.error(`❌ [FEATURE_REQUEST_DEBUG] Thread messages count: ${messages.length}, discoveredCustomerIds: ${discoveredCustomerIds.size}`);
                 
-                // FALLBACK: Try to find companies from thread_links table (if thread was previously processed)
-                console.log(`🔍 [FEATURE_REQUEST_DEBUG] Attempting fallback: checking thread_links for thread ${threadId}`);
-                const { data: existingLinks } = await supabaseAdmin
-                  .from('thread_links')
-                  .select('company_id')
-                  .eq('thread_id', threadId)
-                  .eq('user_id', userId);
-                
-                if (existingLinks && existingLinks.length > 0) {
-                  console.log(`✅ [FEATURE_REQUEST_DEBUG] Found ${existingLinks.length} existing thread_links, using those companies`);
-                  for (const link of existingLinks) {
-                    discoveredCompanyIds.set(link.company_id, true);
-                  }
+                // FALLBACK 1: Re-extract companies from thread messages (in case discovery loop had issues)
+                console.log(`🔍 [FEATURE_REQUEST_DEBUG] Attempting fallback: re-extracting companies from thread messages`);
+                const fallbackEmails = new Set<string>();
+                for (const msg of messages) {
+                  const msgHeaders = msg.payload?.headers || [];
+                  const fromHeader = msgHeaders.find((h: any) => h.name.toLowerCase() === 'from')?.value || '';
+                  const toHeader = msgHeaders.find((h: any) => h.name.toLowerCase() === 'to')?.value || '';
+                  const ccHeader = msgHeaders.find((h: any) => h.name.toLowerCase() === 'cc')?.value || '';
                   
-                  // Try to find customers for these companies
-                  const fallbackCompanyIds = Array.from(discoveredCompanyIds.keys());
-                  const { data: fallbackCustomers } = await supabaseAdmin
-                    .from('customers')
-                    .select('customer_id, company_id')
-                    .in('company_id', fallbackCompanyIds)
-                    .limit(1);
-                  
-                  if (fallbackCustomers && fallbackCustomers.length > 0) {
-                    const fallbackCustomer = fallbackCustomers[0];
-                    discoveredCustomerIds.set('fallback', fallbackCustomer.customer_id);
-                    companyCustomerMap.set(fallbackCustomer.company_id, fallbackCustomer.customer_id);
-                    console.log(`✅ [FEATURE_REQUEST_DEBUG] Found fallback customer ${fallbackCustomer.customer_id} for company ${fallbackCustomer.company_id}`);
-                  } else {
-                    // Last resort: Get user's first active company and create a placeholder customer
-                    console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] No customers found for fallback companies. Attempting to use user's first active company.`);
-                    const { data: userCompanies } = await supabaseAdmin
-                      .from('companies')
-                      .select('company_id')
-                      .eq('user_id', userId)
-                      .neq('status', 'archived')
-                      .neq('status', 'deleted')
-                      .limit(1);
-                    
-                    if (userCompanies && userCompanies.length > 0) {
-                      const fallbackCompanyId = userCompanies[0].company_id;
-                      discoveredCompanyIds.set(fallbackCompanyId, true);
-                      console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] Using user's first active company ${fallbackCompanyId} as fallback. Feature requests will be saved but may not be linked to correct customer.`);
-                      // Note: We'll need to handle missing customer_id in saveFeatureRequests
+                  const allHeaders = [fromHeader, toHeader, ccHeader];
+                  for (const header of allHeaders) {
+                    const emails = header.match(/[\w.-]+@[\w.-]+\.\w+/g) || [];
+                    for (const email of emails) {
+                      if (email !== userEmail) {
+                        fallbackEmails.add(email);
+                      }
                     }
                   }
-                } else {
-                  // Last resort: Use user's first active company
-                  console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] No thread_links found. Using user's first active company as fallback.`);
-                  const { data: userCompanies } = await supabaseAdmin
-                    .from('companies')
-                    .select('company_id')
-                    .eq('user_id', userId)
-                    .neq('status', 'archived')
-                    .neq('status', 'deleted')
-                    .limit(1);
+                }
+                
+                // Try to find companies for these emails
+                if (fallbackEmails.size > 0) {
+                  const fallbackDomains = Array.from(fallbackEmails).map(e => e.split('@')[1]).filter(Boolean);
+                  const uniqueDomains = [...new Set(fallbackDomains)];
                   
-                  if (userCompanies && userCompanies.length > 0) {
-                    const fallbackCompanyId = userCompanies[0].company_id;
-                    discoveredCompanyIds.set(fallbackCompanyId, true);
-                    console.warn(`⚠️ [FEATURE_REQUEST_DEBUG] Using user's first active company ${fallbackCompanyId} as fallback.`);
+                  console.log(`🔍 [FEATURE_REQUEST_DEBUG] Found ${uniqueDomains.length} unique domains from thread: ${uniqueDomains.join(', ')}`);
+                  
+                  // Query for companies matching these domains
+                  const { data: domainCompanies } = await supabaseAdmin
+                    .from('companies')
+                    .select('company_id, domain_name')
+                    .eq('user_id', userId)
+                    .in('domain_name', uniqueDomains)
+                    .neq('status', 'archived')
+                    .neq('status', 'deleted');
+                  
+                  if (domainCompanies && domainCompanies.length > 0) {
+                    console.log(`✅ [FEATURE_REQUEST_DEBUG] Found ${domainCompanies.length} companies matching thread domains`);
+                    for (const comp of domainCompanies) {
+                      discoveredCompanyIds.set(comp.company_id, true);
+                    }
                     
-                    // Try to get any customer for this company
+                    // Try to find customers for these companies
+                    const fallbackCompanyIds = Array.from(discoveredCompanyIds.keys());
                     const { data: fallbackCustomers } = await supabaseAdmin
                       .from('customers')
                       .select('customer_id, company_id')
-                      .eq('company_id', fallbackCompanyId)
-                      .limit(1);
+                      .in('company_id', fallbackCompanyIds);
                     
                     if (fallbackCustomers && fallbackCustomers.length > 0) {
-                      companyCustomerMap.set(fallbackCompanyId, fallbackCustomers[0].customer_id);
-                      console.log(`✅ [FEATURE_REQUEST_DEBUG] Found customer ${fallbackCustomers[0].customer_id} for fallback company`);
+                      for (const customer of fallbackCustomers) {
+                        if (!companyCustomerMap.has(customer.company_id)) {
+                          companyCustomerMap.set(customer.company_id, customer.customer_id);
+                        }
+                      }
+                      console.log(`✅ [FEATURE_REQUEST_DEBUG] Found ${fallbackCustomers.length} customers for fallback companies`);
+                    }
+                  } else {
+                    // Companies don't exist yet - create them now from domains
+                    console.log(`🔍 [FEATURE_REQUEST_DEBUG] Companies don't exist for domains, creating them now`);
+                    for (const domain of uniqueDomains) {
+                      try {
+                        const companyName = domain.split('.')[0].split('-').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                        const { data: newCompany, error: companyError } = await supabaseAdmin
+                          .from('companies')
+                          .upsert({
+                            domain_name: domain,
+                            company_name: companyName,
+                            user_id: userId
+                          }, {
+                            onConflict: 'user_id, domain_name',
+                            ignoreDuplicates: false
+                          })
+                          .select('company_id')
+                          .single();
+                        
+                        if (!companyError && newCompany?.company_id) {
+                          discoveredCompanyIds.set(newCompany.company_id, true);
+                          console.log(`✅ [FEATURE_REQUEST_DEBUG] Created company ${newCompany.company_id} for domain ${domain}`);
+                          
+                          // Try to find or create a customer for this company
+                          const matchingEmail = Array.from(fallbackEmails).find(e => e.split('@')[1] === domain);
+                          if (matchingEmail) {
+                            const { data: customer, error: customerError } = await supabaseAdmin
+                              .from('customers')
+                              .upsert({
+                                email: matchingEmail,
+                                full_name: matchingEmail,
+                                company_id: newCompany.company_id
+                              }, {
+                                onConflict: 'company_id, email',
+                                ignoreDuplicates: false
+                              })
+                              .select('customer_id')
+                              .single();
+                            
+                            if (!customerError && customer?.customer_id) {
+                              companyCustomerMap.set(newCompany.company_id, customer.customer_id);
+                              console.log(`✅ [FEATURE_REQUEST_DEBUG] Created customer ${customer.customer_id} for company ${newCompany.company_id}`);
+                            }
+                          }
+                        }
+                      } catch (err) {
+                        console.error(`❌ [FEATURE_REQUEST_DEBUG] Error creating company for domain ${domain}:`, err);
+                      }
                     }
                   }
+                }
+                
+                // FALLBACK 2: Try to find companies from thread_links table (if thread was previously processed)
+                if (discoveredCompanyIds.size === 0) {
+                  console.log(`🔍 [FEATURE_REQUEST_DEBUG] Still no companies, checking thread_company_link for thread ${threadId}`);
+                  const { data: existingLinks } = await supabaseAdmin
+                    .from('thread_company_link')
+                    .select('company_id')
+                    .eq('thread_id', threadId)
+                    .eq('user_id', userId);
+                  
+                  if (existingLinks && existingLinks.length > 0) {
+                    console.log(`✅ [FEATURE_REQUEST_DEBUG] Found ${existingLinks.length} existing thread_links, using those companies`);
+                    for (const link of existingLinks) {
+                      discoveredCompanyIds.set(link.company_id, true);
+                    }
+                    
+                    // Try to find customers for these companies
+                    const fallbackCompanyIds = Array.from(discoveredCompanyIds.keys());
+                    const { data: fallbackCustomers } = await supabaseAdmin
+                      .from('customers')
+                      .select('customer_id, company_id')
+                      .in('company_id', fallbackCompanyIds);
+                    
+                    if (fallbackCustomers && fallbackCustomers.length > 0) {
+                      for (const customer of fallbackCustomers) {
+                        if (!companyCustomerMap.has(customer.company_id)) {
+                          companyCustomerMap.set(customer.company_id, customer.customer_id);
+                        }
+                      }
+                      console.log(`✅ [FEATURE_REQUEST_DEBUG] Found ${fallbackCustomers.length} customers for thread_link companies`);
+                    }
+                  }
+                }
+                
+                // Final check: If still no companies, this is a critical error
+                if (discoveredCompanyIds.size === 0) {
+                  console.error(`❌ [FEATURE_REQUEST_DEBUG] CRITICAL: All fallbacks failed. Cannot save feature requests without a company.`);
+                  console.error(`❌ [FEATURE_REQUEST_DEBUG] This should not happen if thread has valid email addresses.`);
                 }
               }
 
