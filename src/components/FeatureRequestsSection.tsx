@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import { CheckCircle, ChevronDown, ChevronRight } from 'lucide-react'
+import { CheckCircle, ChevronDown, ChevronRight, Users } from 'lucide-react'
 import { apiFetchJson } from '@/lib/api-client'
 import EditablePill from './EditablePill'
 import { useSupabase } from '@/components/SupabaseProvider'
@@ -163,7 +163,8 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
   const toggleFeatureRequest = async (fr: DashboardFeatureRequest) => {
     setUpdatingRequestId(fr.id)
     try {
-      const updated = await apiFetchJson<DashboardFeatureRequest>(
+      // API returns database row with status, not completed
+      const response = await apiFetchJson<FeatureRequestRow>(
         `/api/feature-requests/${fr.id}`,
         {
           method: 'PATCH',
@@ -173,6 +174,14 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
           body: JSON.stringify({ completed: !fr.completed }),
         }
       )
+
+      // Transform API response to DashboardFeatureRequest
+      // Compute completed from status: status IN ('resolved', 'closed')
+      const isCompleted = response.status === 'resolved' || response.status === 'closed'
+      const updated: DashboardFeatureRequest = {
+        ...fr,
+        completed: isCompleted,
+      }
 
       // Update local state
       setLocalFeatureRequests(
@@ -454,14 +463,14 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
               <div className="mt-6">
                 <button
                   onClick={() => setCompletedExpanded(!completedExpanded)}
-                  className="flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-gray-900 transition-colors mb-3"
+                  className="flex items-center gap-2 mb-3 w-full text-left"
                 >
-                  {completedExpanded ? (
-                    <ChevronDown className="w-4 h-4" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4" />
-                  )}
-                  <span>Completed Feature Requests ({completedRequests.length})</span>
+                  <Users className="h-5 w-5 text-gray-500" />
+                  <h4 className="font-semibold">Deployed Feature Requests</h4>
+                  <span className="ml-auto text-sm text-gray-500">
+                    ({completedRequests.length})
+                    {completedExpanded ? <ChevronDown className="w-4 h-4 inline ml-1" /> : <ChevronRight className="w-4 h-4 inline ml-1" />}
+                  </span>
                 </button>
                 
                 {completedExpanded && (
@@ -472,14 +481,14 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
                       return (
                         <div
                           key={fr.id}
-                          className="block p-4 rounded-lg border border-gray-200 hover:shadow-md transition-all hover:bg-gray-50 opacity-75"
+                          className="block p-4 rounded-lg border border-gray-200 bg-green-50 hover:shadow-md transition-all"
                         >
                           <div className="flex items-start justify-between mb-3">
                             <button
                               onClick={() => openSourceModal(fr)}
                               className="flex-1 text-left"
                             >
-                              <h4 className="font-semibold text-gray-900 text-base hover:text-blue-600 transition-colors">{fr.title}</h4>
+                              <h4 className="font-semibold text-gray-700 text-base hover:text-blue-600 transition-colors line-through">{fr.title}</h4>
                             </button>
                             <button
                               onClick={(e) => {
@@ -489,7 +498,7 @@ const FeatureRequestsSection: React.FC<FeatureRequestsSectionProps> = ({ feature
                               disabled={updatingRequestId === fr.id}
                               className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ml-2 ${
                                 fr.completed
-                                  ? 'bg-blue-600 border-blue-600'
+                                  ? 'bg-green-600 border-green-600'
                                   : 'border-gray-300 hover:border-blue-600'
                               } ${updatingRequestId === fr.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                             >

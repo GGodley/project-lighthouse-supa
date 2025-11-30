@@ -26,12 +26,12 @@ export async function PATCH(
     // Only include fields that we know exist in production
     const updateData: Partial<FeatureRequestUpdate> = {};
 
-    // Note: completed and owner columns may not exist in production
-    // Only update them if they're explicitly provided and the migration has been run
+    // Handle completed field - map to status column
+    // Database uses status column, not completed column
+    // completed = true -> status = 'resolved'
+    // completed = false -> status = 'open'
     if (typeof completed === 'boolean') {
-      // Only include if we're sure the column exists
-      // For now, skip this to avoid errors if column doesn't exist
-      // updateData.completed = completed;
+      updateData.status = completed ? 'resolved' : 'open';
     }
 
     if (priority !== undefined) {
@@ -69,6 +69,14 @@ export async function PATCH(
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
         { error: 'No valid fields to update. Provide completed, priority, or owner' },
+        { status: 400 }
+      );
+    }
+
+    // Validate status value if it's being updated
+    if (updateData.status && !['open', 'in_progress', 'resolved', 'closed', 'rejected'].includes(updateData.status)) {
+      return NextResponse.json(
+        { error: 'Invalid status value. Must be one of: open, in_progress, resolved, closed, rejected' },
         { status: 400 }
       );
     }

@@ -150,7 +150,8 @@ export default async function DashboardPage() {
             email_id,
             meeting_id,
             thread_id,
-            urgency
+            urgency,
+            status
           `)
           .in('company_id', companyIds)
           .not('company_id', 'is', null)
@@ -210,6 +211,10 @@ export default async function DashboardPage() {
                     : fr.request_details)
                 : 'Feature Request'
 
+              // Compute completed boolean from status
+              // Completed = status IN ('resolved', 'closed')
+              const isCompleted = fr.status === 'resolved' || fr.status === 'closed'
+
               return {
                 id: fr.id,
                 title: title,
@@ -219,7 +224,7 @@ export default async function DashboardPage() {
                 source: (fr.source || 'thread') as 'email' | 'meeting' | 'thread',
                 source_id: sourceId,
                 urgency: (fr.urgency || 'Low') as 'Low' | 'Medium' | 'High',
-                completed: false, // Default to false if column doesn't exist
+                completed: isCompleted, // Computed from status
                 first_requested: null, // Not available without features table
                 last_requested: null, // Not available without features table
                 owner: null, // Default to null if column doesn't exist
