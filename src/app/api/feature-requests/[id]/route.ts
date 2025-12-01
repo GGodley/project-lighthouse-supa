@@ -108,10 +108,22 @@ export async function PATCH(
     console.log('[API] Update data before validation:', updateData, 'Keys:', Object.keys(updateData));
     if (Object.keys(updateData).length === 0) {
       console.error('[API] No valid fields to update. Request body was:', body);
-      return NextResponse.json(
-        { error: 'No valid fields to update. Provide completed, priority, or owner' },
-        { status: 400 }
-      );
+      console.error('[API] Completed value:', completed, 'Type:', typeof completed, 'Is undefined?', completed === undefined);
+      
+      // Last resort: if completed exists in body but wasn't processed, try to set it
+      if ('completed' in body && !updateData.status) {
+        const fallbackStatus = body.completed ? 'resolved' : 'open';
+        updateData.status = fallbackStatus;
+        console.log('[API] Fallback: Setting status from body.completed:', { bodyCompleted: body.completed, fallbackStatus });
+      }
+      
+      // Check again after fallback
+      if (Object.keys(updateData).length === 0) {
+        return NextResponse.json(
+          { error: 'No valid fields to update. Provide completed, priority, or owner' },
+          { status: 400 }
+        );
+      }
     }
 
     // Validate status value if it's being updated
