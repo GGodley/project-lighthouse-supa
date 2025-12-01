@@ -19,10 +19,23 @@ export async function PATCH(
     }
 
     // Parse request body
-    const body = await request.json();
+    let body: any = {};
+    try {
+      const text = await request.text();
+      console.log('[API] Raw request body text:', text);
+      if (text) {
+        body = JSON.parse(text);
+      }
+    } catch (error) {
+      console.error('[API] Error parsing request body:', error);
+      return NextResponse.json(
+        { error: 'Invalid request body. Expected JSON.' },
+        { status: 400 }
+      );
+    }
+    
     const { completed, priority, owner } = body;
-
-    console.log('[API] Request body:', { completed, priority, owner, body });
+    console.log('[API] Parsed request body:', { completed, priority, owner, body, bodyKeys: Object.keys(body) });
 
     // Build update object with only provided fields
     // Only include fields that we know exist in production
@@ -32,16 +45,32 @@ export async function PATCH(
     // Database uses status column, not completed column
     // completed = true -> status = 'resolved'
     // completed = false -> status = 'open'
-    if (typeof completed === 'boolean') {
-      const newStatus: string = completed ? 'resolved' : 'open';
-      updateData.status = newStatus;
-      console.log('[API] Setting status:', { completed, newStatus, updateData });
-    } else if (completed !== undefined) {
-      // Handle string booleans or other types
-      const boolValue = completed === true || completed === 'true' || completed === 1;
+    if (completed !== undefined && completed !== null) {
+      // Handle various boolean representations
+      let boolValue: boolean;
+      if (typeof completed === 'boolean') {
+        boolValue = completed;
+      } else if (typeof completed === 'string') {
+        boolValue = completed.toLowerCase() === 'true' || completed === '1';
+      } else if (typeof completed === 'number') {
+        boolValue = completed === 1;
+      } else {
+        // Default to false for any other type
+        boolValue = false;
+      }
+      
       const newStatus: string = boolValue ? 'resolved' : 'open';
       updateData.status = newStatus;
-      console.log('[API] Setting status (converted):', { completed, boolValue, newStatus, updateData });
+      console.log('[API] Setting status:', { 
+        completed, 
+        completedType: typeof completed,
+        boolValue, 
+        newStatus, 
+        updateData,
+        updateDataKeys: Object.keys(updateData)
+      });
+    } else {
+      console.log('[API] Completed field is undefined or null:', { completed, body });
     }
 
     if (priority !== undefined) {
