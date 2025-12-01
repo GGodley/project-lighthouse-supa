@@ -22,6 +22,8 @@ export async function PATCH(
     const body = await request.json();
     const { completed, priority, owner } = body;
 
+    console.log('[API] Request body:', { completed, priority, owner, body });
+
     // Build update object with only provided fields
     // Only include fields that we know exist in production
     const updateData: Partial<FeatureRequestUpdate> = {};
@@ -31,7 +33,15 @@ export async function PATCH(
     // completed = true -> status = 'resolved'
     // completed = false -> status = 'open'
     if (typeof completed === 'boolean') {
-      updateData.status = completed ? 'resolved' : 'open';
+      const newStatus: string = completed ? 'resolved' : 'open';
+      updateData.status = newStatus;
+      console.log('[API] Setting status:', { completed, newStatus, updateData });
+    } else if (completed !== undefined) {
+      // Handle string booleans or other types
+      const boolValue = completed === true || completed === 'true' || completed === 1;
+      const newStatus: string = boolValue ? 'resolved' : 'open';
+      updateData.status = newStatus;
+      console.log('[API] Setting status (converted):', { completed, boolValue, newStatus, updateData });
     }
 
     if (priority !== undefined) {
@@ -66,7 +76,9 @@ export async function PATCH(
     }
 
     // If no valid fields to update, return error
+    console.log('[API] Update data before validation:', updateData, 'Keys:', Object.keys(updateData));
     if (Object.keys(updateData).length === 0) {
+      console.error('[API] No valid fields to update. Request body was:', body);
       return NextResponse.json(
         { error: 'No valid fields to update. Provide completed, priority, or owner' },
         { status: 400 }
