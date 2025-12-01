@@ -4,6 +4,13 @@ import type { Database } from '@/types/database';
 
 type FeatureRequestUpdate = Database['public']['Tables']['feature_requests']['Update'];
 
+// Type for the request body - accepts partial updates
+interface FeatureRequestPatchBody {
+  completed?: boolean;
+  priority?: 'Low' | 'Medium' | 'High' | null;
+  owner?: string | null;
+}
+
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> }
@@ -19,12 +26,18 @@ export async function PATCH(
     }
 
     // Parse request body
-    let body: any = {};
+    let body: FeatureRequestPatchBody = {};
     try {
       const text = await request.text();
       console.log('[API] Raw request body text:', text);
       if (text) {
-        body = JSON.parse(text);
+        const parsed = JSON.parse(text) as Partial<FeatureRequestPatchBody>;
+        // Validate and type the parsed body
+        body = {
+          completed: parsed.completed !== undefined ? parsed.completed : undefined,
+          priority: parsed.priority !== undefined ? parsed.priority : undefined,
+          owner: parsed.owner !== undefined ? parsed.owner : undefined,
+        };
       }
     } catch (error) {
       console.error('[API] Error parsing request body:', error);
