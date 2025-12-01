@@ -37,12 +37,12 @@ export async function PATCH(
     const { completed, priority, owner } = body;
     console.log('[API] Parsed request body:', { completed, priority, owner, body, bodyKeys: Object.keys(body) });
 
-    // Build update object with only provided fields
-    // This API accepts partial updates - you can send any combination of:
-    // - { completed: true/false } -> sets status to 'resolved'/'open'
-    // - { priority: 'Low'|'Medium'|'High'|null } -> sets urgency
-    // - { owner: string|null } -> sets owner (if column exists)
-    // All fields are optional and can be sent independently
+    // Build update object with ONLY the fields that are explicitly provided in the request
+    // This API accepts partial updates - each field is independent:
+    // - { completed: true/false } -> ONLY updates status column (nothing else changes)
+    // - { priority: 'Low'|'Medium'|'High'|null } -> ONLY updates urgency column (nothing else changes)
+    // - { owner: string|null } -> ONLY updates owner column (nothing else changes)
+    // Fields that are NOT in the request body are NOT included in updateData, so they remain unchanged
     const updateData: Partial<FeatureRequestUpdate> = {};
 
     // Handle completed field - map to status column
@@ -205,6 +205,9 @@ export async function PATCH(
     console.log('[API] Existing row found:', existingRow);
     
     // Now perform the update
+    // updateData contains ONLY the fields that were explicitly provided in the request
+    // Supabase will only update those specific fields, leaving all others unchanged
+    console.log('[API] Final updateData (only these fields will be updated):', updateData);
     const { data: updated, error: updateError } = await supabase
       .from('feature_requests')
       .update(updateData)
