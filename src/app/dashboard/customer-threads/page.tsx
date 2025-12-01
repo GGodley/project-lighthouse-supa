@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { Loader2, CheckCircle2, XCircle, RefreshCw, ArrowUp, ArrowDown, Search, Building2 } from 'lucide-react'
 import { useThreadSync } from '@/hooks/useThreadSync'
@@ -52,19 +53,36 @@ const CustomerThreadsPage: React.FC = () => {
     onConfirm: () => {},
     variant: 'default'
   })
+  const [isRedirecting, setIsRedirecting] = useState(false)
   const supabase = useSupabase()
+  const router = useRouter()
 
   // Get auth session for provider token and user email
   useEffect(() => {
     const getAuthData = async () => {
       const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        setProviderToken(session.provider_token || null)
-        setUserEmail(session.user?.email || null)
+      
+      // If no session, leave behavior as-is (middleware/global auth handles this)
+      if (!session) {
+        return
       }
+      
+      // Check if email or provider token is missing
+      if (!session.user?.email || !session.provider_token) {
+        // Redirect to login with returnUrl to preserve intended destination
+        const currentPath = '/dashboard/customer-threads'
+        const returnUrl = encodeURIComponent(currentPath)
+        setIsRedirecting(true)
+        router.push(`/login?returnUrl=${returnUrl}`)
+        return
+      }
+      
+      // Both email and token are present, set state normally
+      setProviderToken(session.provider_token)
+      setUserEmail(session.user.email)
     }
     getAuthData()
-  }, [supabase])
+  }, [supabase, router])
 
   // Thread sync hook (used for status display and manual sync button)
   const { syncStatus, syncDetails, progressPercentage, startSync } = useThreadSync(providerToken, userEmail)
@@ -192,6 +210,16 @@ const CustomerThreadsPage: React.FC = () => {
   }, [supabase])
 
   const renderSyncStatus = () => {
+    // Show redirecting message if we're redirecting to login
+    if (isRedirecting) {
+      return (
+        <div className="flex items-center space-x-2 text-sm text-gray-600">
+          <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+          <span>Redirecting to login to refresh your connection...</span>
+        </div>
+      )
+    }
+    
     if (syncStatus === 'idle') {
       return (
         <div className="flex items-center space-x-2 text-sm text-gray-600">

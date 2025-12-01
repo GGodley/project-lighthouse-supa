@@ -9,7 +9,8 @@ import { useThreadSync } from '@/hooks/useThreadSync'
  * 
  * Manages automatic syncing of threads and calendar when user arrives at Dashboard.
  * - Triggers thread sync first (if no active job exists)
- * - Then triggers calendar sync after thread sync has started
+ * - Starts calendar sync independently after a short delay (3 seconds)
+ * - Calendar sync does not wait for thread sync completion (they have independent rate limits)
  * - Prevents duplicate syncs using session flags and job checks
  * - Runs silently in the background without blocking UI
  */
@@ -26,8 +27,15 @@ export default function DashboardSyncManager() {
     const getAuthData = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
-        setProviderToken(session.provider_token || null)
-        setUserEmail(session.user?.email || null)
+        // Guard: If email or provider token is missing, don't start syncs
+        if (!session.user?.email || !session.provider_token) {
+          console.warn('DashboardSyncManager: Missing email or provider token. Syncs will not start. A redirect should have occurred.')
+          // Don't set state, which prevents syncs from starting
+          return
+        }
+        
+        setProviderToken(session.provider_token)
+        setUserEmail(session.user.email)
       }
     }
     getAuthData()
@@ -36,8 +44,14 @@ export default function DashboardSyncManager() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       // Update provider token and email on sign in or token refresh
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
-        setProviderToken(session.provider_token || null)
-        setUserEmail(session.user?.email || null)
+        // Guard: Only set state if both email and token are present
+        if (!session.user?.email || !session.provider_token) {
+          console.warn('DashboardSyncManager: Missing email or provider token after auth state change. Syncs will not start.')
+          return
+        }
+        
+        setProviderToken(session.provider_token)
+        setUserEmail(session.user.email)
         
         // Reset flags on new sign-in (but not on token refresh)
         if (event === 'SIGNED_IN') {
@@ -177,26 +191,41 @@ export default function DashboardSyncManager() {
     initiateSyncs()
   }, [providerToken, userEmail, supabase, startThreadSync, startCalendarSync])
 
-  // Monitor thread sync status and trigger calendar sync when appropriate
+  // Start calendar sync independently - Gmail and Calendar APIs have separate rate limits
   useEffect(() => {
-    // Only trigger calendar sync if:
-    // 1. Thread sync has started (status is not 'idle' or 'failed')
-    // 2. Calendar sync hasn't been initiated yet
-    // 3. Thread sync is in progress or completed
+    // Start calendar sync as soon as thread sync has been initiated
+    // Small delay (3 seconds) for system organization, not for rate limits
+    // Gmail API and Calendar API have independent quotas, so they can run in parallel safely
     if (
       threadSyncStartedRef.current &&
       !calendarSyncInitiatedRef.current &&
-      (syncStatus === 'syncing' || syncStatus === 'creating_job' || syncStatus === 'completed')
+      providerToken &&
+      userEmail &&
+      syncStatus !== 'idle' // Thread sync has started (any status other than idle)
     ) {
-      // Wait a bit for thread sync to establish, then start calendar sync
       const timer = setTimeout(() => {
-        console.log('📅 Thread sync is in progress, starting calendar sync...')
+        console.log('📅 Starting calendar sync (independent of thread sync)...')
         startCalendarSync()
-      }, 3000) // 3 second delay to let thread sync establish
+      }, 3000) // 3 second delay for system organization
 
       return () => clearTimeout(timer)
     }
-  }, [syncStatus, startCalendarSync])
+    
+    // Fallback: If thread sync fails immediately, still start calendar sync
+    if (
+      threadSyncStartedRef.current &&
+      !calendarSyncInitiatedRef.current &&
+      syncStatus === 'failed' &&
+      providerToken &&
+      userEmail
+    ) {
+      const fallbackTimer = setTimeout(() => {
+        console.log('📅 Thread sync failed, starting calendar sync anyway...')
+        startCalendarSync()
+      }, 5000) // 5 second delay as fallback
+      return () => clearTimeout(fallbackTimer)
+    }
+  }, [syncStatus, providerToken, userEmail, startCalendarSync])
 
   // This component renders nothing - it's purely for side effects
   return null
