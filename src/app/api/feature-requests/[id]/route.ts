@@ -26,20 +26,19 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Parse request body
-    let body: FeatureRequestPatchBody = {};
+    // Parse request body - use request.json() directly for Next.js
+    let body: FeatureRequestPatchBody;
     try {
-      const text = await request.text();
-      console.log('[API] Raw request body text:', text);
-      if (text) {
-        const parsed = JSON.parse(text) as Partial<FeatureRequestPatchBody>;
-        // Validate and type the parsed body
-        body = {
-          completed: parsed.completed !== undefined ? parsed.completed : undefined,
-          priority: parsed.priority !== undefined ? parsed.priority : undefined,
-          owner: parsed.owner !== undefined ? parsed.owner : undefined,
-        };
-      }
+      body = await request.json() as FeatureRequestPatchBody;
+      console.log('[API] Parsed request body:', { 
+        body, 
+        bodyKeys: Object.keys(body),
+        completed: body.completed,
+        completedType: typeof body.completed,
+        completedIsUndefined: body.completed === undefined,
+        completedIsNull: body.completed === null,
+        rawBody: JSON.stringify(body)
+      });
     } catch (error) {
       console.error('[API] Error parsing request body:', error);
       return NextResponse.json(
@@ -49,7 +48,6 @@ export async function PATCH(
     }
     
     const { completed, priority, owner } = body;
-    console.log('[API] Parsed request body:', { completed, priority, owner, body, bodyKeys: Object.keys(body) });
 
     // Build update object with ONLY the fields that are explicitly provided in the request
     // This API accepts partial updates - each field is independent:
@@ -63,7 +61,8 @@ export async function PATCH(
     // Database uses status column, not completed column
     // completed = true -> status = 'resolved'
     // completed = false -> status = 'open'
-    if (completed !== undefined && completed !== null) {
+    if ('completed' in body) {
+      // Field exists in request (even if undefined)
       if (typeof completed === 'boolean') {
         const newStatus: string = completed ? 'resolved' : 'open';
         updateData.status = newStatus;
@@ -75,11 +74,19 @@ export async function PATCH(
           updateDataKeys: Object.keys(updateData)
         });
       } else {
-        // If for some reason the type isn't boolean, log and ignore it
-        console.warn('[API] Ignoring non-boolean completed value:', { completed, completedType: typeof completed, body });
+        console.error('[API] Completed field exists but is not boolean:', { 
+          completed, 
+          completedType: typeof completed, 
+          body,
+          'completed' in body
+        });
+        return NextResponse.json(
+          { error: 'Invalid completed value. Must be a boolean (true or false).' },
+          { status: 400 }
+        );
       }
     } else {
-      console.log('[API] Completed field is undefined or null:', { completed, body });
+      console.log('[API] Completed field not in request body');
     }
 
     // Handle priority field - can be a valid value
