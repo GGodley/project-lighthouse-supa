@@ -5,9 +5,10 @@ import type { Database } from '@/types/database';
 type FeatureRequestUpdate = Database['public']['Tables']['feature_requests']['Update'];
 
 // Type for the request body - accepts partial updates
+// Note: priority cannot be null because urgency column doesn't accept null
 interface FeatureRequestPatchBody {
   completed?: boolean;
-  priority?: 'Low' | 'Medium' | 'High' | null;
+  priority?: 'Low' | 'Medium' | 'High';
   owner?: string | null;
 }
 
@@ -81,19 +82,22 @@ export async function PATCH(
       console.log('[API] Completed field is undefined or null:', { completed, body });
     }
 
-    // Handle priority field - can be a valid value or null to clear it
+    // Handle priority field - can be a valid value
+    // Note: urgency column does not accept null, so we don't support clearing it
     if (priority !== undefined) {
       if (priority === null) {
-        // Allow null to clear the priority
-        updateData.urgency = null;
-        console.log('[API] Clearing urgency (priority set to null)');
+        // Urgency column doesn't accept null - return error
+        return NextResponse.json(
+          { error: 'Priority cannot be null. Urgency must be Low, Medium, or High.' },
+          { status: 400 }
+        );
       } else if (typeof priority === 'string' && ['Low', 'Medium', 'High'].includes(priority)) {
         // Map priority to urgency (the actual database column name)
         updateData.urgency = priority as Database['public']['Enums']['urgency_level'];
         console.log('[API] Setting urgency from priority:', { priority, urgency: updateData.urgency });
       } else {
         return NextResponse.json(
-          { error: 'Invalid priority value. Must be Low, Medium, High, or null' },
+          { error: 'Invalid priority value. Must be Low, Medium, or High' },
           { status: 400 }
         );
       }
