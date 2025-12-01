@@ -63,29 +63,20 @@ export async function PATCH(
     // completed = true -> status = 'resolved'
     // completed = false -> status = 'open'
     if (completed !== undefined && completed !== null) {
-      // Handle various boolean representations
-      let boolValue: boolean;
       if (typeof completed === 'boolean') {
-        boolValue = completed;
-      } else if (typeof completed === 'string') {
-        boolValue = completed.toLowerCase() === 'true' || completed === '1';
-      } else if (typeof completed === 'number') {
-        boolValue = completed === 1;
+        const newStatus: string = completed ? 'resolved' : 'open';
+        updateData.status = newStatus;
+        console.log('[API] Setting status from completed boolean:', { 
+          completed, 
+          completedType: typeof completed,
+          newStatus, 
+          updateData,
+          updateDataKeys: Object.keys(updateData)
+        });
       } else {
-        // Default to false for any other type
-        boolValue = false;
+        // If for some reason the type isn't boolean, log and ignore it
+        console.warn('[API] Ignoring non-boolean completed value:', { completed, completedType: typeof completed, body });
       }
-      
-      const newStatus: string = boolValue ? 'resolved' : 'open';
-      updateData.status = newStatus;
-      console.log('[API] Setting status:', { 
-        completed, 
-        completedType: typeof completed,
-        boolValue, 
-        newStatus, 
-        updateData,
-        updateDataKeys: Object.keys(updateData)
-      });
     } else {
       console.log('[API] Completed field is undefined or null:', { completed, body });
     }
