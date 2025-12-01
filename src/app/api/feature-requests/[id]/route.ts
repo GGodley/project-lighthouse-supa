@@ -74,11 +74,12 @@ export async function PATCH(
           updateDataKeys: Object.keys(updateData)
         });
       } else {
+        const hasCompletedField = 'completed' in body;
         console.error('[API] Completed field exists but is not boolean:', { 
           completed, 
           completedType: typeof completed, 
           body,
-          'completed' in body
+          hasCompletedField
         });
         return NextResponse.json(
           { error: 'Invalid completed value. Must be a boolean (true or false).' },
