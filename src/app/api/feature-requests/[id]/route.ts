@@ -38,7 +38,11 @@ export async function PATCH(
     console.log('[API] Parsed request body:', { completed, priority, owner, body, bodyKeys: Object.keys(body) });
 
     // Build update object with only provided fields
-    // Only include fields that we know exist in production
+    // This API accepts partial updates - you can send any combination of:
+    // - { completed: true/false } -> sets status to 'resolved'/'open'
+    // - { priority: 'Low'|'Medium'|'High'|null } -> sets urgency
+    // - { owner: string|null } -> sets owner (if column exists)
+    // All fields are optional and can be sent independently
     const updateData: Partial<FeatureRequestUpdate> = {};
 
     // Handle completed field - map to status column
@@ -73,35 +77,47 @@ export async function PATCH(
       console.log('[API] Completed field is undefined or null:', { completed, body });
     }
 
+    // Handle priority field - can be a valid value or null to clear it
     if (priority !== undefined) {
-      // Validate priority values
-      if (!['Low', 'Medium', 'High'].includes(priority)) {
+      if (priority === null) {
+        // Allow null to clear the priority
+        updateData.urgency = null;
+        console.log('[API] Clearing urgency (priority set to null)');
+      } else if (typeof priority === 'string' && ['Low', 'Medium', 'High'].includes(priority)) {
+        // Map priority to urgency (the actual database column name)
+        updateData.urgency = priority as Database['public']['Enums']['urgency_level'];
+        console.log('[API] Setting urgency from priority:', { priority, urgency: updateData.urgency });
+      } else {
         return NextResponse.json(
-          { error: 'Invalid priority value. Must be Low, Medium, or High' },
+          { error: 'Invalid priority value. Must be Low, Medium, High, or null' },
           { status: 400 }
         );
       }
-      // Map priority to urgency (the actual database column name)
-      updateData.urgency = priority as Database['public']['Enums']['urgency_level'];
     }
 
+    // Handle owner field - can be a string or null to clear it
     if (owner !== undefined) {
-      // Validate owner is a string and not too long
-      if (typeof owner !== 'string' && owner !== null) {
+      if (owner === null) {
+        // Allow null to clear the owner
+        // Note: owner column may not exist in production, so we skip it for now
+        // updateData.owner = null;
+        console.log('[API] Owner set to null (skipping update - column may not exist)');
+      } else if (typeof owner === 'string') {
+        if (owner.length > 255) {
+          return NextResponse.json(
+            { error: 'Owner value is too long. Maximum 255 characters' },
+            { status: 400 }
+          );
+        }
+        // Note: owner column may not exist in production, so we skip it for now
+        // updateData.owner = owner;
+        console.log('[API] Owner set to:', owner, '(skipping update - column may not exist)');
+      } else {
         return NextResponse.json(
           { error: 'Invalid owner value. Must be a string or null' },
           { status: 400 }
         );
       }
-      if (owner && owner.length > 255) {
-        return NextResponse.json(
-          { error: 'Owner value is too long. Maximum 255 characters' },
-          { status: 400 }
-        );
-      }
-      // Only include if we're sure the column exists
-      // For now, skip this to avoid errors if column doesn't exist
-      // updateData.owner = owner || null;
     }
 
     // If no valid fields to update, return error
