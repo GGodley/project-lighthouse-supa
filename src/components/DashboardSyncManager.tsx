@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { useThreadSync } from '@/hooks/useThreadSync'
 
@@ -17,39 +16,30 @@ import { useThreadSync } from '@/hooks/useThreadSync'
  */
 export default function DashboardSyncManager() {
   const supabase = useSupabase()
-  const router = useRouter()
   const [providerToken, setProviderToken] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const hasInitiatedSyncsRef = useRef(false)
   const calendarSyncInitiatedRef = useRef(false)
   const threadSyncStartedRef = useRef(false)
-  const redirectInProgressRef = useRef(false)
 
   // Get auth session for provider token and user email
   useEffect(() => {
-    const getAuthData = async () => {
+    const getAuthData = async (retryCount = 0) => {
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
-        // Guard: If email or provider token is missing, redirect to login
-        if (!session.user?.email || !session.provider_token) {
-          console.warn('DashboardSyncManager: Missing email or provider token. Redirecting to login...')
-          
-          // Prevent multiple redirects
-          if (redirectInProgressRef.current) {
-            return
-          }
-          
-          redirectInProgressRef.current = true
-          
-          // Redirect to login with returnUrl
-          const returnUrl = encodeURIComponent('/dashboard')
-          router.push(`/login?returnUrl=${returnUrl}`)
-          return
+        // Only set state if both email and provider token are present
+        // If missing, retry a few times (provider_token might not be immediately available after login)
+        if (session.user?.email && session.provider_token) {
+          setProviderToken(session.provider_token)
+          setUserEmail(session.user.email)
+        } else if (retryCount < 3) {
+          // Retry up to 3 times with increasing delays (provider_token might be delayed)
+          const delay = (retryCount + 1) * 1000 // 1s, 2s, 3s
+          console.log(`DashboardSyncManager: Waiting for provider_token (attempt ${retryCount + 1}/3)...`)
+          setTimeout(() => getAuthData(retryCount + 1), delay)
+        } else {
+          console.warn('DashboardSyncManager: Missing email or provider token after retries. Syncs will not start until credentials are available.')
         }
-        
-        setProviderToken(session.provider_token)
-        setUserEmail(session.user.email)
-        redirectInProgressRef.current = false // Reset redirect flag if credentials are present
       }
     }
     getAuthData()
@@ -58,32 +48,19 @@ export default function DashboardSyncManager() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       // Update provider token and email on sign in or token refresh
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
-        // Guard: If credentials are missing, redirect to login
-        if (!session.user?.email || !session.provider_token) {
-          console.warn('DashboardSyncManager: Missing email or provider token after auth state change. Redirecting to login...')
+        // Only set state if both email and token are present
+        if (session.user?.email && session.provider_token) {
+          setProviderToken(session.provider_token)
+          setUserEmail(session.user.email)
           
-          // Prevent multiple redirects
-          if (redirectInProgressRef.current) {
-            return
+          // Reset flags on new sign-in (but not on token refresh)
+          if (event === 'SIGNED_IN') {
+            hasInitiatedSyncsRef.current = false
+            calendarSyncInitiatedRef.current = false
+            threadSyncStartedRef.current = false
           }
-          
-          redirectInProgressRef.current = true
-          
-          // Redirect to login with returnUrl
-          const returnUrl = encodeURIComponent('/dashboard')
-          router.push(`/login?returnUrl=${returnUrl}`)
-          return
-        }
-        
-        setProviderToken(session.provider_token)
-        setUserEmail(session.user.email)
-        redirectInProgressRef.current = false // Reset redirect flag if credentials are present
-        
-        // Reset flags on new sign-in (but not on token refresh)
-        if (event === 'SIGNED_IN') {
-          hasInitiatedSyncsRef.current = false
-          calendarSyncInitiatedRef.current = false
-          threadSyncStartedRef.current = false
+        } else {
+          console.warn('DashboardSyncManager: Missing email or provider token after auth state change. Syncs will not start.')
         }
       }
     })
@@ -91,7 +68,7 @@ export default function DashboardSyncManager() {
     return () => {
       subscription.unsubscribe()
     }
-  }, [supabase, router])
+  }, [supabase])
 
   // Thread sync hook
   const { syncStatus, startSync: startThreadSync } = useThreadSync(providerToken, userEmail)
