@@ -5,14 +5,28 @@ import AuthForm from '@/components/auth/AuthForm'
 export const dynamic = 'force-dynamic'
 
 export default async function LoginPage() {
-  // Check for existing session before showing login form
   const supabase = await createClient()
+
+  // Check for user and session
   const { data: { user } } = await supabase.auth.getUser()
-  
-  // If user is already authenticated, redirect to dashboard
-  if (user) {
+  const { data: { session } } = await supabase.auth.getSession()
+
+  // A "fully valid" session requires:
+  // 1. User exists (Supabase auth)
+  // 2. Provider token exists (Google refresh token for Gmail/Calendar access)
+  // 3. User email exists
+  // Only redirect to dashboard if ALL conditions are met
+  const hasValidGoogleToken =
+    !!user &&
+    !!session?.provider_token &&
+    !!session?.user?.email
+
+  // If user is fully authenticated WITH a valid Google token, send them to dashboard
+  if (hasValidGoogleToken) {
     redirect('/dashboard')
   }
-  
+
+  // Otherwise (no user OR missing Google token), show login form
+  // This allows users with expired/missing Google tokens to re-authenticate
   return <AuthForm />
 }
