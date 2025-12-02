@@ -28,12 +28,13 @@ export async function middleware(request: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession();
   const { pathname } = request.nextUrl;
 
-  // Check if user has valid authentication (user exists AND has provider_token and email)
-  // A user without provider_token or email needs to re-authenticate
+  // Check if user has valid authentication with provider_token and email
+  // Note: We allow users without provider_token to access dashboard - client-side components will handle redirect
   const hasValidAuth = user && session?.provider_token && session?.user?.email;
 
-  // Protect dashboard routes - redirect to login if not authenticated or missing credentials
-  if ((!user || !hasValidAuth) && pathname.startsWith('/dashboard')) {
+  // Protect dashboard routes - redirect to login if not authenticated
+  // Note: We don't check for provider_token here - let client-side handle that to avoid redirect loops
+  if (!user && pathname.startsWith('/dashboard')) {
     // Preserve returnUrl for post-login redirect
     const returnUrl = pathname !== '/dashboard' ? encodeURIComponent(pathname) : undefined;
     const loginUrl = returnUrl 
@@ -42,14 +43,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(loginUrl, request.url));
   }
 
-  // Redirect authenticated users (with valid credentials) away from login page and home page
-  // Don't redirect if user is missing provider_token or email (they need to re-authenticate)
+  // Redirect authenticated users (with valid credentials) away from login page
+  // Only redirect if user has both provider_token and email (fully authenticated)
   if (hasValidAuth && pathname === '/login') {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
   
   // Redirect authenticated users from home page to dashboard
-  // Allow unauthenticated users to access home page
+  // Only redirect if user has valid credentials
   if (hasValidAuth && pathname === '/') {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
