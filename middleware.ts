@@ -25,12 +25,15 @@ export async function middleware(request: NextRequest) {
   );
 
   const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
   const { pathname } = request.nextUrl;
 
-  // Protect dashboard routes - redirect to login if not authenticated
-  // Supabase SSR automatically handles token refresh, so if getUser() returns null,
-  // it means the token is expired and can't be refreshed
-  if (!user && pathname.startsWith('/dashboard')) {
+  // Check if user has valid authentication (user exists AND has provider_token and email)
+  // A user without provider_token or email needs to re-authenticate
+  const hasValidAuth = user && session?.provider_token && session?.user?.email;
+
+  // Protect dashboard routes - redirect to login if not authenticated or missing credentials
+  if ((!user || !hasValidAuth) && pathname.startsWith('/dashboard')) {
     // Preserve returnUrl for post-login redirect
     const returnUrl = pathname !== '/dashboard' ? encodeURIComponent(pathname) : undefined;
     const loginUrl = returnUrl 
@@ -39,14 +42,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(loginUrl, request.url));
   }
 
-  // Redirect authenticated users away from login page and home page
-  if (user && pathname === '/login') {
+  // Redirect authenticated users (with valid credentials) away from login page and home page
+  // Don't redirect if user is missing provider_token or email (they need to re-authenticate)
+  if (hasValidAuth && pathname === '/login') {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
   
   // Redirect authenticated users from home page to dashboard
   // Allow unauthenticated users to access home page
-  if (user && pathname === '/') {
+  if (hasValidAuth && pathname === '/') {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 

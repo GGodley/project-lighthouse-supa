@@ -560,7 +560,7 @@ const CustomerThreadsPage: React.FC = () => {
               </div>
               <button 
                 onClick={() => startSync()}
-                disabled={syncStatus === 'creating_job' || syncStatus === 'syncing'}
+                disabled={isRedirecting || syncStatus === 'creating_job' || syncStatus === 'syncing'}
                 className="glass-button px-5 py-2 text-sm font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
               >
                 {syncStatus === 'syncing' ? 'Syncing...' : 'Sync Threads'}
