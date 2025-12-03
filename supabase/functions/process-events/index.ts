@@ -1,6 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { getMeetingUrl, type GoogleCalendarEvent } from '../_shared/meeting-utils.ts'
+import { getMeetingUrl, type GoogleCalendarEvent, type MeetingStatus, type ErrorDetails } from '../_shared/meeting-utils.ts'
+import { deleteBotWithRetry, isValidBotId } from '../_shared/bot-utils.ts'
+import { validateMeetingEvent, hasValidTimezone } from '../_shared/validation-utils.ts'
+import { logStateTransition, logError, logBotOperation, logMeetingEvent, generateCorrelationId, createTimingContext } from '../_shared/logging-utils.ts'
 
 type Attendee = {
   email: string
@@ -27,8 +30,12 @@ type MeetingPayload = {
   meeting_customer: string | null
   customer_id: string | null
   company_id: string | null
-  status: string
+  status: MeetingStatus
   dispatch_status: string
+  error_details?: ErrorDetails | null
+  last_error_at?: string | null
+  retry_count?: number
+  last_reschedule_attempt?: string | null
 }
 
 const corsHeaders = {
@@ -67,6 +74,107 @@ serve(async (req) => {
 
     console.log(`📥 Found ${tempMeetings.length} unprocessed temp meetings`)
 
+    // State Recovery: Check for stuck meetings and recover them
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+    
+    // Recover meetings stuck in 'scheduling_in_progress' for > 10 minutes
+    const { data: stuckScheduling, error: stuckSchedulingErr } = await supabase
+      .from('meetings')
+      .select('id, google_event_id, status, updated_at')
+      .eq('status', 'scheduling_in_progress')
+      .lt('updated_at', tenMinutesAgo)
+    
+    if (!stuckSchedulingErr && stuckScheduling && stuckScheduling.length > 0) {
+      logMeetingEvent('warn', 'recovering_stuck_scheduling', {
+        count: stuckScheduling.length,
+        operation: 'state_recovery'
+      })
+      
+      for (const meeting of stuckScheduling) {
+        // Reset to 'new' to allow retry
+        await supabase
+          .from('meetings')
+          .update({
+            status: 'new',
+            error_details: {
+              type: 'StateRecovery',
+              message: 'Recovered from stuck scheduling_in_progress state',
+              context: { previousStatus: 'scheduling_in_progress', stuckSince: meeting.updated_at },
+              timestamp: new Date().toISOString(),
+              operation: 'state_recovery'
+            } as ErrorDetails,
+            last_error_at: new Date().toISOString()
+          })
+          .eq('id', meeting.id)
+        
+        logStateTransition(
+          meeting.id.toString(),
+          'scheduling_in_progress',
+          'new',
+          { googleEventId: meeting.google_event_id, operation: 'state_recovery' }
+        )
+      }
+    }
+    
+    // Recover meetings stuck in 'rescheduling' for > 5 minutes
+    const { data: stuckRescheduling, error: stuckReschedulingErr } = await supabase
+      .from('meetings')
+      .select('id, google_event_id, status, updated_at, recall_bot_id')
+      .eq('status', 'rescheduling')
+      .lt('updated_at', fiveMinutesAgo)
+    
+    if (!stuckReschedulingErr && stuckRescheduling && stuckRescheduling.length > 0) {
+      logMeetingEvent('warn', 'recovering_stuck_rescheduling', {
+        count: stuckRescheduling.length,
+        operation: 'state_recovery'
+      })
+      
+      for (const meeting of stuckRescheduling) {
+        // Determine appropriate status based on meeting time
+        const { data: meetingData } = await supabase
+          .from('meetings')
+          .select('end_time, meeting_url')
+          .eq('id', meeting.id)
+          .single()
+        
+        let newStatus: MeetingStatus = 'new'
+        if (meetingData) {
+          const isPast = new Date(meetingData.end_time).getTime() < Date.now()
+          if (!meetingData.meeting_url) {
+            newStatus = 'missing_url'
+          } else if (isPast) {
+            newStatus = 'passed_event'
+          }
+        }
+        
+        await supabase
+          .from('meetings')
+          .update({
+            status: newStatus,
+            recall_bot_id: null, // Clear bot ID since reschedule failed
+            dispatch_status: 'pending',
+            error_details: {
+              type: 'StateRecovery',
+              message: 'Recovered from stuck rescheduling state',
+              context: { previousStatus: 'rescheduling', stuckSince: meeting.updated_at, oldBotId: meeting.recall_bot_id },
+              timestamp: new Date().toISOString(),
+              operation: 'state_recovery',
+              oldBotId: meeting.recall_bot_id || undefined
+            } as ErrorDetails,
+            last_error_at: new Date().toISOString()
+          })
+          .eq('id', meeting.id)
+        
+        logStateTransition(
+          meeting.id.toString(),
+          'rescheduling',
+          newStatus,
+          { googleEventId: meeting.google_event_id, operation: 'state_recovery' }
+        )
+      }
+    }
+
     // Process each temp meeting
     for (const tempRow of tempMeetings) {
       const tempMeeting: TempMeetingRow = tempRow as TempMeetingRow
@@ -84,22 +192,318 @@ serve(async (req) => {
       const userEmail = userData.user.email
       const userDomain = userEmail.split('@')[1]
 
+      // Compute new times and URL from current event (needed for both new and existing meetings)
+      const startIso = event.start?.dateTime || event.start?.date || new Date().toISOString()
+      const endIso = event.end?.dateTime || event.end?.date || startIso
+      const { url: meetingUrl, type: meetingType } = getMeetingUrl(event)
+      const hangoutLink = meetingType === 'google_meet' ? meetingUrl : null
+
+      // Validate event before processing
+      const validation = validateMeetingEvent(event)
+      if (!validation.valid) {
+        logError(undefined, new Error(`Event validation failed: ${validation.errors.join(', ')}`), {
+          googleEventId: event.id,
+          userId,
+          operation: 'validate_event'
+        }, 'high')
+        await supabase
+          .from('temp_meetings')
+          .update({ processed: true })
+          .eq('id', tempMeeting.id)
+        continue
+      }
+
+      // Check timezone validity
+      if (!hasValidTimezone(event)) {
+        logMeetingEvent('warn', 'event_missing_timezone', {
+          googleEventId: event.id,
+          userId,
+          startTime: startIso,
+          endTime: endIso
+        })
+      }
+
+      const correlationId = generateCorrelationId()
+      const timing = createTimingContext()
+
       // Check if meeting already exists in main table
       const { data: existingMeeting, error: existingErr } = await supabase
         .from('meetings')
-        .select('google_event_id')
+        .select('id, start_time, end_time, status, recall_bot_id, meeting_url, hangout_link, meeting_type, customer_id, title, last_reschedule_attempt, updated_at')
         .eq('google_event_id', event.id)
         .eq('user_id', userId)
         .maybeSingle()
 
       if (existingErr) {
-        console.error('❌ Error checking existing meeting:', existingErr)
+        logError(undefined, existingErr, {
+          googleEventId: event.id,
+          userId,
+          operation: 'check_existing_meeting',
+          correlationId
+        }, 'high')
         continue
       }
 
       if (existingMeeting) {
-        console.log('ℹ️ Meeting already exists, skipping:', event.id)
-        // Mark as processed and continue
+        logMeetingEvent('info', 'existing_meeting_found', {
+          meetingId: existingMeeting.id.toString(),
+          googleEventId: event.id,
+          userId,
+          correlationId
+        })
+        
+        // Check if meeting time has changed
+        const oldStartTime = existingMeeting.start_time
+        const oldEndTime = existingMeeting.end_time
+        const timeChanged = oldStartTime !== startIso || oldEndTime !== endIso
+        
+        // Check if meeting URL has changed
+        const urlChanged = existingMeeting.meeting_url !== meetingUrl || 
+                          existingMeeting.hangout_link !== hangoutLink
+        
+        // Check if title changed
+        const titleChanged = event.summary && event.summary !== existingMeeting.title
+        
+        // Debouncing: Check if meeting was recently rescheduled (within last 2 minutes)
+        const lastReschedule = existingMeeting.last_reschedule_attempt
+        const now = Date.now()
+        const twoMinutesAgo = now - (2 * 60 * 1000)
+        const recentlyRescheduled = lastReschedule && new Date(lastReschedule).getTime() > twoMinutesAgo
+        
+        if (recentlyRescheduled && (timeChanged || urlChanged)) {
+          logMeetingEvent('warn', 'reschedule_debounced', {
+            meetingId: existingMeeting.id.toString(),
+            googleEventId: event.id,
+            userId,
+            lastRescheduleAttempt: lastReschedule,
+            correlationId
+          })
+          await supabase
+            .from('temp_meetings')
+            .update({ processed: true })
+            .eq('id', tempMeeting.id)
+          continue
+        }
+        
+        if (timeChanged || urlChanged || titleChanged) {
+          logMeetingEvent('info', 'meeting_update_detected', {
+            meetingId: existingMeeting.id.toString(),
+            googleEventId: event.id,
+            userId,
+            timeChanged,
+            urlChanged,
+            titleChanged,
+            oldStartTime,
+            newStartTime: startIso,
+            correlationId
+          })
+          
+          // Store old state for potential rollback
+          const oldBotId = existingMeeting.recall_bot_id
+          const oldStatus = existingMeeting.status
+          const oldState = {
+            recall_bot_id: oldBotId,
+            status: oldStatus,
+            start_time: oldStartTime,
+            end_time: oldEndTime,
+            meeting_url: existingMeeting.meeting_url,
+            hangout_link: existingMeeting.hangout_link
+          }
+          
+          // Set status to rescheduling while we work
+          await supabase
+            .from('meetings')
+            .update({ 
+              status: 'rescheduling',
+              last_reschedule_attempt: new Date().toISOString()
+            })
+            .eq('id', existingMeeting.id)
+          
+          // If meeting has an existing bot, delete it from Recall.ai
+          let botDeleted = false
+          if (oldBotId && isValidBotId(oldBotId)) {
+            const recallApiKey = Deno.env.get('RECALLAI_API_KEY')
+            
+            if (recallApiKey) {
+              const deleteResult = await deleteBotWithRetry(oldBotId, recallApiKey, 3)
+              botDeleted = deleteResult.deleted
+              
+              logBotOperation(
+                'delete',
+                oldBotId,
+                existingMeeting.id.toString(),
+                deleteResult.success ? 'success' : 'failure',
+                { googleEventId: event.id, userId, correlationId },
+                deleteResult.error
+              )
+              
+              if (!deleteResult.success && deleteResult.statusCode !== 404) {
+                logError(existingMeeting.id.toString(), new Error(deleteResult.error || 'Bot deletion failed'), {
+                  googleEventId: event.id,
+                  userId,
+                  botId: oldBotId,
+                  operation: 'delete_bot',
+                  correlationId
+                }, 'high')
+              }
+            } else {
+              logError(existingMeeting.id.toString(), new Error('RECALLAI_API_KEY not found'), {
+                googleEventId: event.id,
+                userId,
+                operation: 'delete_bot',
+                correlationId
+              }, 'high')
+            }
+          }
+          
+          // Determine new status based on updated end time and URL availability
+          const isPastEvent = new Date(endIso).getTime() < Date.now()
+          let statusToSet: MeetingStatus
+          if (!meetingUrl) {
+            statusToSet = 'missing_url'
+          } else if (isPastEvent) {
+            statusToSet = 'passed_event'
+          } else {
+            statusToSet = 'new'
+          }
+          
+          // Update the meeting with new times, URL, title, and status
+          const updatePayload: Partial<MeetingPayload> = {
+            start_time: startIso,
+            end_time: endIso,
+            meeting_url: meetingUrl,
+            hangout_link: hangoutLink,
+            meeting_type: meetingType,
+            status: statusToSet,
+            recall_bot_id: null, // Clear old bot ID - will be set when new bot is created
+            dispatch_status: 'pending', // Reset to allow new bot dispatch
+            last_reschedule_attempt: new Date().toISOString(),
+            error_details: null, // Clear any previous errors
+            last_error_at: null
+          }
+          
+          if (titleChanged) {
+            updatePayload.title = event.summary || 'Untitled Meeting'
+          }
+          
+          const { error: updateErr } = await supabase
+            .from('meetings')
+            .update(updatePayload)
+            .eq('id', existingMeeting.id)
+          
+          if (updateErr) {
+            // Rollback: Attempt to restore old state
+            logError(existingMeeting.id.toString(), updateErr, {
+              googleEventId: event.id,
+              userId,
+              operation: 'update_meeting_after_reschedule',
+              oldState,
+              correlationId
+            }, 'critical')
+            
+            // Try to restore old bot ID (even if bot was deleted, at least preserve the reference)
+            const rollbackPayload: Partial<MeetingPayload> = {
+              status: oldStatus as MeetingStatus,
+              recall_bot_id: oldBotId,
+              error_details: {
+                type: 'UpdateFailedAfterBotDeletion',
+                message: 'Meeting update failed after bot deletion',
+                context: {
+                  oldState,
+                  updateError: updateErr.message
+                },
+                timestamp: new Date().toISOString(),
+                operation: 'reschedule_rollback',
+                oldBotId: oldBotId || undefined
+              } as ErrorDetails,
+              last_error_at: new Date().toISOString()
+            }
+            
+            await supabase
+              .from('meetings')
+              .update(rollbackPayload)
+              .eq('id', existingMeeting.id)
+            
+            // Mark as processed to avoid infinite loop
+            await supabase
+              .from('temp_meetings')
+              .update({ processed: true })
+              .eq('id', tempMeeting.id)
+            continue
+          }
+          
+          logStateTransition(
+            existingMeeting.id.toString(),
+            'rescheduling',
+            statusToSet,
+            { googleEventId: event.id, userId, correlationId }
+          )
+          
+          // If meeting is now in the future and has a meeting URL, dispatch a new bot
+          if (statusToSet === 'new' && meetingUrl) {
+            logMeetingEvent('info', 'dispatching_bot_for_reschedule', {
+              meetingId: existingMeeting.id.toString(),
+              googleEventId: event.id,
+              userId,
+              correlationId
+            })
+            
+            try {
+              await supabase.functions.invoke('dispatch-recall-bot', {
+                body: {
+                  meeting_id: event.id,
+                  user_id: userId,
+                  customer_id: existingMeeting.customer_id
+                }
+              })
+              logMeetingEvent('info', 'bot_dispatched_for_reschedule', {
+                meetingId: existingMeeting.id.toString(),
+                googleEventId: event.id,
+                userId,
+                correlationId
+              })
+            } catch (botErr) {
+              logError(existingMeeting.id.toString(), botErr, {
+                googleEventId: event.id,
+                userId,
+                operation: 'dispatch_bot_reschedule',
+                correlationId
+              }, 'high')
+              
+              // Update meeting with error details
+              await supabase
+                .from('meetings')
+                .update({
+                  status: 'error',
+                  error_details: {
+                    type: 'BotDispatchFailed',
+                    message: botErr instanceof Error ? botErr.message : String(botErr),
+                    context: { operation: 'reschedule_bot_dispatch' },
+                    timestamp: new Date().toISOString(),
+                    operation: 'dispatch_bot_reschedule'
+                  } as ErrorDetails,
+                  last_error_at: new Date().toISOString()
+                })
+                .eq('id', existingMeeting.id)
+            }
+          } else if (statusToSet === 'missing_url') {
+            logMeetingEvent('warn', 'reschedule_missing_url', {
+              meetingId: existingMeeting.id.toString(),
+              googleEventId: event.id,
+              userId,
+              correlationId
+            })
+          }
+        } else {
+          logMeetingEvent('info', 'no_changes_detected', {
+            meetingId: existingMeeting.id.toString(),
+            googleEventId: event.id,
+            userId,
+            correlationId
+          })
+        }
+        
+        // Mark temp meeting as processed
         await supabase
           .from('temp_meetings')
           .update({ processed: true })
@@ -128,8 +532,8 @@ serve(async (req) => {
         continue
       }
 
-      const startIso = event.start?.dateTime || event.start?.date || new Date().toISOString()
-      const endIso = event.end?.dateTime || event.end?.date || startIso
+      // Note: startIso, endIso, meetingUrl, hangoutLink, and meetingType are already computed above
+      // (before the existing meeting check) and are available here for new meetings
 
       // Identify all external attendees
       const externalAttendees: Attendee[] = attendees.filter((a) => {
@@ -184,31 +588,43 @@ serve(async (req) => {
         console.warn(`ℹ️ User has no companies. The meeting will be saved without a customer link.`);
       }
 
-      if (findErr) {
-        console.error('❌ Customer lookup failed:', findErr);
-      } else if (customer) {
-        // We found a match!
-        customerId = customer.customer_id;
-        companyId = customer.company_id;
-        console.log(`✅ Found matching customer: ${customerId} (Company: ${companyId})`);
+      // Determine status based on time and URL availability
+      const isPastEvent = new Date(endIso).getTime() < Date.now()
+      let statusToSet: MeetingStatus
+      if (!meetingUrl) {
+        statusToSet = 'missing_url'
+      } else if (isPastEvent) {
+        statusToSet = 'passed_event'
       } else {
-        // No match was found.
-        console.warn(`ℹ️ No known customer found for this meeting. The meeting will be saved without a customer link.`);
+        statusToSet = 'new'
       }
 
-      // Determine status
-      const isPastEvent = new Date(endIso).getTime() < Date.now()
-      const statusToSet = isPastEvent ? 'passed_event' : 'new'
+      // Diagnostic logging for missing URLs (meetingUrl already computed above)
+      if (!meetingUrl) {
+        const diagnosticInfo = {
+          eventTitle: event.summary || 'Untitled',
+          hangoutLink: event.hangoutLink || null,
+          location: event.location || null,
+          description: event.description ? event.description.substring(0, 200) + '...' : null,
+          conferenceData: event.conferenceData ? JSON.stringify(event.conferenceData).substring(0, 200) + '...' : null
+        }
+        
+        logMeetingEvent('warn', 'missing_meeting_url', {
+          googleEventId: event.id,
+          userId,
+          correlationId,
+          ...diagnosticInfo
+        })
+      }
 
-      // Extract meeting URL and type using utility function
-      const { url: meetingUrl, type: meetingType } = getMeetingUrl(event)
-      
-      // Set hangout_link for backward compatibility:
-      // - For Google Meet: same as meeting_url
-      // - For Zoom: null (since it's not a Google Meet link)
-      const hangoutLink = meetingType === 'google_meet' ? meetingUrl : null
-
-      console.log(`🔗 Meeting URL detected: ${meetingUrl}, Type: ${meetingType}`)
+      logMeetingEvent('info', 'meeting_url_detected', {
+        googleEventId: event.id,
+        userId,
+        meetingUrl: meetingUrl || 'NONE',
+        meetingType: meetingType || 'NONE',
+        status: statusToSet,
+        correlationId
+      })
 
       // Step a: Create the Meeting Record with dispatch_status 'pending'
       // CRITICAL: Validate that customer_id belongs to user's company before linking
@@ -228,6 +644,20 @@ serve(async (req) => {
         }
       }
 
+      // Prepare error details if missing URL
+      const errorDetails: ErrorDetails | null = statusToSet === 'missing_url' ? {
+        type: 'MissingMeetingUrl',
+        message: 'No meeting URL found in event data',
+        context: {
+          hangoutLink: event.hangoutLink || null,
+          location: event.location || null,
+          hasDescription: !!event.description,
+          hasConferenceData: !!event.conferenceData
+        },
+        timestamp: new Date().toISOString(),
+        operation: 'create_meeting'
+      } : null
+
       const meetingPayload: MeetingPayload = {
         user_id: userId,
         google_event_id: event.id,
@@ -242,18 +672,42 @@ serve(async (req) => {
         customer_id: customerId,
         company_id: companyId,
         status: statusToSet,
-        dispatch_status: 'pending'
+        dispatch_status: 'pending',
+        error_details: errorDetails,
+        last_error_at: errorDetails ? new Date().toISOString() : null,
+        retry_count: 0
       }
 
-      console.log('📦 Creating meeting record:', JSON.stringify(meetingPayload))
-      const { error: insertErr } = await supabase
+      logMeetingEvent('info', 'creating_meeting_record', {
+        googleEventId: event.id,
+        userId,
+        status: statusToSet,
+        hasUrl: !!meetingUrl,
+        correlationId
+      })
+
+      const { data: insertedMeeting, error: insertErr } = await supabase
         .from('meetings')
         .insert(meetingPayload)
+        .select('id')
+        .single()
 
-      if (insertErr) {
-        console.error('❌ Failed to insert meeting:', insertErr)
+      if (insertErr || !insertedMeeting) {
+        logError(undefined, insertErr || new Error('Failed to insert meeting'), {
+          googleEventId: event.id,
+          userId,
+          operation: 'insert_meeting',
+          correlationId
+        }, 'critical')
         continue
       }
+
+      const meetingId = insertedMeeting.id.toString()
+      logStateTransition(meetingId, null, statusToSet, {
+        googleEventId: event.id,
+        userId,
+        correlationId
+      })
 
       // Step b: Atomic Lock - try to update dispatch_status to 'processing'
       console.log('🔒 Attempting atomic lock for meeting:', event.id)
@@ -278,9 +732,15 @@ serve(async (req) => {
 
       console.log('✅ Successfully acquired lock for meeting:', event.id)
 
-      // Step d: Dispatch the Bot (only for future meetings)
-      if (statusToSet === 'new') {
-        console.log('🤖 Dispatching bot for meeting:', event.id)
+      // Step d: Dispatch the Bot (only for future meetings with URLs)
+      if (statusToSet === 'new' && meetingUrl) {
+        logMeetingEvent('info', 'dispatching_bot', {
+          meetingId,
+          googleEventId: event.id,
+          userId,
+          correlationId
+        })
+        
         try {
           await supabase.functions.invoke('dispatch-recall-bot', {
             body: {
@@ -289,12 +749,51 @@ serve(async (req) => {
               customer_id: customerId
             }
           })
-          console.log('✅ Successfully dispatched bot for meeting:', event.id)
+          logMeetingEvent('info', 'bot_dispatched', {
+            meetingId,
+            googleEventId: event.id,
+            userId,
+            correlationId
+          })
         } catch (botErr) {
-          console.error('❌ Failed to dispatch bot:', botErr)
+          logError(meetingId, botErr, {
+            googleEventId: event.id,
+            userId,
+            operation: 'dispatch_bot',
+            correlationId
+          }, 'high')
+          
+          // Update meeting with error details
+          await supabase
+            .from('meetings')
+            .update({
+              status: 'error',
+              error_details: {
+                type: 'BotDispatchFailed',
+                message: botErr instanceof Error ? botErr.message : String(botErr),
+                context: { operation: 'initial_bot_dispatch' },
+                timestamp: new Date().toISOString(),
+                operation: 'dispatch_bot'
+              } as ErrorDetails,
+              last_error_at: new Date().toISOString(),
+              retry_count: 1
+            })
+            .eq('id', insertedMeeting.id)
         }
-      } else {
-        console.log('ℹ️ Past event, skipping bot dispatch for meeting:', event.id)
+      } else if (statusToSet === 'missing_url') {
+        logMeetingEvent('info', 'skipping_bot_dispatch_missing_url', {
+          meetingId,
+          googleEventId: event.id,
+          userId,
+          correlationId
+        })
+      } else if (statusToSet === 'passed_event') {
+        logMeetingEvent('info', 'skipping_bot_dispatch_past_event', {
+          meetingId,
+          googleEventId: event.id,
+          userId,
+          correlationId
+        })
       }
 
       // Step e: Update on Success
