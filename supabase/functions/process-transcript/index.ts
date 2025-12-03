@@ -65,18 +65,9 @@ Deno.serve(async (req) => {
       
       console.log(`[LOG] Found meeting with google_event_id: ${meeting.google_event_id}`);
       
-      // Update meeting status to 'processing'
-      console.log(`[LOG] Updating meeting status to 'processing'`);
-      const { error: processingUpdateError } = await supabaseClient
-        .from('meetings')
-        .update({ status: 'processing' })
-        .eq('recall_bot_id', botIdFromPayload);
-        
-      if (processingUpdateError) {
-        console.error(`Failed to update meeting status to processing: ${processingUpdateError.message}`);
-        throw new Error(`Failed to update meeting status: ${processingUpdateError.message}`);
-      }
-      console.log(`[LOG] Meeting status updated to 'processing'`);
+      // Note: We don't change status here - meeting should already be 'recording_scheduled'
+      // The transcript processing doesn't change the meeting status
+      console.log(`[LOG] Processing transcript for meeting (status remains 'recording_scheduled')`);
       
       // Now fetch the transcription job using the meeting's google_event_id
       const { data: job, error: fetchError } = await supabaseClient
@@ -130,7 +121,21 @@ Deno.serve(async (req) => {
       }
       console.log(`[LOG] Transcript processed into fullText (length: ${fullText.length})`);
       
-      // --- 7. Final Database Update ---
+      // --- 7. Verify Transcript Data ---
+      const isTranscriptValid = 
+        fullText.length > 100 && 
+        Array.isArray(transcriptContent) && 
+        transcriptContent.length > 0;
+      
+      if (!isTranscriptValid) {
+        console.warn(`[WARNING] Transcript validation failed. fullText length: ${fullText.length}, transcriptContent is array: ${Array.isArray(transcriptContent)}, transcriptContent length: ${Array.isArray(transcriptContent) ? transcriptContent.length : 'N/A'}`);
+        console.warn(`[WARNING] Skipping cleanup - transcript may need to be re-fetched.`);
+        // Still save what we have, but don't trigger cleanup
+      } else {
+        console.log(`[LOG] Transcript validation passed. Proceeding with storage and cleanup.`);
+      }
+      
+      // --- 8. Update transcription_jobs with transcript ---
       console.log(`[LOG] Attempting to update job ${job.id} in database...`);
       const { error: updateError } = await supabaseClient
         .from('transcription_jobs')
@@ -148,31 +153,43 @@ Deno.serve(async (req) => {
       }
       console.log(`[SUCCESS] Job ${job.id} updated successfully in the database.`);
       
-      // Final update: set meeting status to 'done'
-      console.log(`[LOG] Updating meeting status to 'done'`);
-      const { error: doneUpdateError } = await supabaseClient
+      // --- 9. Update meetings table with transcript ---
+      // Note: Status remains 'recording_scheduled' - transcript completion doesn't change status
+      console.log(`[LOG] Saving transcript to meetings table...`);
+      const { error: transcriptUpdateError } = await supabaseClient
         .from('meetings')
-        .update({ status: 'done' })
+        .update({ 
+          transcript: fullText
+          // Status remains 'recording_scheduled' - meeting is complete with transcript
+          // We don't update status here to maintain consistency with our status constraint
+        })
         .eq('recall_bot_id', botIdFromPayload);
         
-      if (doneUpdateError) {
-        console.error(`Failed to update meeting status to done: ${doneUpdateError.message}`);
-        throw new Error(`Failed to update meeting status to done: ${doneUpdateError.message}`);
+      if (transcriptUpdateError) {
+        console.error(`Failed to save transcript to meetings: ${transcriptUpdateError.message}`);
+        throw new Error(`Failed to save transcript to meetings: ${transcriptUpdateError.message}`);
       }
-      console.log(`[LOG] Meeting status updated to 'done'`);
-
-      // Update transcription_jobs status to 'awaiting_summary'
-      console.log(`[LOG] Updating transcription_jobs status to 'awaiting_summary'`);
-      const { error: jobCompleteError } = await supabaseClient
-        .from('transcription_jobs')
-        .update({ status: 'awaiting_summary' })
-        .eq('id', job.id);
-        
-      if (jobCompleteError) {
-        console.error(`Failed to update transcription_jobs status to awaiting_summary: ${jobCompleteError.message}`);
-        throw new Error(`Failed to update transcription_jobs status: ${jobCompleteError.message}`);
+      console.log(`[SUCCESS] Transcript saved to meetings table.`);
+      
+      // --- 10. Trigger Recall.ai cleanup if transcript is valid ---
+      if (isTranscriptValid) {
+        console.log(`[LOG] Transcript verified. Triggering Recall.ai media cleanup...`);
+        try {
+          await supabaseClient.functions.invoke('cleanup-meeting-data', {
+            body: {
+              record: {
+                meeting_id: meeting.google_event_id,
+                recall_bot_id: botIdFromPayload
+              }
+            }
+          });
+          console.log(`[SUCCESS] Cleanup triggered successfully for meeting ${meeting.google_event_id}`);
+        } catch (cleanupError) {
+          // Best-effort: log but don't fail the webhook
+          console.error(`[WARNING] Failed to trigger cleanup for meeting ${meeting.google_event_id}:`, cleanupError);
+          console.error(`[WARNING] Transcript is saved, but Recall media may still exist. Manual cleanup may be needed.`);
+        }
       }
-      console.log(`[LOG] Transcription job status updated to 'awaiting_summary'`);
     }
     
     console.log("[END] Process complete. Returning 200 OK.");

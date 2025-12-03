@@ -3,9 +3,10 @@
 
 -- View: meetings_requiring_attention
 -- Identifies meetings that need manual intervention or monitoring
-CREATE OR REPLACE VIEW meetings_requiring_attention AS
+CREATE OR REPLACE VIEW public.meetings_requiring_attention
+WITH (security_invoker=true)
+AS
 SELECT 
-  m.id,
   m.google_event_id,
   m.user_id,
   m.title,
@@ -28,7 +29,7 @@ SELECT
     ELSE 'other'
   END AS issue_type,
   EXTRACT(EPOCH FROM (NOW() - m.updated_at)) / 60 AS minutes_stuck
-FROM meetings m
+FROM public.meetings AS m
 WHERE 
   -- Recent errors (within last hour)
   (m.status = 'error' AND m.last_error_at > NOW() - INTERVAL '1 hour')
@@ -49,13 +50,14 @@ ORDER BY
   m.updated_at ASC;
 
 -- Add comment
-COMMENT ON VIEW meetings_requiring_attention IS 'Meetings that require attention: errors, stuck processing, or missing URLs for future meetings';
+COMMENT ON VIEW public.meetings_requiring_attention IS 'Meetings that require attention: errors, stuck processing, or missing URLs for future meetings';
 
 -- View: meetings_stuck_in_processing
 -- Specifically identifies meetings stuck in processing states
-CREATE OR REPLACE VIEW meetings_stuck_in_processing AS
+CREATE OR REPLACE VIEW public.meetings_stuck_in_processing
+WITH (security_invoker=true)
+AS
 SELECT 
-  m.id,
   m.google_event_id,
   m.user_id,
   m.title,
@@ -74,7 +76,7 @@ SELECT
     WHEN m.status = 'rescheduling' THEN 'rescheduling'
     ELSE 'unknown'
   END AS stuck_state
-FROM meetings m
+FROM public.meetings AS m
 WHERE 
   m.status IN ('scheduling_in_progress', 'rescheduling')
   AND (
@@ -84,13 +86,14 @@ WHERE
 ORDER BY m.updated_at ASC;
 
 -- Add comment
-COMMENT ON VIEW meetings_stuck_in_processing IS 'Meetings stuck in processing states (scheduling_in_progress or rescheduling) for extended periods';
+COMMENT ON VIEW public.meetings_stuck_in_processing IS 'Meetings stuck in processing states (scheduling_in_progress or rescheduling) for extended periods';
 
 -- View: meetings_with_high_retry_count
 -- Identifies meetings that have failed multiple times
-CREATE OR REPLACE VIEW meetings_with_high_retry_count AS
+CREATE OR REPLACE VIEW public.meetings_with_high_retry_count
+WITH (security_invoker=true)
+AS
 SELECT 
-  m.id,
   m.google_event_id,
   m.user_id,
   m.title,
@@ -102,19 +105,20 @@ SELECT
   m.end_time,
   m.meeting_url,
   m.hangout_link
-FROM meetings m
+FROM public.meetings AS m
 WHERE 
   m.retry_count >= 2
 ORDER BY m.retry_count DESC, m.last_error_at DESC;
 
 -- Add comment
-COMMENT ON VIEW meetings_with_high_retry_count IS 'Meetings with high retry counts (>= 2), indicating persistent issues';
+COMMENT ON VIEW public.meetings_with_high_retry_count IS 'Meetings with high retry counts (>= 2), indicating persistent issues';
 
 -- View: meetings_missing_urls
 -- Identifies future meetings without URLs
-CREATE OR REPLACE VIEW meetings_missing_urls AS
+CREATE OR REPLACE VIEW public.meetings_missing_urls
+WITH (security_invoker=true)
+AS
 SELECT 
-  m.id,
   m.google_event_id,
   m.user_id,
   m.title,
@@ -128,12 +132,11 @@ SELECT
     WHEN m.end_time <= NOW() THEN 'past'
     ELSE 'unknown'
   END AS time_status
-FROM meetings m
+FROM public.meetings AS m
 WHERE 
   m.status = 'missing_url'
   AND m.end_time > NOW() -- Only future meetings
 ORDER BY m.start_time ASC;
 
 -- Add comment
-COMMENT ON VIEW meetings_missing_urls IS 'Future meetings that are missing meeting URLs';
-
+COMMENT ON VIEW public.meetings_missing_urls IS 'Future meetings that are missing meeting URLs';
