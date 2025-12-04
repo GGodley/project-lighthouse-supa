@@ -69,18 +69,34 @@ Deno.serve(async (req) => {
       // The transcript processing doesn't change the meeting status
       console.log(`[LOG] Processing transcript for meeting (status remains 'recording_scheduled')`);
       
-      // Now fetch the transcription job using the meeting's google_event_id
-      const { data: job, error: fetchError } = await supabaseClient
+      // Now fetch the transcription job using BOTH the meeting's google_event_id
+      // and the current bot_id. This makes the lookup resilient to historical
+      // jobs for the same meeting that were created by previous bots.
+      const {
+        data: jobs,
+        error: fetchError,
+        count: jobCount,
+      } = await supabaseClient
         .from('transcription_jobs')
-        .select('id, status')
+        .select('id, status', { count: 'exact' })
         .eq('meeting_id', meeting.google_event_id)
-        .maybeSingle();
+        .eq('recall_bot_id', botIdFromPayload)
+        .order('created_at', { ascending: false })
+        .limit(1);
 
       if (fetchError) {
         console.error(`Database fetch error: ${fetchError.message}`);
         throw new Error(`Database fetch error: ${fetchError.message}`);
       }
-      
+
+      const job = jobs && jobs.length > 0 ? jobs[0] : null;
+
+      if (jobCount && jobCount > 1) {
+        console.warn(
+          `[WARN] Multiple transcription_jobs found for meeting_id=${meeting.google_event_id} and recall_bot_id=${botIdFromPayload}. Using the most recent one by created_at.`
+        );
+      }
+
       if (!job) {
         console.warn(`No transcription job found for meeting: ${meeting.google_event_id}. Returning 200 to stop webhook retries.`);
         return new Response("OK (no matching job found)", { status: 200 });
