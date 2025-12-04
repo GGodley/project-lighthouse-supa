@@ -72,6 +72,8 @@ CHECK (
 
 -- Step 6.5: Add CHECK constraint for valid dispatch_status values
 ALTER TABLE meetings 
+DROP CONSTRAINT IF EXISTS meetings_dispatch_status_check;
+ALTER TABLE meetings 
 ADD CONSTRAINT meetings_dispatch_status_check 
 CHECK (dispatch_status IN ('pending', 'processing', 'completed') OR dispatch_status IS NULL);
 

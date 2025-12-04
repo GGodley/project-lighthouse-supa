@@ -28,10 +28,12 @@ Deno.serve(async (req) => {
     const supabaseClient = createClient(supabaseUrl!, serviceKey!)
 
     // 3. Fetch meeting first to check retry_count and status
+    // CRITICAL: Filter by both google_event_id AND user_id for security
     const { data: meetingCheck, error: meetingCheckError } = await supabaseClient
       .from('meetings')
       .select('id, status, retry_count, meeting_url, hangout_link')
       .eq('google_event_id', meeting_id)
+      .eq('user_id', user_id)
       .single()
 
     if (meetingCheckError || !meetingCheck) {
@@ -153,10 +155,11 @@ Deno.serve(async (req) => {
     })
 
     // 5. Fetch meeting details after claiming the job
+    // Use id for safer lookup after we've already validated the meeting exists
     const { data: meeting, error: meetingError } = await supabaseClient
       .from('meetings')
       .select('hangout_link, meeting_url, meeting_type, title, start_time, retry_count')
-      .eq('google_event_id', meeting_id)
+      .eq('id', meetingCheck.id)
       .single()
 
     if (meetingError || !meeting) {
@@ -167,7 +170,7 @@ Deno.serve(async (req) => {
         correlationId
       }, 'critical')
       
-      // Update status to error before throwing
+      // Update status to error before throwing - use id for precise update
       await supabaseClient
         .from('meetings')
         .update({
@@ -181,7 +184,7 @@ Deno.serve(async (req) => {
           } as ErrorDetails,
           last_error_at: new Date().toISOString()
         })
-        .eq('google_event_id', meeting_id)
+        .eq('id', meetingCheck.id)
       return new Response(JSON.stringify({ error: 'Meeting not found after lock acquisition.' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' },
@@ -212,7 +215,7 @@ Deno.serve(async (req) => {
           } as ErrorDetails,
           last_error_at: new Date().toISOString()
         })
-        .eq('google_event_id', meeting_id)
+        .eq('id', meetingCheck.id)
       return new Response(JSON.stringify({ error: 'Meeting does not have a meeting URL for recording.' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
@@ -326,7 +329,7 @@ Deno.serve(async (req) => {
         last_error_at: null,
         retry_count: 0 // Reset retry count on success
       })
-      .eq('google_event_id', meeting_id)
+      .eq('id', meetingCheck.id)
 
     if (meetingUpdateError) {
       logError(meetingId, meetingUpdateError, {
