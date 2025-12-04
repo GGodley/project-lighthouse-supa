@@ -24,34 +24,56 @@ export default function DashboardSyncManager() {
 
   // Get auth session for provider token and user email
   useEffect(() => {
-    const getAuthData = async (retryCount = 0) => {
+    let mounted = true
+    
+    // First, try to get session immediately
+    const getAuthData = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
-        // Only set state if both email and provider token are present
-        // If missing, retry a few times (provider_token might not be immediately available after login)
+        // Log session details for debugging
+        console.log('DashboardSyncManager: Initial session check:', {
+          hasUser: !!session.user,
+          hasEmail: !!session.user?.email,
+          hasProviderToken: !!session.provider_token,
+          providerTokenLength: session.provider_token?.length || 0,
+        })
+        
+        // If we have both, set them immediately
         if (session.user?.email && session.provider_token) {
-          setProviderToken(session.provider_token)
-          setUserEmail(session.user.email)
-        } else if (retryCount < 3) {
-          // Retry up to 3 times with increasing delays (provider_token might be delayed)
-          const delay = (retryCount + 1) * 1000 // 1s, 2s, 3s
-          console.log(`DashboardSyncManager: Waiting for provider_token (attempt ${retryCount + 1}/3)...`)
-          setTimeout(() => getAuthData(retryCount + 1), delay)
-        } else {
-          console.warn('DashboardSyncManager: Missing email or provider token after retries. Syncs will not start until credentials are available.')
+          console.log('DashboardSyncManager: Got provider_token on initial check')
+          if (mounted) {
+            setProviderToken(session.provider_token)
+            setUserEmail(session.user.email)
+          }
+          return
+        }
+        
+        // If missing, try refreshing the session (forces re-read from cookies)
+        if (!session.provider_token) {
+          console.log('DashboardSyncManager: No provider_token in initial session, refreshing...')
+          const { data: { session: refreshedSession } } = await supabase.auth.refreshSession()
+          if (refreshedSession?.provider_token && refreshedSession?.user?.email) {
+            console.log('DashboardSyncManager: Got provider_token after refresh')
+            if (mounted) {
+              setProviderToken(refreshedSession.provider_token)
+              setUserEmail(refreshedSession.user.email)
+            }
+            return
+          }
         }
       }
     }
     getAuthData()
 
-    // Listen for auth state changes (e.g., on login, token refresh)
+    // Listen for auth state changes - this is the KEY: wait for INITIAL_SESSION
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('DashboardSyncManager: Auth state change:', event, session ? 'Session exists' : 'No session')
       
       // Handle INITIAL_SESSION, SIGNED_IN, and TOKEN_REFRESHED events
       if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
         // Log session details for debugging
-        console.log('DashboardSyncManager: Session details:', {
+        console.log('DashboardSyncManager: Session from auth event:', {
+          event,
           hasUser: !!session.user,
           hasEmail: !!session.user?.email,
           hasProviderToken: !!session.provider_token,
@@ -62,14 +84,29 @@ export default function DashboardSyncManager() {
         // Only set state if both email and token are present
         if (session.user?.email && session.provider_token) {
           console.log('DashboardSyncManager: Setting provider token and email from auth state change')
-          setProviderToken(session.provider_token)
-          setUserEmail(session.user.email)
-          
-          // Reset flags on new sign-in (but not on token refresh or initial session)
-          if (event === 'SIGNED_IN') {
-            hasInitiatedSyncsRef.current = false
-            calendarSyncInitiatedRef.current = false
-            threadSyncStartedRef.current = false
+          if (mounted) {
+            setProviderToken(session.provider_token)
+            setUserEmail(session.user.email)
+            
+            // Reset flags on new sign-in (but not on token refresh or initial session)
+            if (event === 'SIGNED_IN') {
+              hasInitiatedSyncsRef.current = false
+              calendarSyncInitiatedRef.current = false
+              threadSyncStartedRef.current = false
+            }
+          }
+        } else if (event === 'INITIAL_SESSION' && !session.provider_token) {
+          // INITIAL_SESSION without provider_token - try refreshing
+          console.log('DashboardSyncManager: INITIAL_SESSION without provider_token, refreshing session...')
+          const { data: { session: refreshedSession } } = await supabase.auth.refreshSession()
+          if (refreshedSession?.provider_token && refreshedSession?.user?.email) {
+            console.log('DashboardSyncManager: Got provider_token after refresh from INITIAL_SESSION')
+            if (mounted) {
+              setProviderToken(refreshedSession.provider_token)
+              setUserEmail(refreshedSession.user.email)
+            }
+          } else {
+            console.warn('DashboardSyncManager: provider_token still missing after INITIAL_SESSION and refresh. Syncs will not start until credentials are available.')
           }
         } else {
           console.warn('DashboardSyncManager: Missing email or provider token after auth state change:', {
@@ -77,22 +114,12 @@ export default function DashboardSyncManager() {
             hasEmail: !!session.user?.email,
             hasProviderToken: !!session.provider_token
           })
-          
-          // If INITIAL_SESSION doesn't have provider_token, try refreshing the session
-          if (event === 'INITIAL_SESSION' && !session.provider_token) {
-            console.log('DashboardSyncManager: INITIAL_SESSION without provider_token, refreshing session...')
-            const { data: { session: refreshedSession } } = await supabase.auth.getSession()
-            if (refreshedSession?.provider_token && refreshedSession?.user?.email) {
-              console.log('DashboardSyncManager: Got provider_token after refresh')
-              setProviderToken(refreshedSession.provider_token)
-              setUserEmail(refreshedSession.user.email)
-            }
-          }
         }
       }
     })
 
     return () => {
+      mounted = false
       subscription.unsubscribe()
     }
   }, [supabase])
