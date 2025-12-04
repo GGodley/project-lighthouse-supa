@@ -59,7 +59,7 @@ const CustomerThreadsPage: React.FC = () => {
 
   // Get auth session for provider token and user email
   useEffect(() => {
-    const getAuthData = async () => {
+    const getAuthData = async (retryCount = 0) => {
       const { data: { session } } = await supabase.auth.getSession()
       
       // If no session, leave behavior as-is (middleware/global auth handles this)
@@ -69,7 +69,16 @@ const CustomerThreadsPage: React.FC = () => {
       
       // Check if email or provider token is missing
       if (!session.user?.email || !session.provider_token) {
-        // Redirect to login with returnUrl to preserve intended destination
+        // Retry up to 3 times with increasing delays (provider_token might be delayed after login redirect)
+        if (retryCount < 3) {
+          const delay = (retryCount + 1) * 1000 // 1s, 2s, 3s
+          console.log(`CustomerThreadsPage: Waiting for provider_token (attempt ${retryCount + 1}/3)...`)
+          setTimeout(() => getAuthData(retryCount + 1), delay)
+          return
+        }
+        
+        // After retries, if still missing, redirect to login
+        console.warn('CustomerThreadsPage: Missing email or provider token after retries. Redirecting to login.')
         const currentPath = '/dashboard/customer-threads'
         const returnUrl = encodeURIComponent(currentPath)
         setIsRedirecting(true)
@@ -82,6 +91,20 @@ const CustomerThreadsPage: React.FC = () => {
       setUserEmail(session.user.email)
     }
     getAuthData()
+
+    // Also listen for auth state changes to catch when session becomes available
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
+        if (session.user?.email && session.provider_token) {
+          setProviderToken(session.provider_token)
+          setUserEmail(session.user.email)
+        }
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [supabase, router])
 
   // Thread sync hook (used for status display and manual sync button)
