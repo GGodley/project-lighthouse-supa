@@ -26,6 +26,7 @@ interface MeetingDetailViewProps {
     attendees: Json | null;
     next_steps: Json | null;
     customer_sentiment: string | null;
+    transcript: string | null;
   };
   companyId: string;
   onClose: () => void;
@@ -245,6 +246,19 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
                 <p className="text-sm text-black dark:text-gray-300 whitespace-pre-wrap" style={{ color: '#1a1a1a' }}>
                   {meeting.summary}
                 </p>
+              </div>
+            )}
+
+            {/* Transcript */}
+            {meeting.transcript && (
+              <div className="glass-card rounded-xl p-4" style={{ color: '#1a1a1a' }}>
+                <h4 className="font-semibold text-black mb-3">Transcript</h4>
+                <p className="text-xs text-gray-500 mb-2 italic">This is the raw transcript of the meeting</p>
+                <div className="max-h-96 overflow-y-auto">
+                  <p className="text-sm text-black dark:text-gray-300 whitespace-pre-wrap" style={{ color: '#1a1a1a' }}>
+                    {meeting.transcript}
+                  </p>
+                </div>
               </div>
             )}
 

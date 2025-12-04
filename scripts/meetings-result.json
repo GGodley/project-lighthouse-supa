@@ -1,0 +1,310 @@
+[
+  {
+    "result": {
+      "meetings": [
+        {
+          "recall_bot_id": "dde2baa0-0fd0-4276-af02-6ed9d42c5802",
+          "google_event_id": "ud84pqt70aflj8oaa8otbctt7u_20251120T131500Z",
+          "title": "EDAG<>AIR Battery Weekly sprint",
+          "start_time": "2025-11-24T09:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "b8ca22e9-96ef-4e2b-b00e-79fed78bb1b7",
+          "google_event_id": "c8ln2hca2qj5qei6upemls79to_20251126T080000Z",
+          "title": "Electrical 600 battery design review + PDU new location",
+          "start_time": "2025-11-26T08:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "9d6ca114-e64b-497b-9a1a-c1c9877e0a20",
+          "google_event_id": "ud84pqt70aflj8oaa8otbctt7u_20251127T131500Z",
+          "title": "EDAG<>AIR Battery Weekly sprint",
+          "start_time": "2025-11-27T13:15:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "66738f5b-0bf6-448e-8cdb-67a146e37037",
+          "google_event_id": "5rpb8rtlvk9ei9e9te26tq4dnt_20251201T070000Z",
+          "title": "600 Weekly IPT",
+          "start_time": "2025-12-01T07:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "ef699a96-be01-445e-8a7c-fd890064e3ba",
+          "google_event_id": "ft9m164t0t23lke81a3fc69imd_20251201T130000Z",
+          "title": "Air - Monthly Meeting",
+          "start_time": "2025-12-01T13:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "04cb586a-adb1-423f-8433-6bef0a304e27",
+          "google_event_id": "c8ln2hca2qj5qei6upemls79to_20251203T080000Z",
+          "title": "Electrical 600 battery design review + PDU new location",
+          "start_time": "2025-12-03T08:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "03666074-4b35-4cb9-83a3-8f024e8f45c3",
+          "google_event_id": "ud84pqt70aflj8oaa8otbctt7u_20251211T131500Z",
+          "title": "EDAG<>AIR Battery Weekly sprint",
+          "start_time": "2025-12-11T13:15:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "3c555840-6e46-478e-a4cc-92a505de9e3a",
+          "google_event_id": "ud84pqt70aflj8oaa8otbctt7u_20251204T131500Z",
+          "title": "EDAG<>AIR Battery Weekly sprint",
+          "start_time": "2025-12-04T13:15:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "a11aedbd-2d00-433d-bca7-5627f3ade5d3",
+          "google_event_id": "5rpb8rtlvk9ei9e9te26tq4dnt_20251208T070000Z",
+          "title": "600 Weekly IPT",
+          "start_time": "2025-12-08T07:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "c01854cc-d2ee-46fe-b223-55e535325b49",
+          "google_event_id": "ud84pqt70aflj8oaa8otbctt7u_20251218T131500Z",
+          "title": "EDAG<>AIR Battery Weekly sprint",
+          "start_time": "2025-12-18T13:15:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "4a04bcf7-d6eb-41c5-89dd-2b913bf93a38",
+          "google_event_id": "c8ln2hca2qj5qei6upemls79to_20251210T080000Z",
+          "title": "Electrical 600 battery design review + PDU new location",
+          "start_time": "2025-12-10T08:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "3b6cae19-0563-42e1-93dc-4ef85a1854d9",
+          "google_event_id": "5rpb8rtlvk9ei9e9te26tq4dnt_20251215T070000Z",
+          "title": "600 Weekly IPT",
+          "start_time": "2025-12-15T07:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "92f7b395-a1e3-4d3c-8695-d82d9fa3b00c",
+          "google_event_id": "c8ln2hca2qj5qei6upemls79to_20251217T080000Z",
+          "title": "Electrical 600 battery design review + PDU new location",
+          "start_time": "2025-12-17T08:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "2f84ec26-cc62-4334-9e51-cbe7eab4f272",
+          "google_event_id": "5rpb8rtlvk9ei9e9te26tq4dnt_20251222T070000Z",
+          "title": "600 Weekly IPT",
+          "start_time": "2025-12-22T07:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "3f8565af-4e92-43e7-a507-3d5c79738cb3",
+          "google_event_id": "c8ln2hca2qj5qei6upemls79to_20251224T080000Z",
+          "title": "Electrical 600 battery design review + PDU new location",
+          "start_time": "2025-12-24T08:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "d2201187-1c3e-4c14-baf9-87bdb0b8ecf7",
+          "google_event_id": "ud84pqt70aflj8oaa8otbctt7u_20251225T131500Z",
+          "title": "EDAG<>AIR Battery Weekly sprint",
+          "start_time": "2025-12-25T13:15:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "3c382f3d-52bb-4840-bf45-6c13b9230c83",
+          "google_event_id": "ud84pqt70aflj8oaa8otbctt7u_20260101T131500Z",
+          "title": "EDAG<>AIR Battery Weekly sprint",
+          "start_time": "2026-01-01T13:15:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "fe636bb2-2924-4d75-9e29-160489048f03",
+          "google_event_id": "5rpb8rtlvk9ei9e9te26tq4dnt_20251229T070000Z",
+          "title": "600 Weekly IPT",
+          "start_time": "2025-12-29T07:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "fc4dd950-3a91-4dd8-88f1-e5093423533a",
+          "google_event_id": "c8ln2hca2qj5qei6upemls79to_20251231T080000Z",
+          "title": "Electrical 600 battery design review + PDU new location",
+          "start_time": "2025-12-31T08:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "48100a81-781e-46b6-acd1-f18955af4603",
+          "google_event_id": "ud84pqt70aflj8oaa8otbctt7u_20260115T131500Z",
+          "title": "EDAG<>AIR Battery Weekly sprint",
+          "start_time": "2026-01-15T13:15:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "4657527b-17bc-4353-9631-cf9f80b1cf9d",
+          "google_event_id": "5rpb8rtlvk9ei9e9te26tq4dnt_20260105T070000Z",
+          "title": "600 Weekly IPT",
+          "start_time": "2026-01-05T07:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "c47952a3-abed-4678-adfe-0f6d80b574ae",
+          "google_event_id": "ud84pqt70aflj8oaa8otbctt7u_20260108T131500Z",
+          "title": "EDAG<>AIR Battery Weekly sprint",
+          "start_time": "2026-01-08T13:15:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "6b608b4f-302c-4ec7-ad11-8273706700bc",
+          "google_event_id": "ft9m164t0t23lke81a3fc69imd_20260105T130000Z",
+          "title": "Air - Monthly Meeting",
+          "start_time": "2026-01-05T13:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "5abe9c85-447d-4740-9e36-c94339382287",
+          "google_event_id": "c8ln2hca2qj5qei6upemls79to_20260107T080000Z",
+          "title": "Electrical 600 battery design review + PDU new location",
+          "start_time": "2026-01-07T08:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "29a3b902-3d5d-4fb0-9f88-5d794593316d",
+          "google_event_id": "c8ln2hca2qj5qei6upemls79to_20260114T080000Z",
+          "title": "Electrical 600 battery design review + PDU new location",
+          "start_time": "2026-01-14T08:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "a045f70e-2a6b-46d8-bee5-b9b4a3c53faa",
+          "google_event_id": "5rpb8rtlvk9ei9e9te26tq4dnt_20260112T070000Z",
+          "title": "600 Weekly IPT",
+          "start_time": "2026-01-12T07:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "7600deaf-1866-4c44-af9a-83616ea93e99",
+          "google_event_id": "5rpb8rtlvk9ei9e9te26tq4dnt_20260119T070000Z",
+          "title": "600 Weekly IPT",
+          "start_time": "2026-01-19T07:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "efaa1057-9c5a-41a1-9226-b1c8f9dc67e5",
+          "google_event_id": "c8ln2hca2qj5qei6upemls79to_20260121T080000Z",
+          "title": "Electrical 600 battery design review + PDU new location",
+          "start_time": "2026-01-21T08:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "3802f725-ff96-4bda-8096-05858385f365",
+          "google_event_id": "ud84pqt70aflj8oaa8otbctt7u_20260122T131500Z",
+          "title": "EDAG<>AIR Battery Weekly sprint",
+          "start_time": "2026-01-22T13:15:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "d269f05c-e481-4e14-9444-818878b58713",
+          "google_event_id": "5rpb8rtlvk9ei9e9te26tq4dnt_20260126T070000Z",
+          "title": "600 Weekly IPT",
+          "start_time": "2026-01-26T07:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "81d15429-0b4f-4b62-b67e-e301d0578b1f",
+          "google_event_id": "c8ln2hca2qj5qei6upemls79to_20260128T080000Z",
+          "title": "Electrical 600 battery design review + PDU new location",
+          "start_time": "2026-01-28T08:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "b66b6af0-5384-45cb-bc1d-3d442a982551",
+          "google_event_id": "c8ln2hca2qj5qei6upemls79to_20260218T080000Z",
+          "title": "Electrical 600 battery design review + PDU new location",
+          "start_time": "2026-02-18T08:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "a220fc36-a0ce-47e6-8b72-47590054385f",
+          "google_event_id": "ud84pqt70aflj8oaa8otbctt7u_20260129T131500Z",
+          "title": "EDAG<>AIR Battery Weekly sprint",
+          "start_time": "2026-01-29T13:15:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "8881d11c-896d-4f9b-a446-593ffae89584",
+          "google_event_id": "ud84pqt70aflj8oaa8otbctt7u_20260205T131500Z",
+          "title": "EDAG<>AIR Battery Weekly sprint",
+          "start_time": "2026-02-05T13:15:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "25c34d50-1cd3-4780-ba82-c1d407409ee7",
+          "google_event_id": "5rpb8rtlvk9ei9e9te26tq4dnt_20260202T070000Z",
+          "title": "600 Weekly IPT",
+          "start_time": "2026-02-02T07:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "f52bf726-fc13-45a1-bb3b-ee837ed6bd12",
+          "google_event_id": "ud84pqt70aflj8oaa8otbctt7u_20260212T131500Z",
+          "title": "EDAG<>AIR Battery Weekly sprint",
+          "start_time": "2026-02-12T13:15:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "d3c1ab9e-9cc2-476d-b0c1-d117ee3081fc",
+          "google_event_id": "ft9m164t0t23lke81a3fc69imd_20260202T130000Z",
+          "title": "Air - Monthly Meeting",
+          "start_time": "2026-02-02T13:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "1e337118-759e-469d-8926-ed7bcb547784",
+          "google_event_id": "5rpb8rtlvk9ei9e9te26tq4dnt_20260209T070000Z",
+          "title": "600 Weekly IPT",
+          "start_time": "2026-02-09T07:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "85066e9a-5312-495c-a5ae-b73de18b06c5",
+          "google_event_id": "c8ln2hca2qj5qei6upemls79to_20260204T080000Z",
+          "title": "Electrical 600 battery design review + PDU new location",
+          "start_time": "2026-02-04T08:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "a5359b81-8e99-4194-88ba-306349581f85",
+          "google_event_id": "c8ln2hca2qj5qei6upemls79to_20260211T080000Z",
+          "title": "Electrical 600 battery design review + PDU new location",
+          "start_time": "2026-02-11T08:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "5b742912-8b49-4c8b-ac88-17d667e8a97d",
+          "google_event_id": "5rpb8rtlvk9ei9e9te26tq4dnt_20260216T070000Z",
+          "title": "600 Weekly IPT",
+          "start_time": "2026-02-16T07:00:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "af83fdf1-1fa1-4478-8f20-92d194751dbf",
+          "google_event_id": "ud84pqt70aflj8oaa8otbctt7u_20260219T131500Z",
+          "title": "EDAG<>AIR Battery Weekly sprint",
+          "start_time": "2026-02-19T13:15:00+00:00",
+          "status": "recording_scheduled"
+        },
+        {
+          "recall_bot_id": "16f4e99a-87c7-4c24-a372-fad6e73c56d2",
+          "google_event_id": "6cumctf7a7frtl5hep2smv06q8",
+          "title": "אלכס - חופש",
+          "start_time": "2025-12-08T00:00:00+00:00",
+          "status": "recording_scheduled"
+        }
+      ]
+    }
+  }
+]
+

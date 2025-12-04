@@ -776,6 +776,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                   attendees: selectedMeeting.attendees,
                   next_steps: selectedMeeting.next_steps,
                   customer_sentiment: selectedMeeting.customer_sentiment,
+                  transcript: selectedMeeting.transcript,
                 }}
                 companyId={companyId}
                 onClose={() => {

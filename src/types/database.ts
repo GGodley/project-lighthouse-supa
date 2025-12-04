@@ -373,6 +373,7 @@ export type Database = {
           status: string | null
           summary: string | null
           title: string | null
+          transcript: string | null
           updated_at: string | null
           user_id: string
         }
@@ -396,6 +397,7 @@ export type Database = {
           status?: string | null
           summary?: string | null
           title?: string | null
+          transcript?: string | null
           updated_at?: string | null
           user_id: string
         }
@@ -419,6 +421,7 @@ export type Database = {
           status?: string | null
           summary?: string | null
           title?: string | null
+          transcript?: string | null
           updated_at?: string | null
           user_id?: string
         }

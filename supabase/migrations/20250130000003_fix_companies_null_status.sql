@@ -12,3 +12,4 @@ ALTER COLUMN status SET DEFAULT 'active';
 -- Add a comment explaining the status values
 COMMENT ON COLUMN public.companies.status IS 'Company status: active, inactive, at_risk, churned, or archived. Defaults to active.';
 
+

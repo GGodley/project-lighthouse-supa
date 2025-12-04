@@ -191,28 +191,9 @@ Deno.serve(async (req)=>{
 
     console.log(`✅ Summary processing completed for meeting ${job.meeting_id}`);
 
-    // Trigger Recall.ai storage cleanup after successful completion
-    // This optimizes storage usage by deleting media after we've extracted and stored the summary
-    // Works for both Google Meet and Zoom meetings
-    if (job.recall_bot_id && job.meeting_id) {
-      console.log(`🧹 Triggering Recall.ai media cleanup for meeting ${job.meeting_id} (bot: ${job.recall_bot_id})`);
-      supabase.functions.invoke('cleanup-meeting-data', {
-        body: {
-          record: {
-            meeting_id: job.meeting_id,
-            recall_bot_id: job.recall_bot_id
-          }
-        }
-      }).then(() => {
-        console.log(`✅ Cleanup triggered successfully for meeting ${job.meeting_id}`);
-      }).catch(err => {
-        console.error(`⚠️ Failed to trigger cleanup for meeting ${job.meeting_id}:`, err);
-        // Don't throw - cleanup failure shouldn't break the summary flow
-        // The summary is already stored, so this is non-critical
-      });
-    } else {
-      console.log(`ℹ️ Skipping cleanup for meeting ${job.meeting_id}: missing recall_bot_id or meeting_id`);
-    }
+    // Note: Recall.ai media cleanup is now handled in process-transcript function
+    // after the transcript is verified and saved. This ensures cleanup happens
+    // as soon as we have the transcript, not waiting for summary generation.
 
     return new Response(JSON.stringify({
       success: true
