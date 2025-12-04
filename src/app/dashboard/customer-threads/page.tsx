@@ -64,15 +64,27 @@ const CustomerThreadsPage: React.FC = () => {
       
       // If no session, leave behavior as-is (middleware/global auth handles this)
       if (!session) {
+        console.log('CustomerThreadsPage: No session found')
         return
       }
       
+      // Log session details for debugging
+      console.log('CustomerThreadsPage: Session check:', {
+        attempt: retryCount + 1,
+        hasUser: !!session.user,
+        hasEmail: !!session.user?.email,
+        hasProviderToken: !!session.provider_token,
+        providerTokenLength: session.provider_token?.length || 0,
+        accessTokenExists: !!session.access_token,
+        sessionKeys: Object.keys(session)
+      })
+      
       // Check if email or provider token is missing
       if (!session.user?.email || !session.provider_token) {
-        // Retry up to 3 times with increasing delays (provider_token might be delayed after login redirect)
-        if (retryCount < 3) {
-          const delay = (retryCount + 1) * 1000 // 1s, 2s, 3s
-          console.log(`CustomerThreadsPage: Waiting for provider_token (attempt ${retryCount + 1}/3)...`)
+        // Retry up to 5 times with increasing delays (provider_token might be delayed after login redirect)
+        if (retryCount < 5) {
+          const delay = (retryCount + 1) * 1000 // 1s, 2s, 3s, 4s, 5s
+          console.log(`CustomerThreadsPage: Waiting for provider_token (attempt ${retryCount + 1}/5)...`)
           setTimeout(() => getAuthData(retryCount + 1), delay)
           return
         }
@@ -87,17 +99,50 @@ const CustomerThreadsPage: React.FC = () => {
       }
       
       // Both email and token are present, set state normally
+      console.log('CustomerThreadsPage: Successfully got provider_token and email')
       setProviderToken(session.provider_token)
       setUserEmail(session.user.email)
+      setIsRedirecting(false)
     }
     getAuthData()
 
     // Also listen for auth state changes to catch when session becomes available
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
+      console.log('CustomerThreadsPage: Auth state change:', event, session ? 'Session exists' : 'No session')
+      
+      // Handle INITIAL_SESSION, SIGNED_IN, and TOKEN_REFRESHED events
+      if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
+        // Log session details for debugging
+        console.log('CustomerThreadsPage: Session details:', {
+          hasUser: !!session.user,
+          hasEmail: !!session.user?.email,
+          hasProviderToken: !!session.provider_token,
+          providerTokenLength: session.provider_token?.length || 0
+        })
+        
         if (session.user?.email && session.provider_token) {
+          console.log('CustomerThreadsPage: Setting provider token and email from auth state change')
           setProviderToken(session.provider_token)
           setUserEmail(session.user.email)
+          setIsRedirecting(false) // Cancel any pending redirect
+        } else {
+          console.warn('CustomerThreadsPage: Missing email or provider token after auth state change:', {
+            event,
+            hasEmail: !!session.user?.email,
+            hasProviderToken: !!session.provider_token
+          })
+          
+          // If INITIAL_SESSION doesn't have provider_token, try refreshing the session
+          if (event === 'INITIAL_SESSION' && !session.provider_token) {
+            console.log('CustomerThreadsPage: INITIAL_SESSION without provider_token, refreshing session...')
+            const { data: { session: refreshedSession } } = await supabase.auth.getSession()
+            if (refreshedSession?.provider_token && refreshedSession?.user?.email) {
+              console.log('CustomerThreadsPage: Got provider_token after refresh')
+              setProviderToken(refreshedSession.provider_token)
+              setUserEmail(refreshedSession.user.email)
+              setIsRedirecting(false) // Cancel any pending redirect
+            }
+          }
         }
       }
     })

@@ -109,6 +109,16 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Log session details for debugging
+  console.log('Auth callback: Session created successfully', {
+    hasUser: !!data.user,
+    hasEmail: !!data.user?.email,
+    hasProviderToken: !!data.session.provider_token,
+    providerTokenLength: data.session.provider_token?.length || 0,
+    accessTokenExists: !!data.session.access_token,
+    refreshTokenExists: !!data.session.refresh_token
+  })
+
   // Create profile if it doesn't exist
   if (data.user) {
     try {
