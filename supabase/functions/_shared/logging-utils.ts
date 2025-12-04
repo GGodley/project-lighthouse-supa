@@ -25,6 +25,9 @@ export type ErrorLog = {
     type: string
     message: string
     stack?: string
+    code?: string
+    details?: string
+    hint?: string
   }
   context: LogContext
   severity: 'low' | 'medium' | 'high' | 'critical'
@@ -84,16 +87,56 @@ export function logError(
   context: LogContext = {},
   severity: 'low' | 'medium' | 'high' | 'critical' = 'medium'
 ): void {
-  const errorObj = error instanceof Error 
-    ? {
-        type: error.constructor.name,
-        message: error.message,
-        stack: error.stack
+  let errorObj: {
+    type: string
+    message: string
+    stack?: string
+    code?: string
+    details?: string
+    hint?: string
+  }
+
+  if (error instanceof Error) {
+    // Standard Error instance
+    errorObj = {
+      type: error.constructor.name,
+      message: error.message,
+      stack: error.stack
+    }
+  } else if (error && typeof error === 'object' && 'message' in error) {
+    // Supabase error object or similar structured error
+    const supabaseError = error as {
+      message?: string
+      code?: string
+      details?: string
+      hint?: string
+    }
+    errorObj = {
+      type: 'SupabaseError',
+      message: supabaseError.message || 'Unknown error',
+      code: supabaseError.code,
+      details: typeof supabaseError.details === 'string'
+        ? supabaseError.details
+        : supabaseError.details
+          ? JSON.stringify(supabaseError.details)
+          : undefined,
+      hint: supabaseError.hint
+    }
+  } else {
+    // Fallback for other types - try to serialize as JSON
+    try {
+      const serialized = JSON.stringify(error)
+      errorObj = {
+        type: typeof error,
+        message: serialized.length > 500 ? serialized.substring(0, 500) + '...' : serialized
       }
-    : {
+    } catch {
+      errorObj = {
         type: typeof error,
         message: String(error)
       }
+    }
+  }
 
   const log: ErrorLog = {
     meetingId,
