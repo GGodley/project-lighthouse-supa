@@ -1,5 +1,5 @@
 // scripts/list-all-recall-bots.ts
-// Run with: deno run --allow-net --allow-env scripts/list-all-recall-bots.ts
+// Run with: node scripts/list-all-recall-bots.js  (use the JS version in CI/Vercel)
 
 const RECALLAI_API_KEY = '636b9c93ed6c14905dbbdd31f8ae5d3cebb718ae'
 const BASE_URL = 'https://us-west-2.recall.ai/api/v1'
@@ -32,7 +32,7 @@ async function listAllBots() {
       console.error('Response:', errorText)
       console.log('\n💡 Note: The endpoint might be different. Check Recall.ai API docs.')
       console.log('   Or try: GET https://us-west-2.recall.ai/api/v1/bot')
-      Deno.exit(1)
+      process.exit(1)
     }
 
     const data = await response.json()
@@ -111,7 +111,7 @@ async function listAllBots() {
     
   } catch (error) {
     console.error('❌ Error:', error)
-    Deno.exit(1)
+    process.exit(1)
   }
 }
 
