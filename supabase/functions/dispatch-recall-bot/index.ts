@@ -325,6 +325,7 @@ Deno.serve(async (req) => {
       .update({
         recall_bot_id: recallBotId,
         status: 'recording_scheduled',
+        dispatch_status: 'completed', // Mark dispatch as completed
         error_details: null, // Clear any previous errors
         last_error_at: null,
         retry_count: 0 // Reset retry count on success

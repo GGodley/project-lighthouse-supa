@@ -229,7 +229,7 @@ serve(async (req) => {
       // Check if meeting already exists in main table
       const { data: existingMeeting, error: existingErr } = await supabase
         .from('meetings')
-        .select('id, start_time, end_time, status, recall_bot_id, meeting_url, hangout_link, meeting_type, customer_id, title, last_reschedule_attempt, updated_at')
+        .select('id, start_time, end_time, status, recall_bot_id, meeting_url, hangout_link, meeting_type, customer_id, company_id, title, last_reschedule_attempt, updated_at')
         .eq('google_event_id', event.id)
         .eq('user_id', userId)
         .maybeSingle()
@@ -367,6 +367,56 @@ serve(async (req) => {
             statusToSet = 'new'
           }
           
+          // Preserve or re-resolve customer_id and company_id
+          // First, try to preserve existing values
+          let customerId = existingMeeting.customer_id
+          let companyId = existingMeeting.company_id
+          
+          // If missing, try to re-resolve from event attendees
+          if (!customerId || !companyId) {
+            const attendees: Attendee[] = event.attendees || []
+            const externalAttendees: Attendee[] = attendees.filter((a) => {
+              if (!a.email) return false
+              const domain = a.email.split('@')[1]
+              return Boolean(domain) && domain !== userDomain
+            })
+            const externalEmails: string[] = externalAttendees.map(a => a.email)
+            
+            if (externalEmails.length > 0) {
+              // Get user's companies first
+              const { data: userCompanies, error: companiesErr } = await supabase
+                .from('companies')
+                .select('company_id')
+                .eq('user_id', userId)
+              
+              if (!companiesErr && userCompanies && userCompanies.length > 0) {
+                const companyIds = userCompanies.map(c => c.company_id)
+                
+                // Find customer in user's companies
+                const { data: customer, error: findErr } = await supabase
+                  .from('customers')
+                  .select('customer_id, company_id')
+                  .in('email', externalEmails)
+                  .in('company_id', companyIds)
+                  .limit(1)
+                  .maybeSingle()
+                
+                if (!findErr && customer) {
+                  customerId = customer.customer_id
+                  companyId = customer.company_id
+                  logMeetingEvent('info', 'resolved_customer_on_reschedule', {
+                    meetingId: existingMeeting.id.toString(),
+                    googleEventId: event.id,
+                    userId,
+                    customerId,
+                    companyId,
+                    correlationId
+                  })
+                }
+              }
+            }
+          }
+          
           // Update the meeting with new times, URL, title, and status
           const updatePayload: Partial<MeetingPayload> = {
             start_time: startIso,
@@ -379,7 +429,9 @@ serve(async (req) => {
             dispatch_status: 'pending', // Reset to allow new bot dispatch
             last_reschedule_attempt: new Date().toISOString(),
             error_details: null, // Clear any previous errors
-            last_error_at: null
+            last_error_at: null,
+            customer_id: customerId, // Preserve or use re-resolved customer_id
+            company_id: companyId // Preserve or use re-resolved company_id
           }
           
           if (titleChanged) {
@@ -453,7 +505,7 @@ serve(async (req) => {
                 body: {
                   meeting_id: event.id,
                   user_id: userId,
-                  customer_id: existingMeeting.customer_id
+                  customer_id: customerId // Use re-resolved customer_id if available
                 }
               })
               logMeetingEvent('info', 'bot_dispatched_for_reschedule', {
