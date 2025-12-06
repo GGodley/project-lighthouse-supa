@@ -195,6 +195,26 @@ serve(async (req) => {
       // Compute new times and URL from current event (needed for both new and existing meetings)
       const startIso = event.start?.dateTime || event.start?.date || new Date().toISOString()
       const endIso = event.end?.dateTime || event.end?.date || startIso
+      
+      // Skip meetings more than 30 days in the future (efficiency optimization)
+      const meetingStartDate = new Date(startIso)
+      const thirtyDaysFromNow = new Date()
+      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30)
+      
+      if (meetingStartDate > thirtyDaysFromNow) {
+        logMeetingEvent('info', 'skipping_future_meeting', {
+          googleEventId: event.id,
+          userId,
+          meetingStartDate: startIso,
+          reason: 'Meeting is more than 30 days in the future'
+        })
+        await supabase
+          .from('temp_meetings')
+          .update({ processed: true })
+          .eq('id', tempMeeting.id)
+        continue
+      }
+      
       const { url: meetingUrl, type: meetingType } = getMeetingUrl(event)
       const hangoutLink = meetingType === 'google_meet' ? meetingUrl : null
 
@@ -374,13 +394,27 @@ serve(async (req) => {
           
           // If missing, try to re-resolve from event attendees
           if (!customerId || !companyId) {
+            // Helper function to check if email is a Google Calendar resource
+            const isGoogleCalendarResource = (email: string): boolean => {
+              return email.startsWith('c_') && (
+                email.includes('@resource.calendar.google.com') ||
+                email.includes('@group.calendar.google.com')
+              )
+            }
+
             const attendees: Attendee[] = event.attendees || []
+            // Filter out Google Calendar resources
             const externalAttendees: Attendee[] = attendees.filter((a) => {
               if (!a.email) return false
+              // Filter out Google Calendar resources
+              if (isGoogleCalendarResource(a.email)) return false
               const domain = a.email.split('@')[1]
               return Boolean(domain) && domain !== userDomain
             })
             const externalEmails: string[] = externalAttendees.map(a => a.email)
+            const externalDomains: string[] = externalAttendees
+              .map(a => a.email?.split('@')[1])
+              .filter((d): d is string => Boolean(d))
             
             if (externalEmails.length > 0) {
               // Get user's companies first
@@ -392,7 +426,7 @@ serve(async (req) => {
               if (!companiesErr && userCompanies && userCompanies.length > 0) {
                 const companyIds = userCompanies.map(c => c.company_id)
                 
-                // Find customer in user's companies
+                // STEP 1: Try exact email match first
                 const { data: customer, error: findErr } = await supabase
                   .from('customers')
                   .select('customer_id, company_id')
@@ -412,6 +446,40 @@ serve(async (req) => {
                     companyId,
                     correlationId
                   })
+                } else {
+                  // STEP 2: No email match - try domain-based matching
+                  const { data: domainCompany, error: domainErr } = await supabase
+                    .from('companies')
+                    .select('company_id, domain_name')
+                    .in('domain_name', externalDomains)
+                    .eq('user_id', userId)
+                    .limit(1)
+                    .maybeSingle()
+
+                  if (!domainErr && domainCompany) {
+                    // Found company by domain - get first customer from that company
+                    const { data: companyCustomer, error: companyCustomerErr } = await supabase
+                      .from('customers')
+                      .select('customer_id, company_id')
+                      .eq('company_id', domainCompany.company_id)
+                      .order('created_at', { ascending: true })
+                      .limit(1)
+                      .maybeSingle()
+
+                    if (!companyCustomerErr && companyCustomer) {
+                      customerId = companyCustomer.customer_id
+                      companyId = companyCustomer.company_id
+                      logMeetingEvent('info', 'resolved_customer_on_reschedule_by_domain', {
+                        meetingId: existingMeeting.id.toString(),
+                        googleEventId: event.id,
+                        userId,
+                        customerId,
+                        companyId,
+                        domain: domainCompany.domain_name,
+                        correlationId
+                      })
+                    }
+                  }
                 }
               }
             }
@@ -563,20 +631,28 @@ serve(async (req) => {
         continue
       }
 
-      // Check for external attendees
+      // Check for external attendees (excluding Google Calendar resources)
       const attendees: Attendee[] = event.attendees || []
-      let isExternal = false
-      for (const a of attendees) {
-        if (!a.email) continue
-        const aDomain = a.email.split('@')[1]
-        if (aDomain && aDomain !== userDomain) {
-          isExternal = true
-          break
-        }
+      
+      // Helper function to check if email is a Google Calendar resource
+      const isGoogleCalendarResource = (email: string): boolean => {
+        return email.startsWith('c_') && (
+          email.includes('@resource.calendar.google.com') ||
+          email.includes('@group.calendar.google.com')
+        )
       }
 
-      if (!isExternal) {
-        console.log('ℹ️ No external attendees, marking as processed')
+      // Identify all external attendees (excluding Google Calendar resources)
+      const externalAttendees: Attendee[] = attendees.filter((a) => {
+        if (!a.email) return false
+        // Filter out Google Calendar resources
+        if (isGoogleCalendarResource(a.email)) return false
+        const domain = a.email.split('@')[1]
+        return Boolean(domain) && domain !== userDomain
+      })
+
+      if (externalAttendees.length === 0) {
+        console.log('ℹ️ No real external attendees (only Google Calendar resources or internal), marking as processed')
         await supabase
           .from('temp_meetings')
           .update({ processed: true })
@@ -587,16 +663,10 @@ serve(async (req) => {
       // Note: startIso, endIso, meetingUrl, hangoutLink, and meetingType are already computed above
       // (before the existing meeting check) and are available here for new meetings
 
-      // Identify all external attendees
-      const externalAttendees: Attendee[] = attendees.filter((a) => {
-        if (!a.email) return false
-        const domain = a.email.split('@')[1]
-        return Boolean(domain) && domain !== userDomain
-      })
-
       const externalEmails: string[] = externalAttendees.map(a => a.email)
-      const externalDomains: (string | undefined)[] = externalAttendees.map(a => a.email?.split('@')[1])
-      const primaryCustomer: string | null = (externalDomains.find(Boolean) as string | undefined) ?? null
+      const externalDomains: string[] = externalAttendees
+        .map(a => a.email?.split('@')[1])
+        .filter((d): d is string => Boolean(d))
 
       console.log(`🔍 Searching for existing customer using emails: ${externalEmails.join(', ')}`);
 
@@ -616,7 +686,7 @@ serve(async (req) => {
       } else if (userCompanies && userCompanies.length > 0) {
         const companyIds = userCompanies.map(c => c.company_id);
         
-        // Find customer in user's companies only
+        // STEP 1: Try exact email match first
         const { data: customer, error: findErr } = await supabase
           .from('customers')
           .select('customer_id, company_id')
@@ -628,13 +698,48 @@ serve(async (req) => {
         if (findErr) {
           console.error('❌ Customer lookup failed:', findErr);
         } else if (customer) {
-          // We found a match!
+          // We found a match by email!
           customerId = customer.customer_id;
           companyId = customer.company_id;
-          console.log(`✅ Found matching customer: ${customerId} (Company: ${companyId})`);
+          console.log(`✅ Found matching customer by email: ${customerId} (Company: ${companyId})`);
         } else {
-          // No match was found.
-          console.warn(`ℹ️ No known customer found for this meeting. The meeting will be saved without a customer link.`);
+          // STEP 2: No email match found - try domain-based matching
+          console.log(`ℹ️ No customer email match found. Trying domain-based matching for domains: ${externalDomains.join(', ')}`);
+          
+          // Try to match by company domain
+          const { data: domainCompany, error: domainErr } = await supabase
+            .from('companies')
+            .select('company_id, domain_name')
+            .in('domain_name', externalDomains)
+            .eq('user_id', userId)
+            .limit(1)
+            .maybeSingle();
+
+          if (domainErr) {
+            console.error('❌ Domain-based company lookup failed:', domainErr);
+          } else if (domainCompany) {
+            // Found a company by domain - get the first customer from that company
+            const { data: companyCustomer, error: companyCustomerErr } = await supabase
+              .from('customers')
+              .select('customer_id, company_id')
+              .eq('company_id', domainCompany.company_id)
+              .order('created_at', { ascending: true })
+              .limit(1)
+              .maybeSingle();
+
+            if (companyCustomerErr) {
+              console.error('❌ Failed to get customer from domain-matched company:', companyCustomerErr);
+            } else if (companyCustomer) {
+              customerId = companyCustomer.customer_id;
+              companyId = companyCustomer.company_id;
+              console.log(`✅ Found matching company by domain (${domainCompany.domain_name}), using first customer: ${customerId} (Company: ${companyId})`);
+            } else {
+              console.warn(`ℹ️ Found company by domain (${domainCompany.domain_name}) but no customers exist in that company. Meeting will be saved without customer link.`);
+            }
+          } else {
+            // No match was found by email or domain.
+            console.warn(`ℹ️ No known customer or company found for this meeting. The meeting will be saved without a customer link.`);
+          }
         }
       } else {
         console.warn(`ℹ️ User has no companies. The meeting will be saved without a customer link.`);

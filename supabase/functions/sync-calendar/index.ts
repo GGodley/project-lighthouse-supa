@@ -86,15 +86,16 @@ serve(async (req) => {
     }
     console.log('✅ PROVIDER TOKEN: Successfully received Google access token')
 
-    // Calculate date range: past 90 days to next 3 months
+    // Calculate date range: current date to next 30 days
+    // This limits processing to near-term meetings only, improving efficiency
     const now = new Date()
-    const pastNinetyDays = new Date()
-    pastNinetyDays.setDate(pastNinetyDays.getDate() - 90)
-    const threeMonthsFromNow = new Date()
-    threeMonthsFromNow.setMonth(threeMonthsFromNow.getMonth() + 3)
+    const thirtyDaysFromNow = new Date()
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30)
 
-    const timeMin = pastNinetyDays.toISOString()
-    const timeMax = threeMonthsFromNow.toISOString()
+    const timeMin = now.toISOString()
+    const timeMax = thirtyDaysFromNow.toISOString()
+    
+    console.log(`📅 Date range: ${timeMin} to ${timeMax} (next 30 days only)`)
 
     // Stage 1: fetch list of all calendars the user has access to
     const calendarListUrl = `https://www.googleapis.com/calendar/v3/users/me/calendarList`

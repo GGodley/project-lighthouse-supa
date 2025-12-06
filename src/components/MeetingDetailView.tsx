@@ -184,10 +184,63 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
       </div>
 
       <div className="flex flex-col lg:flex-row h-[600px]">
-        {/* Main Content Panel */}
-        <div className="flex-1 overflow-y-auto p-6 border-r border-white/20 dark:border-white/10" style={{ color: '#1a1a1a' }}>
-          <div className="space-y-6">
-            {/* Date and Time */}
+        {/* Left Panel - Transcript (primary content, like email body) */}
+        <div className="flex-1 overflow-y-auto p-6 border-r border-white/20 dark:border-white/10" style={{ color: '#1a1a1a', minWidth: '60%' }}>
+          <div className="glass-card rounded-xl p-4 h-full flex flex-col" style={{ color: '#1a1a1a' }}>
+            <h4 className="font-semibold text-black mb-3">Transcript</h4>
+            {meeting.transcript && meeting.transcript.trim().length > 0 ? (
+              <>
+                <p className="text-xs text-gray-500 mb-2 italic">
+                  This is the raw transcript of the meeting.
+                </p>
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                  <p
+                    className="text-sm text-black dark:text-gray-300 whitespace-pre-wrap"
+                    style={{ color: '#1a1a1a' }}
+                  >
+                    {meeting.transcript}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex flex-col items-start justify-center text-sm text-gray-600">
+                <p className="mb-2 font-medium">No transcript available yet.</p>
+                <p className="text-xs text-gray-500">
+                  Once the transcription job finishes, the full call transcript will appear here.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Panel - Summary & Details Sidebar (mirrors thread summary sidebar) */}
+        <div className="w-full lg:w-96 p-6 bg-gray-50 overflow-y-auto border-l border-gray-200 glass-card">
+          <div className="space-y-4">
+            {/* Summary */}
+            {meeting.summary && meeting.summary.trim().length > 0 && (
+              <div className="glass-card rounded-xl p-4" style={{ color: '#1a1a1a' }}>
+                <h4 className="font-semibold text-black mb-2">Summary</h4>
+                <p className="text-sm text-black dark:text-gray-300 whitespace-pre-wrap" style={{ color: '#1a1a1a' }}>
+                  {meeting.summary}
+                </p>
+              </div>
+            )}
+
+            {/* Customer Sentiment */}
+            {meeting.customer_sentiment && meeting.customer_sentiment.trim().length > 0 && (
+              <div className="glass-card rounded-xl p-4" style={{ color: '#1a1a1a' }}>
+                <h4 className="font-semibold text-black mb-2">Customer Sentiment</h4>
+                <span
+                  className={`inline-block px-3 py-1.5 rounded-full text-xs font-semibold ${getSentimentColor(
+                    meeting.customer_sentiment
+                  )}`}
+                >
+                  {meeting.customer_sentiment}
+                </span>
+              </div>
+            )}
+
+            {/* Date & Time */}
             <div className="glass-card rounded-xl p-4" style={{ color: '#1a1a1a' }}>
               <div className="flex items-center gap-2 mb-3">
                 <Calendar className="h-5 w-5 text-black dark:text-gray-400" />
@@ -195,18 +248,30 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
               </div>
               <div className="space-y-2 text-sm" style={{ color: '#1a1a1a' }}>
                 <div>
-                  <span className="font-medium text-black dark:text-gray-300" style={{ color: '#1a1a1a' }}>Date: </span>
-                  <span className="text-black dark:text-gray-400" style={{ color: '#1a1a1a' }}>{formatDate(meeting.start_time)}</span>
+                  <span className="font-medium text-black dark:text-gray-300" style={{ color: '#1a1a1a' }}>
+                    Date:{' '}
+                  </span>
+                  <span className="text-black dark:text-gray-400" style={{ color: '#1a1a1a' }}>
+                    {formatDate(meeting.start_time)}
+                  </span>
                 </div>
                 <div className="flex items-center gap-4">
                   <div>
-                    <span className="font-medium text-black dark:text-gray-300" style={{ color: '#1a1a1a' }}>Start: </span>
-                    <span className="text-black dark:text-gray-400" style={{ color: '#1a1a1a' }}>{formatTime(meeting.start_time)}</span>
+                    <span className="font-medium text-black dark:text-gray-300" style={{ color: '#1a1a1a' }}>
+                      Start:{' '}
+                    </span>
+                    <span className="text-black dark:text-gray-400" style={{ color: '#1a1a1a' }}>
+                      {formatTime(meeting.start_time)}
+                    </span>
                   </div>
                   {meeting.end_time && (
                     <div>
-                      <span className="font-medium text-black dark:text-gray-300" style={{ color: '#1a1a1a' }}>End: </span>
-                      <span className="text-black dark:text-gray-400" style={{ color: '#1a1a1a' }}>{formatTime(meeting.end_time)}</span>
+                      <span className="font-medium text-black dark:text-gray-300" style={{ color: '#1a1a1a' }}>
+                        End:{' '}
+                      </span>
+                      <span className="text-black dark:text-gray-400" style={{ color: '#1a1a1a' }}>
+                        {formatTime(meeting.end_time)}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -214,7 +279,9 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
                   <div className="flex items-center gap-2 mt-2">
                     <Clock className="h-4 w-4 text-black dark:text-gray-400" style={{ color: '#1a1a1a' }} />
                     <span className="text-xs text-black dark:text-gray-400" style={{ color: '#1a1a1a' }}>
-                      Duration: {Math.round((new Date(meeting.end_time).getTime() - new Date(meeting.start_time).getTime()) / 60000)} minutes
+                      Duration:{' '}
+                      {Math.round((new Date(meeting.end_time).getTime() - new Date(meeting.start_time).getTime()) / 60000)}{' '}
+                      minutes
                     </span>
                   </div>
                 )}
@@ -239,91 +306,65 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
               </div>
             )}
 
-            {/* Summary */}
-            {meeting.summary && (
-              <div className="glass-card rounded-xl p-4" style={{ color: '#1a1a1a' }}>
-                <h4 className="font-semibold text-black mb-3">Summary</h4>
-                <p className="text-sm text-black dark:text-gray-300 whitespace-pre-wrap" style={{ color: '#1a1a1a' }}>
-                  {meeting.summary}
-                </p>
+            {/* Next Steps */}
+            <div className="glass-card rounded-xl p-4" style={{ color: '#1a1a1a' }}>
+              <div className="flex items-center gap-2 mb-3">
+                <CheckCircle className="h-5 w-5 text-black dark:text-gray-400" />
+                <h4 className="font-semibold text-black">Next Steps</h4>
               </div>
-            )}
-
-            {/* Transcript */}
-            {meeting.transcript && (
-              <div className="glass-card rounded-xl p-4" style={{ color: '#1a1a1a' }}>
-                <h4 className="font-semibold text-black mb-3">Transcript</h4>
-                <p className="text-xs text-gray-500 mb-2 italic">This is the raw transcript of the meeting</p>
-                <div className="max-h-96 overflow-y-auto">
-                  <p className="text-sm text-black dark:text-gray-300 whitespace-pre-wrap" style={{ color: '#1a1a1a' }}>
-                    {meeting.transcript}
-                  </p>
+              {loadingNextSteps ? (
+                <div className="flex items-center justify-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                 </div>
-              </div>
-            )}
-
-            {/* Sentiment */}
-            {meeting.customer_sentiment && (
-              <div className="glass-card rounded-xl p-4" style={{ color: '#1a1a1a' }}>
-                <h4 className="font-semibold text-black mb-3">Customer Sentiment</h4>
-                <span className={`inline-block px-3 py-1.5 rounded-full text-xs font-semibold ${getSentimentColor(meeting.customer_sentiment)}`}>
-                  {meeting.customer_sentiment}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Next Steps Sidebar */}
-        <div className="w-full lg:w-80 p-4 glass-card overflow-y-auto" style={{ color: '#1a1a1a' }}>
-          <div className="flex items-center gap-2 mb-4">
-            <CheckCircle className="h-5 w-5 text-black dark:text-gray-400" />
-            <h4 className="font-semibold text-black">Next Steps</h4>
-          </div>
-          {loadingNextSteps ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-            </div>
-          ) : nextSteps.length > 0 ? (
-            <div className="space-y-3">
-              {nextSteps.map((step) => (
-                <div key={step.id} className={`glass-bar-row p-3 ${step.completed ? 'opacity-75' : ''}`}>
-                  <div className="flex items-start gap-3">
-                    <button
-                      onClick={() => toggleNextStep(step)}
-                      disabled={updatingStepId === step.id}
-                      className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 ${
-                        step.completed
-                          ? 'bg-green-600 border-green-600'
-                          : 'border-gray-300 hover:border-blue-600'
-                      } ${updatingStepId === step.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                    >
-                      {step.completed && <CheckCircle className="w-4 h-4 text-white" />}
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm text-black font-medium mb-2 ${step.completed ? 'line-through' : ''}`} style={{ color: '#1a1a1a' }}>
-                        {step.text}
-                      </p>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {step.owner && (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                            Owner: {step.owner}
-                          </span>
-                        )}
-                        {step.due_date && (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                            Due: {new Date(step.due_date).toLocaleDateString()}
-                          </span>
-                        )}
+              ) : nextSteps.length > 0 ? (
+                <div className="space-y-3">
+                  {nextSteps.map((step) => (
+                    <div key={step.id} className={`glass-bar-row p-3 ${step.completed ? 'opacity-75' : ''}`}>
+                      <div className="flex items-start gap-3">
+                        <button
+                          onClick={() => toggleNextStep(step)}
+                          disabled={updatingStepId === step.id}
+                          className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 ${
+                            step.completed
+                              ? 'bg-green-600 border-green-600'
+                              : 'border-gray-300 hover:border-blue-600'
+                          } ${updatingStepId === step.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                        >
+                          {step.completed && <CheckCircle className="w-4 h-4 text-white" />}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className={`text-sm text-black font-medium mb-2 ${
+                              step.completed ? 'line-through' : ''
+                            }`}
+                            style={{ color: '#1a1a1a' }}
+                          >
+                            {step.text}
+                          </p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {step.owner && (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                Owner: {step.owner}
+                              </span>
+                            )}
+                            {step.due_date && (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                                Due: {new Date(step.due_date).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              ) : (
+                <p className="text-sm text-black dark:text-gray-400 text-center py-2">
+                  No next steps for this meeting
+                </p>
+              )}
             </div>
-          ) : (
-            <p className="text-sm text-black dark:text-gray-400 text-center py-4">No next steps for this meeting</p>
-          )}
+          </div>
         </div>
       </div>
     </div>
