@@ -65,44 +65,29 @@ export function useThreadSync(provider_token: string | null | undefined, user_em
         throw new Error('Provider token not available in session');
       }
 
-      // Create job in sync_jobs table
-      const { data: job, error: jobError } = await supabase
-        .from('sync_jobs')
-        .insert({ 
-          user_id: currentSession.user.id, 
-          status: 'pending'
-        })
-        .select()
-        .single();
+      setSyncDetails('Creating sync job and starting sync...');
 
-      if (jobError || !job) {
-        throw new Error(`Failed to create sync job: ${jobError?.message || 'Unknown error'}`);
-      }
-
-      const newJobId = job.id;
-      setJobId(newJobId);
-      setSyncDetails('Job created, invoking sync function...');
-
-      // Invoke sync-threads function (don't await - it will time out)
-      const { data: invokeData, error: invokeError } = await supabase.functions.invoke('sync-threads', {
+      // Invoke sync-threads-orchestrator function (creates job and initial page queue)
+      const { data: invokeData, error: invokeError } = await supabase.functions.invoke('sync-threads-orchestrator', {
         body: { 
-          jobId: newJobId, 
-          provider_token: tokenToUse
+          provider_token: tokenToUse,
+          userId: currentSession.user.id
         }
       });
 
       if (invokeError) {
-        // Check if it's a 202 (Accepted) - this is expected
-        if (invokeData || invokeError.message?.includes('202')) {
-          setSyncStatus('syncing');
-          setSyncDetails('Sync started successfully');
-        } else {
-          throw new Error(`Failed to invoke function: ${invokeError.message}`);
-        }
-      } else {
-        setSyncStatus('syncing');
-        setSyncDetails('Sync started successfully');
+        throw new Error(`Failed to invoke orchestrator: ${invokeError.message}`);
       }
+
+      // Extract jobId from response
+      const newJobId = invokeData?.jobId;
+      if (!newJobId) {
+        throw new Error('Orchestrator did not return jobId');
+      }
+
+      setJobId(newJobId);
+      setSyncStatus('syncing');
+      setSyncDetails('Sync started successfully');
     } catch (error) {
       console.error('Error starting sync:', error);
       setSyncStatus('failed');

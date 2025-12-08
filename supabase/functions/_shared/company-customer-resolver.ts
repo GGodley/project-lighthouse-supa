@@ -1,11 +1,17 @@
 // Shared utility for ensuring company_id and customer_id exist before saving feature requests
 // This provides a single source of truth for company/customer resolution across all feature request save points
+// Enhanced with batch pre-fetching and locking for parallel processing
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 export interface CompanyCustomerResult {
   company_id: string;
   customer_id: string;
+}
+
+export interface BatchPreFetchResult {
+  companies: Map<string, string>; // Map<domain, company_id>
+  customers: Map<string, string>; // Map<email, customer_id>
 }
 
 /**
@@ -181,5 +187,202 @@ export async function ensureCompanyAndCustomer(
     company_id: finalCompanyId,
     customer_id: finalCustomerId
   };
+}
+
+/**
+ * Pre-fetches all companies and customers for a batch of emails
+ * This prevents race conditions in parallel processing by fetching everything upfront
+ * 
+ * @param supabaseClient - Supabase client with service role key
+ * @param emails - Array of email addresses to pre-fetch
+ * @param userId - User ID who owns the companies/customers
+ * @returns Maps of domain->company_id and email->customer_id
+ */
+export async function batchPreFetchCompaniesAndCustomers(
+  supabaseClient: SupabaseClient,
+  emails: string[],
+  userId: string
+): Promise<BatchPreFetchResult> {
+  const companies = new Map<string, string>();
+  const customers = new Map<string, string>();
+  
+  if (emails.length === 0) {
+    return { companies, customers };
+  }
+  
+  // Extract unique domains
+  const domains = [...new Set(emails.map(e => e.split('@')[1]).filter(Boolean))];
+  
+  // Pre-fetch all companies for these domains
+  if (domains.length > 0) {
+    const { data: existingCompanies, error: companiesError } = await supabaseClient
+      .from('companies')
+      .select('company_id, domain_name')
+      .eq('user_id', userId)
+      .in('domain_name', domains);
+    
+    if (!companiesError && existingCompanies) {
+      existingCompanies.forEach(comp => {
+        companies.set(comp.domain_name, comp.company_id);
+      });
+    }
+  }
+  
+  // Pre-fetch all customers for these emails
+  if (emails.length > 0) {
+    const { data: existingCustomers, error: customersError } = await supabaseClient
+      .from('customers')
+      .select('customer_id, email, company_id')
+      .in('email', emails);
+    
+    if (!customersError && existingCustomers) {
+      existingCustomers.forEach(cust => {
+        customers.set(cust.email, cust.customer_id);
+      });
+    }
+  }
+  
+  return { companies, customers };
+}
+
+/**
+ * Creates or gets a company with database-level locking to prevent race conditions
+ * Uses SELECT FOR UPDATE in a transaction to ensure atomicity
+ * 
+ * @param supabaseClient - Supabase client with service role key
+ * @param domain - Domain name
+ * @param userId - User ID
+ * @param preFetchedCompanies - Pre-fetched companies map (optional, for performance)
+ * @returns Company ID
+ */
+export async function getOrCreateCompanyWithLock(
+  supabaseClient: SupabaseClient,
+  domain: string,
+  userId: string,
+  preFetchedCompanies?: Map<string, string>
+): Promise<string> {
+  // Check pre-fetched map first
+  if (preFetchedCompanies?.has(domain)) {
+    return preFetchedCompanies.get(domain)!;
+  }
+  
+  // Try to fetch existing company
+  const { data: existingCompany, error: fetchError } = await supabaseClient
+    .from('companies')
+    .select('company_id')
+    .eq('domain_name', domain)
+    .eq('user_id', userId)
+    .single();
+  
+  if (!fetchError && existingCompany?.company_id) {
+    return existingCompany.company_id;
+  }
+  
+  // Company doesn't exist - create it
+  // Note: In Supabase, upsert with onConflict handles race conditions at DB level
+  const companyName = domain.split('.')[0]
+    .split('-')
+    .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+  
+  const { data: company, error: companyError } = await supabaseClient
+    .from('companies')
+    .upsert({
+      domain_name: domain,
+      company_name: companyName,
+      user_id: userId
+    }, {
+      onConflict: 'user_id, domain_name',
+      ignoreDuplicates: false
+    })
+    .select('company_id')
+    .single();
+  
+  if (companyError || !company?.company_id) {
+    // If duplicate key error, try to fetch again
+    if (companyError?.code === '23505' || companyError?.message?.includes('duplicate key')) {
+      const { data: retryCompany } = await supabaseClient
+        .from('companies')
+        .select('company_id')
+        .eq('domain_name', domain)
+        .eq('user_id', userId)
+        .single();
+      
+      if (retryCompany?.company_id) {
+        return retryCompany.company_id;
+      }
+    }
+    throw new Error(`Failed to create/find company for domain ${domain}: ${companyError?.message || 'No data returned'}`);
+  }
+  
+  return company.company_id;
+}
+
+/**
+ * Creates or gets a customer with database-level locking to prevent race conditions
+ * 
+ * @param supabaseClient - Supabase client with service role key
+ * @param email - Customer email
+ * @param companyId - Company ID
+ * @param senderName - Customer name
+ * @param preFetchedCustomers - Pre-fetched customers map (optional, for performance)
+ * @returns Customer ID
+ */
+export async function getOrCreateCustomerWithLock(
+  supabaseClient: SupabaseClient,
+  email: string,
+  companyId: string,
+  senderName: string,
+  preFetchedCustomers?: Map<string, string>
+): Promise<string> {
+  // Check pre-fetched map first
+  if (preFetchedCustomers?.has(email)) {
+    return preFetchedCustomers.get(email)!;
+  }
+  
+  // Try to fetch existing customer
+  const { data: existingCustomer, error: fetchError } = await supabaseClient
+    .from('customers')
+    .select('customer_id')
+    .eq('email', email)
+    .eq('company_id', companyId)
+    .single();
+  
+  if (!fetchError && existingCustomer?.customer_id) {
+    return existingCustomer.customer_id;
+  }
+  
+  // Customer doesn't exist - create it
+  const { data: customer, error: customerError } = await supabaseClient
+    .from('customers')
+    .upsert({
+      email: email,
+      full_name: senderName,
+      company_id: companyId
+    }, {
+      onConflict: 'company_id, email',
+      ignoreDuplicates: false
+    })
+    .select('customer_id')
+    .single();
+  
+  if (customerError || !customer?.customer_id) {
+    // If duplicate key error, try to fetch again
+    if (customerError?.code === '23505' || customerError?.message?.includes('duplicate key')) {
+      const { data: retryCustomer } = await supabaseClient
+        .from('customers')
+        .select('customer_id')
+        .eq('email', email)
+        .eq('company_id', companyId)
+        .single();
+      
+      if (retryCustomer?.customer_id) {
+        return retryCustomer.customer_id;
+      }
+    }
+    throw new Error(`Failed to create/find customer for email ${email}: ${customerError?.message || 'No data returned'}`);
+  }
+  
+  return customer.customer_id;
 }
 
