@@ -49,6 +49,7 @@ serve(async (req: Request) => {
     const jobId = syncJob.id;
 
     // Create initial page queue job (page 1)
+    // FIX: Set next_retry_at to NOW() so the page is immediately processable by webhook
     const idempotencyKey = `${jobId}-page-1`;
     const { data: pageJob, error: pageError } = await supabaseAdmin
       .from('sync_page_queue')
@@ -57,7 +58,8 @@ serve(async (req: Request) => {
         user_id: userId,
         provider_token: provider_token, // In production, encrypt this
         page_number: 1,
-        idempotency_key: idempotencyKey
+        idempotency_key: idempotencyKey,
+        next_retry_at: new Date().toISOString() // Set to NOW() so it's immediately processable
       })
       .select()
       .single();

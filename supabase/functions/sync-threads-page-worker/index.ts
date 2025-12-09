@@ -1,5 +1,5 @@
 // Page worker function - processes Gmail API pages and enqueues threads
-// Runs on a schedule (every 30 seconds) to process pending pages
+// Triggered by webhook when new pages are inserted into sync_page_queue
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -121,6 +121,54 @@ serve(async (req: Request) => {
       const listJson = await listResp.json();
       const threadIds = listJson.threads?.map((t: any) => t.id).filter(Boolean) || [];
 
+      // FIX: Update total_pages and pages_completed in sync_jobs
+      // For the first page, estimate total pages
+      if (page.page_number === 1) {
+        let estimatedTotalPages = 1;
+        if (listJson.nextPageToken) {
+          // Conservative estimate: at least 10 pages if there's a next page
+          estimatedTotalPages = 10;
+        }
+
+        await supabaseAdmin
+          .from('sync_jobs')
+          .update({
+            total_pages: estimatedTotalPages,
+            pages_completed: 1
+          })
+          .eq('id', page.sync_job_id);
+        
+        console.log(`📊 Updated sync_job ${page.sync_job_id}: total_pages=${estimatedTotalPages}, pages_completed=1`);
+      } else {
+        // For subsequent pages, increment pages_completed
+        const { data: currentJob } = await supabaseAdmin
+          .from('sync_jobs')
+          .select('pages_completed, total_pages')
+          .eq('id', page.sync_job_id)
+          .single();
+
+        if (currentJob) {
+          const newPagesCompleted = (currentJob.pages_completed || 0) + 1;
+          
+          // If we've exceeded our estimate and there's still more pages, increase estimate
+          let newTotalPages = currentJob.total_pages;
+          if (listJson.nextPageToken && newPagesCompleted >= (newTotalPages || 1)) {
+            newTotalPages = newPagesCompleted + 5; // Add buffer
+            console.log(`📊 Increasing total_pages estimate to ${newTotalPages}`);
+          }
+
+          await supabaseAdmin
+            .from('sync_jobs')
+            .update({
+              pages_completed: newPagesCompleted,
+              total_pages: newTotalPages
+            })
+            .eq('id', page.sync_job_id);
+          
+          console.log(`📊 Updated sync_job ${page.sync_job_id}: pages_completed=${newPagesCompleted}`);
+        }
+      }
+
       // Create thread_processing_stages records for each thread
       if (threadIds.length > 0) {
         const stageJobs = threadIds.map((threadId: string) => ({
@@ -155,7 +203,8 @@ serve(async (req: Request) => {
             provider_token: page.provider_token,
             page_token: listJson.nextPageToken,
             page_number: page.page_number + 1,
-            idempotency_key: nextPageIdempotencyKey
+            idempotency_key: nextPageIdempotencyKey,
+            next_retry_at: new Date().toISOString() // FIX: Set to NOW() so it's immediately processable
           });
 
         if (nextPageError) {

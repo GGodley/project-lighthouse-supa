@@ -83,11 +83,11 @@ export function useThreadSync(provider_token: string | null | undefined, user_em
       const newJobId = invokeData?.jobId;
       if (!newJobId) {
         throw new Error('Orchestrator did not return jobId');
-      }
+        }
 
       setJobId(newJobId);
-      setSyncStatus('syncing');
-      setSyncDetails('Sync started successfully');
+        setSyncStatus('syncing');
+        setSyncDetails('Sync started successfully');
     } catch (error) {
       console.error('Error starting sync:', error);
       setSyncStatus('failed');
