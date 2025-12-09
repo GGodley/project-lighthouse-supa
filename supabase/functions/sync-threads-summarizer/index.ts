@@ -11,7 +11,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 
-const CONCURRENCY = 5; // Process 5 jobs at a time (OpenAI rate limits)
+const CONCURRENCY = 3; // Reduced from 5 to 3 to prevent connection pool exhaustion (OpenAI rate limits also considered)
 
 const openai = new OpenAI({
   apiKey: Deno.env.get("OPENAI_API_KEY")

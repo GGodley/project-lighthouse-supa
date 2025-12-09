@@ -11,7 +11,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 
-const CONCURRENCY = 10; // Process 10 threads in parallel
+const CONCURRENCY = 5; // Reduced from 10 to 5 to prevent connection pool exhaustion
 
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {

@@ -203,6 +203,7 @@ export interface StageErrorResult {
 /**
  * Handles stage errors with retry logic
  * Returns whether to retry and when to retry next
+ * Special handling for connection pool errors with longer backoff
  */
 export function handleStageError(
   error: Error | unknown,
@@ -210,13 +211,21 @@ export function handleStageError(
   maxAttempts: number = 3
 ): StageErrorResult {
   const errorMessage = error instanceof Error ? error.message : String(error);
+  const isConnectionPoolError = errorMessage.includes('connection pool') || 
+                                 errorMessage.includes('PGRST003') ||
+                                 errorMessage.includes('Timed out acquiring connection');
+  
   const shouldRetry = currentAttempts < maxAttempts;
   
   let nextRetryAt: Date | null = null;
   if (shouldRetry) {
-    // Exponential backoff: 2^attempts seconds
-    const delayMs = Math.pow(2, currentAttempts) * 1000;
-    nextRetryAt = new Date(Date.now() + delayMs);
+    // For connection pool errors, use longer backoff (5s, 10s, 20s)
+    // For other errors, use standard exponential backoff (2s, 4s, 8s)
+    const baseDelay = isConnectionPoolError ? 5000 : 2000;
+    const delayMs = baseDelay * Math.pow(2, currentAttempts);
+    // Cap at 30 seconds for connection pool errors, 10 seconds for others
+    const maxDelay = isConnectionPoolError ? 30000 : 10000;
+    nextRetryAt = new Date(Date.now() + Math.min(delayMs, maxDelay));
   }
   
   return {
