@@ -110,12 +110,40 @@ serve(async (req: Request) => {
       }
 
       // Fetch threads from Gmail API
-      const listResp = await fetch(listUrl, {
+      let listResp = await fetch(listUrl, {
         headers: { Authorization: `Bearer ${page.provider_token}` }
       });
 
+      // Handle 401 Unauthenticated - token expired
+      if (listResp.status === 401) {
+        const errorText = await listResp.text();
+        console.error(`❌ Gmail API authentication failed for user ${page.user_id}. Token may be expired.`);
+        
+        // Mark page as failed with clear error message
+        await supabaseAdmin
+          .from('sync_page_queue')
+          .update({
+            status: 'failed',
+            error_message: 'Gmail OAuth token expired. Please re-authenticate and try again.',
+            attempts: page.attempts + 1
+          })
+          .eq('id', page.id);
+
+        // Mark sync_job as failed
+        await supabaseAdmin
+          .from('sync_jobs')
+          .update({
+            status: 'failed',
+            details: `Gmail authentication failed: OAuth token expired. Please re-authenticate with Google and try again.`
+          })
+          .eq('id', page.sync_job_id);
+
+        throw new Error(`Gmail API authentication failed: OAuth token expired. Please re-authenticate with Google.`);
+      }
+
       if (!listResp.ok) {
-        throw new Error(`Gmail API failed: ${await listResp.text()}`);
+        const errorText = await listResp.text();
+        throw new Error(`Gmail API failed: ${errorText}`);
       }
 
       const listJson = await listResp.json();
