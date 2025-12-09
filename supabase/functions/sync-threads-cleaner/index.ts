@@ -91,7 +91,7 @@ serve(async (req: Request) => {
             .eq('id', job.id);
 
           // Save messages to database
-          const preprocessed = job.preprocessed_data;
+          // Reuse preprocessed variable declared above (line 66)
           const msgCustomerMap = preprocessed?.msgCustomerMap || {};
           const rawMessages = job.raw_thread_data?.messages || [];
 
