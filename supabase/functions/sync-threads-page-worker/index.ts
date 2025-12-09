@@ -207,9 +207,14 @@ serve(async (req: Request) => {
           stage_imported: false
         }));
 
+        // Upsert to avoid duplicate rows for the same (thread_id, sync_job_id)
+        // This prevents duplicate processing when webhooks retry or pages are re-enqueued
         const { error: stagesError } = await supabaseAdmin
           .from('thread_processing_stages')
-          .insert(stageJobs);
+          .upsert(stageJobs, {
+            onConflict: 'thread_id,sync_job_id',
+            ignoreDuplicates: true
+          });
 
         if (stagesError) {
           console.error('Failed to create thread processing stages:', stagesError);
