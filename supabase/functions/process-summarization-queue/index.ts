@@ -1,5 +1,6 @@
 //
 // ⚠️ THIS IS THE UPGRADED process-summarization-queue EDGE FUNCTION WITH FULL EMAIL ANALYSIS ⚠️
+// Webhook-driven with atomic locking and rate limit protection
 //
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -15,8 +16,11 @@ const openai = new OpenAI({
   apiKey: Deno.env.get("OPENAI_API_KEY"),
 });
 
+// Process only 1 job at a time to avoid OpenAI rate limits
+const MAX_CONCURRENT_JOBS = 1;
+
 // Helper function to update job status with more detail
-async function updateJobStatus(supabase: SupabaseClient, jobId: number, status: string, details: string | null, attempts?: number) {
+async function updateJobStatus(supabase: SupabaseClient, jobId: string | number, status: string, details: string | null, attempts?: number) {
   const updatePayload: { status: string; details: string | null; updated_at: string; attempts?: number } = {
     status,
     details,
@@ -36,6 +40,43 @@ async function updateJobStatus(supabase: SupabaseClient, jobId: number, status: 
   }
 }
 
+// Helper to check if there are already jobs being processed (prevent concurrent processing)
+async function hasActiveProcessing(supabase: SupabaseClient): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('summarization_jobs')
+    .select('id')
+    .eq('status', 'processing')
+    .limit(1);
+  
+  if (error) {
+    console.error('Error checking for active processing:', error);
+    return false; // If we can't check, allow processing (fail open)
+  }
+  
+  return (data?.length || 0) > 0;
+}
+
+// Helper to atomically claim a job (prevent duplicate processing)
+async function claimJob(supabase: SupabaseClient, jobId: string | number): Promise<boolean> {
+  // Atomic update: only update if status is 'pending'
+  const { count, error } = await supabase
+    .from('summarization_jobs')
+    .update({ 
+      status: 'processing',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', jobId)
+    .eq('status', 'pending')
+    .select('*', { count: 'exact', head: true });
+  
+  if (error) {
+    console.error(`Error claiming job ${jobId}:`, error);
+    return false;
+  }
+  
+  return (count || 0) > 0;
+}
+
 serve(async (_req) => {
   try {
     const supabaseAdmin = createClient(
@@ -45,17 +86,27 @@ serve(async (_req) => {
 
     console.log('🔄 Starting summarization queue processing...');
     
-    // Fetch a batch of jobs that are pending and have not exceeded the retry limit
+    // FIX: Check if there are already jobs being processed (prevent concurrent processing)
+    const hasActive = await hasActiveProcessing(supabaseAdmin);
+    if (hasActive) {
+      console.log('⏸️ Another instance is already processing jobs. Skipping to avoid rate limits.');
+      return new Response(JSON.stringify({ message: 'Another instance is processing. Skipping to avoid rate limits.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
+        status: 200
+      });
+    }
+    
+    // FIX: Fetch only 1 job at a time to avoid OpenAI rate limits
     const { data: jobs, error: jobsError } = await supabaseAdmin
       .from('summarization_jobs')
       .select(`
         *,
-        emails (id, body_text, customer_id)
+        emails (id, body_text, customer_id, user_id)
       `)
       .eq('status', 'pending')
-      .lt('attempts', 3) // ✅ IMPROVEMENT: Only fetch jobs with less than 3 attempts
+      .lt('attempts', 3)
       .order('created_at', { ascending: true })
-      .limit(5);
+      .limit(MAX_CONCURRENT_JOBS);
 
     if (jobsError) throw jobsError;
 
@@ -65,11 +116,19 @@ serve(async (_req) => {
       });
     }
 
-    console.log(`📋 Found ${jobs.length} pending jobs to process.`);
+    console.log(`📋 Found ${jobs.length} pending job(s) to process.`);
 
+    // Process jobs sequentially (one at a time)
     for (const job of jobs) {
+      // FIX: Atomically claim the job (prevent duplicate processing from multiple webhooks)
+      const claimed = await claimJob(supabaseAdmin, job.id);
+      if (!claimed) {
+        console.log(`⏭️ Job ${job.id} was already claimed by another instance. Skipping.`);
+        continue;
+      }
+
       const email = job.emails;
-      const currentAttempts = job.attempts + 1;
+      const currentAttempts = (job.attempts || 0) + 1;
 
       try {
         if (!email || !email.body_text) {
@@ -164,15 +223,48 @@ serve(async (_req) => {
   If no feature requests are found, return an empty array [].
 `;
 
-        // Call OpenAI API
-        const completion = await openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: [
-            { role: "system", content: prompt },
-            { role: "user", content: truncatedBody }
-          ],
-          response_format: { type: "json_object" },
-        });
+        // FIX: Call OpenAI API with retry logic for rate limits
+        let completion;
+        let retries = 0;
+        const maxRetries = 3;
+        
+        while (retries < maxRetries) {
+          try {
+            completion = await openai.chat.completions.create({
+              model: "gpt-4o",
+              messages: [
+                { role: "system", content: prompt },
+                { role: "user", content: truncatedBody }
+              ],
+              response_format: { type: "json_object" },
+            });
+            break; // Success, exit retry loop
+          } catch (openaiError: any) {
+            retries++;
+            
+            // Check if it's a rate limit error
+            if (openaiError?.status === 429 || openaiError?.message?.includes('rate limit')) {
+              if (retries >= maxRetries) {
+                throw new Error(`OpenAI rate limit exceeded after ${maxRetries} retries. Job will be retried later.`);
+              }
+              
+              // Exponential backoff: 2^retries seconds
+              const backoffSeconds = Math.pow(2, retries);
+              const retryAfter = openaiError?.headers?.['retry-after'] || backoffSeconds;
+              console.warn(`⚠️ OpenAI rate limit hit. Waiting ${retryAfter}s before retry ${retries}/${maxRetries}...`);
+              
+              await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+              continue;
+            }
+            
+            // Not a rate limit error, throw immediately
+            throw openaiError;
+          }
+        }
+
+        if (!completion) {
+          throw new Error("Failed to get completion from OpenAI after retries");
+        }
 
         const responseContent = completion.choices[0]?.message?.content;
         if (!responseContent) {
@@ -260,17 +352,30 @@ serve(async (_req) => {
         await updateJobStatus(supabaseAdmin, job.id, 'completed', 'Full analysis generated successfully.');
         console.log(`✅ Successfully processed job ${job.id} for email ${job.email_id}`);
 
-      } catch (error) {
+      } catch (error: any) {
         console.error(`❌ Error processing job ${job.id}:`, error.message);
-        await updateJobStatus(supabaseAdmin, job.id, 'failed', error.message, currentAttempts);
+        
+        // FIX: Handle rate limit errors specially - mark for retry instead of failing
+        const isRateLimit = error?.status === 429 || 
+                           error?.message?.includes('rate limit') ||
+                           error?.message?.includes('Rate limit');
+        
+        if (isRateLimit && currentAttempts < 3) {
+          // Reset to pending so it can be retried later
+          await updateJobStatus(supabaseAdmin, job.id, 'pending', error.message, currentAttempts);
+          console.log(`⏳ Job ${job.id} marked for retry due to rate limit (attempt ${currentAttempts}/3)`);
+        } else {
+          // Mark as failed
+          await updateJobStatus(supabaseAdmin, job.id, 'failed', error.message, currentAttempts);
+        }
       }
     }
 
-    return new Response(JSON.stringify({ success: true, message: `Processed ${jobs.length} jobs.` }), {
+    return new Response(JSON.stringify({ success: true, message: `Processed ${jobs.length} job(s).` }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Fatal error in process-summarization-queue:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500

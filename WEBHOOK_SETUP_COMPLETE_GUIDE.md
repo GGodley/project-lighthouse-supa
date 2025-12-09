@@ -302,6 +302,49 @@ Here's how the webhook-driven thread sync works:
 
 ---
 
+### Webhook 8: Email Summarization Queue (Process Email Summarization)
+
+**Purpose**: Automatically process email summarization jobs when new jobs are created
+
+**Configuration**:
+- **Name**: `trigger-email-summarization`
+- **Table**: `summarization_jobs`
+- **Events**: ✅ **Insert** (uncheck Update, Delete)
+- **Type**: **HTTP Request**
+- **HTTP Request**:
+  - **Method**: `POST`
+  - **URL**: `https://fdaqphksmlmupyrsatcz.supabase.co/functions/v1/process-summarization-queue`
+  - **HTTP Headers**:
+    ```
+    Authorization: Bearer YOUR_SERVICE_ROLE_KEY
+    Content-Type: application/json
+    ```
+  - **HTTP Parameters**: 
+    - ⚠️ **Leave empty** - The function queries the database directly and doesn't need parameters
+- **Filter**: 
+  - **Column**: `status`
+  - **Operator**: `=`
+  - **Value**: `pending`
+- **Advanced Options**: None needed
+
+**What This Does**:
+- When a new `summarization_job` is inserted with `status = 'pending'`, this webhook triggers
+- The `process-summarization-queue` function:
+  - Checks if another instance is already processing (prevents concurrent processing)
+  - Atomically claims one pending job
+  - Calls OpenAI API to analyze the email
+  - Handles rate limits with exponential backoff
+  - Updates the email record with summary, sentiment, action items, and feature requests
+  - Marks the job as `completed` or `failed`
+
+**Important Notes**:
+- ⚠️ **Processes only 1 job at a time** to avoid OpenAI rate limits
+- ⚠️ **Uses atomic locking** to prevent duplicate processing from multiple webhook triggers
+- ⚠️ **Handles rate limits** automatically with retry logic
+- The function will skip if another instance is already processing
+
+---
+
 ## 🐛 Troubleshooting
 
 ### Webhook Not Triggering?
@@ -330,10 +373,11 @@ Here's how the webhook-driven thread sync works:
 
 ## 📝 Summary
 
-✅ **7 Database Webhooks** configured for event-driven processing  
+✅ **8 Database Webhooks** configured for event-driven processing  
 ✅ **No CRON Jobs Required** - everything is triggered by database changes  
 ✅ **Automatic Retries** - Supabase handles webhook retries automatically  
 ✅ **Scalable** - Webhooks scale with database activity  
+✅ **Rate Limit Protection** - Summarization queue processes one job at a time with atomic locking
 
 **All processing is now event-driven and automatic!** 🎉
 
