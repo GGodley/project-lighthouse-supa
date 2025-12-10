@@ -63,10 +63,10 @@ serve(async (req: Request) => {
         })
         .eq('id', page.id);
 
-      // Get user profile for last sync time and blocklist
+      // Get user profile for last sync time, blocklist, and latest provider token
       const { data: profileData, error: profileError } = await supabaseAdmin
         .from('profiles')
-        .select('email, threads_last_synced_at')
+        .select('email, threads_last_synced_at, provider_token')
         .eq('id', page.user_id)
         .single();
 
@@ -75,6 +75,11 @@ serve(async (req: Request) => {
       }
 
       const userEmail = profileData.email || '';
+      // Prefer the freshest token from profile; fall back to queued token
+      const effectiveToken = profileData.provider_token || page.provider_token;
+      if (!effectiveToken) {
+        throw new Error('No valid provider token. Please re-authenticate with Google.');
+      }
       const profileLastSyncedAt = profileData.threads_last_synced_at;
 
       // Build Gmail query
@@ -111,7 +116,7 @@ serve(async (req: Request) => {
 
       // Fetch threads from Gmail API
       let listResp = await fetch(listUrl, {
-        headers: { Authorization: `Bearer ${page.provider_token}` }
+        headers: { Authorization: `Bearer ${effectiveToken}` }
       });
 
       // Handle 401 Unauthenticated - token expired
@@ -119,7 +124,7 @@ serve(async (req: Request) => {
         const errorText = await listResp.text();
         console.error(`❌ Gmail API authentication failed for user ${page.user_id}. Token may be expired.`);
         
-        // Mark page as failed with clear error message
+        // Mark page as failed with clear error message (no retry to avoid loops)
         await supabaseAdmin
           .from('sync_page_queue')
           .update({
@@ -257,7 +262,7 @@ serve(async (req: Request) => {
           .insert({
             sync_job_id: page.sync_job_id,
             user_id: page.user_id,
-            provider_token: page.provider_token,
+            provider_token: effectiveToken, // use freshest token
             page_token: listJson.nextPageToken,
             page_number: page.page_number + 1,
             idempotency_key: nextPageIdempotencyKey,
