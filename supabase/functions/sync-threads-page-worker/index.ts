@@ -66,7 +66,7 @@ serve(async (req: Request) => {
       // Get user profile for last sync time, blocklist, and latest provider token
       const { data: profileData, error: profileError } = await supabaseAdmin
         .from('profiles')
-        .select('email, threads_last_synced_at, provider_token')
+        .select('email, threads_last_synced_at, gmail_access_token')
         .eq('id', page.user_id)
         .single();
 
@@ -76,7 +76,7 @@ serve(async (req: Request) => {
 
       const userEmail = profileData.email || '';
       // Prefer the freshest token from profile; fall back to queued token
-      const effectiveToken = profileData.provider_token || page.provider_token;
+      const effectiveToken = profileData.gmail_access_token || page.provider_token;
       if (!effectiveToken) {
         throw new Error('No valid provider token. Please re-authenticate with Google.');
       }
