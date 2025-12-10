@@ -113,6 +113,15 @@ serve(async (req: Request) => {
       });
     }
 
+    // Skip if thread is already completed
+    if (claimedJob.current_stage === 'completed') {
+      console.log(`⏭️ Thread ${claimedJob.thread_id} (stage ${claimedJob.id}) already completed. Skipping.`);
+      return new Response(JSON.stringify({ message: 'Thread already completed' }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
     // Process thread through ALL stages sequentially
     // Determine where to resume based on what's already been done
     let currentJob = claimedJob;
