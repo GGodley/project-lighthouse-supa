@@ -68,32 +68,10 @@ serve(async (req: Request) => {
       }
     }
 
-    // Fallback: if no queue id was provided, try to grab the oldest unprocessed queue row
+    // No fallback polling - webhook-driven only
     if (!queueEntry) {
-      const { data: pendingQueue } = await supabaseAdmin
-        .from('thread_processing_queue')
-        .select('id, thread_stage_id, sync_job_id')
-        .is('processed_at', null)
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      if (pendingQueue?.id) {
-        const { data: claimedQueue } = await supabaseAdmin
-          .from('thread_processing_queue')
-          .update({ processed_at: new Date().toISOString() })
-          .eq('id', pendingQueue.id)
-          .is('processed_at', null)
-          .select('thread_stage_id, sync_job_id')
-          .single();
-        if (claimedQueue) {
-          queueEntry = claimedQueue;
-        }
-      }
-    }
-
-    if (!queueEntry) {
-      return new Response(JSON.stringify({ message: 'No queue items to process' }), {
+      console.log('⚠️ No queue entry claimed. Webhook payload may be missing or entry already processed.');
+      return new Response(JSON.stringify({ message: 'Queue entry not available for processing' }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });

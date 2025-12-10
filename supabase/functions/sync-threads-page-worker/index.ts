@@ -30,38 +30,81 @@ serve(async (req: Request) => {
   });
 
   try {
-    // Fetch one pending page job (process 1 at a time to avoid conflicts)
-    const { data: pages, error } = await supabaseAdmin
-      .from('sync_page_queue')
-      .select('*')
-      .eq('status', 'pending')
-      .lte('next_retry_at', new Date().toISOString())
-      .order('created_at', { ascending: true })
-      .limit(1);
-
-    if (error) {
-      throw error;
+    // Get page ID from webhook payload (webhook-driven, not polling)
+    let pageId: string | null = null;
+    try {
+      const body = await req.json();
+      pageId = body?.record?.id || body?.id || null;
+    } catch {
+      // ignore JSON parse errors
     }
 
-    if (!pages || pages.length === 0) {
-      return new Response(JSON.stringify({ message: 'No pages to process' }), {
+    if (!pageId) {
+      console.log('⚠️ No page ID in webhook payload. Webhook may not have fired correctly.');
+      return new Response(JSON.stringify({ message: 'No page ID in webhook payload' }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
-    const page = pages[0];
+    // First, fetch the page to get current attempts count
+    const { data: existingPage, error: fetchError } = await supabaseAdmin
+      .from('sync_page_queue')
+      .select('id, attempts, status, next_retry_at')
+      .eq('id', pageId)
+      .single();
+
+    if (fetchError || !existingPage) {
+      console.log(`⏭️ Page ${pageId} not found: ${fetchError?.message || 'Not found'}`);
+      return new Response(JSON.stringify({ message: 'Page not found' }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // Check if page is ready to process
+    if (existingPage.status !== 'pending') {
+      console.log(`⏭️ Page ${pageId} is not pending (status: ${existingPage.status})`);
+      return new Response(JSON.stringify({ message: 'Page not available for processing' }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    const nextRetryAt = existingPage.next_retry_at ? new Date(existingPage.next_retry_at) : new Date(0);
+    if (nextRetryAt > new Date()) {
+      console.log(`⏭️ Page ${pageId} not ready yet (next_retry_at: ${nextRetryAt.toISOString()})`);
+      return new Response(JSON.stringify({ message: 'Page not ready for processing yet' }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // Atomically claim the specific page (prevents race conditions)
+    const { data: claimedPage, error: claimError } = await supabaseAdmin
+      .from('sync_page_queue')
+      .update({
+        status: 'processing',
+        started_at: new Date().toISOString(),
+        attempts: (existingPage.attempts || 0) + 1
+      })
+      .eq('id', pageId)
+      .eq('status', 'pending') // Only claim if still pending (atomic check)
+      .select()
+      .single();
+
+    if (claimError || !claimedPage) {
+      // Page not found, already processing, or not ready yet
+      console.log(`⏭️ Page ${pageId} not available for processing: ${claimError?.message || 'Already claimed or not ready'}`);
+      return new Response(JSON.stringify({ message: 'Page not available for processing' }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    const page = claimedPage;
 
     try {
-      // Mark as processing
-      await supabaseAdmin
-        .from('sync_page_queue')
-        .update({
-          status: 'processing',
-          started_at: new Date().toISOString(),
-          attempts: page.attempts + 1
-        })
-        .eq('id', page.id);
 
       // Get user profile for last sync time, blocklist, and latest provider token
       const { data: profileData, error: profileError } = await supabaseAdmin
