@@ -601,14 +601,13 @@ serve(async (req: Request) => {
       .from('thread_processing_queue')
       .select('thread_stage_id, processed_at');
 
+    // Only track threads currently in queue (being processed now)
+    // Don't skip threads that were previously processed - they might need retry
     const activeQueued = new Set<string>();
-    const processedQueued = new Set<string>();
     if (queueRows) {
       queueRows.forEach((row: any) => {
         if (row.processed_at === null) {
           activeQueued.add(row.thread_stage_id);
-        } else {
-          processedQueued.add(row.thread_stage_id);
         }
       });
     }
@@ -616,9 +615,12 @@ serve(async (req: Request) => {
     let nextThreadId: string | null = null;
     if (allThreads) {
       for (const t of allThreads) {
+        // Skip completed or failed threads
         if (t.current_stage === 'completed' || t.current_stage === 'failed') continue;
+        // Only skip if currently in queue (being processed now)
+        // Don't skip if previously processed from queue - those might need retry
         if (activeQueued.has(t.id)) continue;
-        if (processedQueued.has(t.id)) continue;
+        // Found next thread to process
         nextThreadId = t.id;
         break;
       }
@@ -626,14 +628,24 @@ serve(async (req: Request) => {
 
     if (nextThreadId) {
       // Insert next thread into processing queue (triggers next webhook)
-      await supabaseAdmin
+      const { error: queueError } = await supabaseAdmin
         .from('thread_processing_queue')
         .insert({
           thread_stage_id: nextThreadId,
           sync_job_id: finalJob?.sync_job_id || currentJob.sync_job_id
         });
+      
+      if (queueError && queueError.code !== '23505') {
+        // 23505 is unique constraint violation (already queued) - that's okay
+        console.error(`❌ Failed to enqueue next thread ${nextThreadId}:`, queueError);
+      } else {
+        console.log(`🚀 Enqueued next thread ${nextThreadId} into processing queue`);
+      }
     } else {
       // No more threads to enqueue. If no pending/processing summaries, mark job completed.
+      const syncJobId = finalJob?.sync_job_id || currentJob.sync_job_id;
+      console.log(`✅ No more threads to enqueue for sync job ${syncJobId}`);
+      
       const stageIds = (allThreads || []).map((t: any) => t.id);
       const { data: pendingSummaries } = await supabaseAdmin
         .from('thread_summarization_queue')
@@ -651,12 +663,16 @@ serve(async (req: Request) => {
             status: 'completed',
             details: `Sync completed: ${(allThreads || []).filter((t: any) => t.current_stage === 'completed').length} threads processed successfully`
           })
-          .eq('id', finalJob?.sync_job_id || currentJob.sync_job_id);
+          .eq('id', syncJobId);
 
         await supabaseAdmin
           .from('profiles')
           .update({ threads_last_synced_at: new Date().toISOString() })
           .eq('id', finalJob?.user_id || currentJob.user_id);
+        
+        console.log(`✅ Sync job ${syncJobId} completed successfully`);
+      } else {
+        console.log(`⏳ Sync job ${syncJobId} waiting: ${hasActiveThreads ? 'active threads' : ''} ${hasActiveSummaries ? `${pendingSummaries.length} pending summaries` : ''}`);
       }
     }
 
