@@ -42,88 +42,72 @@ serve(async (req: Request) => {
   });
 
   try {
-    // FIX: Atomically claim ONE thread to prevent duplicate processing
-    // Strategy: Use UPDATE ... WHERE to atomically claim only threads that are:
-    // 1) Not already completed
-    // 2) Not already in a processing state (importing, preprocessing, etc.)
-    // 3) Either pending OR in a retry state (with next_retry_at <= now)
-    
-    let threadStageId: string | null = null;
+    //
+    // Queue-driven processing (INSERT webhook on thread_processing_queue)
+    //
+    let queueId: string | null = null;
     try {
       const body = await req.json();
-      threadStageId = body?.record?.id || body?.thread_stage_id || body?.id || null;
+      queueId = body?.record?.id || body?.id || null;
     } catch {
       // ignore JSON parse errors
     }
 
-    let claimedJob: any = null;
-    const now = new Date().toISOString();
-
-    // Helper function to atomically claim a thread by ID
-    // Uses atomic UPDATE with WHERE clause to prevent race conditions
-    // This is truly atomic: the UPDATE will only succeed if the WHERE conditions match
-    // If another instance already claimed the thread, the WHERE will fail and return no rows
-    const tryClaimThread = async (id: string): Promise<any> => {
-      // Atomically claim: only update if thread is in a claimable state
-      // This UPDATE will only succeed if the thread is 'pending' or 'failed' (retry state)
-      // If another instance already claimed it, the WHERE clause will fail and return no rows
-      // The .in() filter ensures we only claim threads that are NOT in a processing state
-      const { data: claimed, error: claimError } = await supabaseAdmin
-        .from('thread_processing_stages')
-        .update({
-          current_stage: 'importing', // Start from importing, will resume from correct stage based on flags
-          updated_at: now
-        })
-        .eq('id', id)
-        .in('current_stage', ['pending', 'failed']) // Only claim pending or failed (retry) threads
-        .select()
+    // Atomically claim ONE queue row by marking processed_at if it was NULL
+    let queueEntry: { thread_stage_id: string; sync_job_id: number } | null = null;
+    if (queueId) {
+      const { data: claimedQueue } = await supabaseAdmin
+        .from('thread_processing_queue')
+        .update({ processed_at: new Date().toISOString() })
+        .eq('id', queueId)
+        .is('processed_at', null)
+        .select('thread_stage_id, sync_job_id')
         .single();
-
-      if (!claimError && claimed) {
-        // Double-check: if thread is already fully completed, don't process it
-        if (claimed.current_stage === 'completed' || 
-            (claimed.stage_imported && claimed.stage_preprocessed && 
-             claimed.stage_body_cleaned && claimed.stage_chunked && claimed.stage_summarized)) {
-          // Mark as completed if all stages are done
-          await supabaseAdmin
-            .from('thread_processing_stages')
-            .update({ current_stage: 'completed' })
-            .eq('id', id);
-          return null;
-        }
-        return claimed;
+      if (claimedQueue) {
+        queueEntry = claimedQueue;
       }
-      return null;
-    };
-
-    // 1) Try to claim the thread passed by webhook (if provided)
-    if (threadStageId) {
-      claimedJob = await tryClaimThread(threadStageId);
     }
 
-    // 2) If nothing claimed from webhook, find and claim the oldest processable thread
-    if (!claimedJob) {
-      // Find threads that are pending or need retry
-      const { data: processableThreads } = await supabaseAdmin
-        .from('thread_processing_stages')
-        .select('id')
-        .in('current_stage', ['pending', 'failed'])
-        .neq('current_stage', 'completed')
-        .or(`next_retry_at.is.null,next_retry_at.lte.${now}`)
+    // Fallback: if no queue id was provided, try to grab the oldest unprocessed queue row
+    if (!queueEntry) {
+      const { data: pendingQueue } = await supabaseAdmin
+        .from('thread_processing_queue')
+        .select('id, thread_stage_id, sync_job_id')
+        .is('processed_at', null)
         .order('created_at', { ascending: true })
-        .limit(10); // Try up to 10 threads to find one we can claim
+        .limit(1)
+        .maybeSingle();
 
-      if (processableThreads && processableThreads.length > 0) {
-        // Try to claim each thread until one succeeds
-        for (const thread of processableThreads) {
-          claimedJob = await tryClaimThread(thread.id);
-          if (claimedJob) break; // Successfully claimed one
+      if (pendingQueue?.id) {
+        const { data: claimedQueue } = await supabaseAdmin
+          .from('thread_processing_queue')
+          .update({ processed_at: new Date().toISOString() })
+          .eq('id', pendingQueue.id)
+          .is('processed_at', null)
+          .select('thread_stage_id, sync_job_id')
+          .single();
+        if (claimedQueue) {
+          queueEntry = claimedQueue;
         }
       }
     }
 
-    if (!claimedJob) {
-      return new Response(JSON.stringify({ message: 'No threads to process or already being processed' }), {
+    if (!queueEntry) {
+      return new Response(JSON.stringify({ message: 'No queue items to process' }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // Fetch the thread stage referenced by the queue entry
+    const { data: claimedJob, error: stageError } = await supabaseAdmin
+      .from('thread_processing_stages')
+      .select('*')
+      .eq('id', queueEntry.thread_stage_id)
+      .single();
+
+    if (stageError || !claimedJob) {
+      return new Response(JSON.stringify({ message: 'Thread stage not found for queue entry' }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
@@ -606,6 +590,76 @@ serve(async (req: Request) => {
       }
     }
 
+    // Enqueue the next thread for this sync_job (sequential handoff)
+    const { data: allThreads } = await supabaseAdmin
+      .from('thread_processing_stages')
+      .select('id, current_stage')
+      .eq('sync_job_id', finalJob?.sync_job_id || currentJob.sync_job_id)
+      .order('created_at', { ascending: true });
+
+    const { data: queueRows } = await supabaseAdmin
+      .from('thread_processing_queue')
+      .select('thread_stage_id, processed_at');
+
+    const activeQueued = new Set<string>();
+    const processedQueued = new Set<string>();
+    if (queueRows) {
+      queueRows.forEach((row: any) => {
+        if (row.processed_at === null) {
+          activeQueued.add(row.thread_stage_id);
+        } else {
+          processedQueued.add(row.thread_stage_id);
+        }
+      });
+    }
+
+    let nextThreadId: string | null = null;
+    if (allThreads) {
+      for (const t of allThreads) {
+        if (t.current_stage === 'completed' || t.current_stage === 'failed') continue;
+        if (activeQueued.has(t.id)) continue;
+        if (processedQueued.has(t.id)) continue;
+        nextThreadId = t.id;
+        break;
+      }
+    }
+
+    if (nextThreadId) {
+      // Insert next thread into processing queue (triggers next webhook)
+      await supabaseAdmin
+        .from('thread_processing_queue')
+        .insert({
+          thread_stage_id: nextThreadId,
+          sync_job_id: finalJob?.sync_job_id || currentJob.sync_job_id
+        });
+    } else {
+      // No more threads to enqueue. If no pending/processing summaries, mark job completed.
+      const stageIds = (allThreads || []).map((t: any) => t.id);
+      const { data: pendingSummaries } = await supabaseAdmin
+        .from('thread_summarization_queue')
+        .select('thread_stage_id, status')
+        .in('thread_stage_id', stageIds.length > 0 ? stageIds : ['00000000-0000-0000-0000-000000000000'])
+        .in('status', ['pending', 'processing']);
+
+      const hasActiveThreads = (allThreads || []).some((t: any) => t.current_stage !== 'completed' && t.current_stage !== 'failed');
+      const hasActiveSummaries = (pendingSummaries || []).length > 0;
+
+      if (!hasActiveThreads && !hasActiveSummaries) {
+        await supabaseAdmin
+          .from('sync_jobs')
+          .update({
+            status: 'completed',
+            details: `Sync completed: ${(allThreads || []).filter((t: any) => t.current_stage === 'completed').length} threads processed successfully`
+          })
+          .eq('id', finalJob?.sync_job_id || currentJob.sync_job_id);
+
+        await supabaseAdmin
+          .from('profiles')
+          .update({ threads_last_synced_at: new Date().toISOString() })
+          .eq('id', finalJob?.user_id || currentJob.user_id);
+      }
+    }
+
     return new Response(JSON.stringify({
       success: true,
       threadId: currentJob.thread_id,
@@ -627,4 +681,5 @@ serve(async (req: Request) => {
     });
   }
 });
+
 

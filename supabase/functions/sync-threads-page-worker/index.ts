@@ -198,6 +198,7 @@ serve(async (req: Request) => {
       }
 
       // Create thread_processing_stages records for each thread
+      // (Bulk insert is fine; no webhooks on this table)
       if (threadIds.length > 0) {
         const stageJobs = threadIds.map((threadId: string) => ({
           thread_id: threadId,
@@ -207,8 +208,6 @@ serve(async (req: Request) => {
           stage_imported: false
         }));
 
-        // Upsert to avoid duplicate rows for the same (thread_id, sync_job_id)
-        // This prevents duplicate processing when webhooks retry or pages are re-enqueued
         const { error: stagesError } = await supabaseAdmin
           .from('thread_processing_stages')
           .upsert(stageJobs, {
@@ -222,6 +221,31 @@ serve(async (req: Request) => {
         }
 
         console.log(`✅ Enqueued ${threadIds.length} threads for page ${page.page_number}`);
+
+        // Enqueue ONLY the first thread into the processing queue (one webhook)
+        const { data: firstThread } = await supabaseAdmin
+          .from('thread_processing_stages')
+          .select('id')
+          .eq('sync_job_id', page.sync_job_id)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (firstThread?.id) {
+          const { error: queueError } = await supabaseAdmin
+            .from('thread_processing_queue')
+            .insert({
+              thread_stage_id: firstThread.id,
+              sync_job_id: page.sync_job_id
+            });
+
+          if (queueError && queueError.code !== '23505') {
+            console.error('Failed to enqueue first thread into processing queue:', queueError);
+            throw queueError;
+          } else {
+            console.log(`🚀 Enqueued first thread ${firstThread.id} into processing queue`);
+          }
+        }
       }
 
       // If there's a next page, enqueue it
