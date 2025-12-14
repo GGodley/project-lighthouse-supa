@@ -27,5 +27,5 @@ jobs:
       - name: Deploy to Trigger.dev
         env:
           TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
-        run: npx trigger.dev@latest deploy
+        run: npx trigger.dev@3.3.17 deploy
 
