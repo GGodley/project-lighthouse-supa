@@ -40,3 +40,23 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.trigger
+
+# IDE
+.cursor/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Temporary SQL scripts
+add_missing_columns.sql
+reset-thread-for-testing.sql
+
+# Test files
+test_analyzer_local.py
+test_resolver.py
