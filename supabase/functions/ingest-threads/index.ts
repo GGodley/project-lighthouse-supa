@@ -10,6 +10,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 
+// Limit the number of threads processed per run to avoid CPU timeouts
+const MAX_THREADS_PER_RUN = 50;
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -40,6 +43,76 @@ serve(async (req: Request) => {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
+    }
+
+    // --- Zombie Job Cleanup: handle stuck 'running' jobs for this user ---
+    type RunningJob = {
+      id: number;
+      created_at: string;
+      status: string;
+    };
+
+    const TEN_MINUTES_MS = 10 * 60 * 1000;
+    const now = new Date();
+
+    const { data: runningJobs, error: runningJobsError } = await supabaseAdmin
+      .from("sync_jobs")
+      .select("id, created_at, status")
+      .eq("user_id", userId)
+      .eq("status", "running")
+      .order("created_at", { ascending: false });
+
+    if (runningJobsError) {
+      throw new Error(`Failed to check existing sync jobs: ${runningJobsError.message}`);
+    }
+
+    if (runningJobs && runningJobs.length > 0) {
+      const latestJob = runningJobs[0] as RunningJob;
+      const createdAt = new Date(latestJob.created_at);
+      const ageMs = now.getTime() - createdAt.getTime();
+
+      if (ageMs > TEN_MINUTES_MS) {
+        console.log(
+          `🧹 Cleaning up zombie sync job ${latestJob.id} for user ${userId} (age: ${Math.round(
+            ageMs / 1000
+          )}s)`
+        );
+
+        const { error: cleanupError } = await supabaseAdmin
+          .from("sync_jobs")
+          .update({
+            status: "failed",
+            details: "System Cleanup: Job timed out or crashed previously",
+          })
+          .eq("id", latestJob.id);
+
+        if (cleanupError) {
+          console.warn(
+            `⚠️ Failed to mark zombie sync job ${latestJob.id} as failed: ${cleanupError.message}`
+          );
+        }
+        // Continue and create a new job below
+      } else {
+        const remainingMs = TEN_MINUTES_MS - ageMs;
+        const retryAfterSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
+
+        console.log(
+          `⏳ Active sync job ${latestJob.id} for user ${userId} still running (age: ${Math.round(
+            ageMs / 1000
+          )}s). Blocking new sync.`
+        );
+
+        return new Response(
+          JSON.stringify({
+            error: "Sync already in progress",
+            retryAfter: retryAfterSeconds,
+          }),
+          {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
     }
 
     // Handle sync_jobs tracking
@@ -153,7 +226,11 @@ serve(async (req: Request) => {
       }
 
       const listJson = await listResp.json();
-      const pageThreadIds = listJson.threads?.map((t: any) => t.id).filter(Boolean) || [];
+      const threadsArray = Array.isArray(listJson.threads) ? listJson.threads as { id?: string }[] : [];
+      const pageThreadIds = threadsArray
+        .map((t) => t.id)
+        .filter((id): id is string => Boolean(id));
+
       threadIds.push(...pageThreadIds);
       totalThreadsFetched += pageThreadIds.length;
       nextPageToken = listJson.nextPageToken;
@@ -161,16 +238,36 @@ serve(async (req: Request) => {
       console.log(`📧 Fetched ${pageThreadIds.length} threads (total: ${totalThreadsFetched})`);
     } while (nextPageToken);
 
-    console.log(`📧 Total threads to process: ${threadIds.length}`);
+    console.log(`📧 Total threads discovered from Gmail: ${threadIds.length}`);
+
+    // Determine which threads to process in this run (oldest first, up to MAX_THREADS_PER_RUN)
+    let hasMore = false;
+    let threadsToProcess: string[] = [];
+
+    if (threadIds.length > 0) {
+      // Oldest first
+      threadIds.reverse();
+      hasMore = threadIds.length > MAX_THREADS_PER_RUN;
+      threadsToProcess = hasMore
+        ? threadIds.slice(0, MAX_THREADS_PER_RUN)
+        : threadIds.slice();
+
+      console.log(
+        `📧 Limiting processing to ${threadsToProcess.length} threads this run (hasMore=${hasMore})`
+      );
+    } else {
+      console.log("📭 No threads returned from Gmail; nothing to process in this run.");
+    }
 
     // Process threads in parallel batches
     const BATCH_SIZE = 10;
     let threadsSynced = 0;
     let messagesSynced = 0;
     const errors: string[] = [];
+    let batchLastMessageTime: number | null = null;
 
     // Process thread function (extracted for reuse in batch processing)
-    const processThread = async (threadId: string): Promise<{ success: boolean; messagesCount: number; errors: string[] }> => {
+    const processThread = async (threadId: string): Promise<{ success: boolean; messagesCount: number; errors: string[]; lastMessageDate?: string }> => {
       const threadErrors: string[] = [];
       const messagesCount = 0;
 
@@ -192,7 +289,27 @@ serve(async (req: Request) => {
           return { success: false, messagesCount: 0, errors: threadErrors };
         }
 
-        const threadJson = await threadResp.json();
+        type GmailThreadJson = {
+          messages?: { internalDate?: string }[];
+          [key: string]: unknown;
+        };
+
+        const threadJson = await threadResp.json() as GmailThreadJson;
+
+        // Compute last message date for this thread (based on internalDate of last message)
+        let lastMessageDate: string | undefined;
+        const messagesForThread = Array.isArray(threadJson.messages)
+          ? threadJson.messages
+          : [];
+        if (messagesForThread.length > 0) {
+          const lastMessage = messagesForThread[messagesForThread.length - 1];
+          if (lastMessage.internalDate) {
+            const ms = Number(lastMessage.internalDate);
+            if (!Number.isNaN(ms)) {
+              lastMessageDate = new Date(ms).toISOString();
+            }
+          }
+        }
 
         // Upsert thread data as a dumb pipe: store raw JSON and leave parsing to downstream processors
         const { error: threadError } = await supabaseAdmin
@@ -253,7 +370,7 @@ serve(async (req: Request) => {
         }
 
         console.log(`✅ Successfully processed thread ${threadId} (raw JSON stored, parsing deferred)`);
-        return { success: true, messagesCount, errors: threadErrors };
+        return { success: true, messagesCount, errors: threadErrors, lastMessageDate };
 
       } catch (threadError) {
         console.error(`❌ Error processing thread ${threadId}:`, threadError);
@@ -263,8 +380,8 @@ serve(async (req: Request) => {
     };
 
     // Process threads in batches
-    for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
-      const batch = threadIds.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < threadsToProcess.length; i += BATCH_SIZE) {
+      const batch = threadsToProcess.slice(i, i + BATCH_SIZE);
       console.log(`🔄 Processing batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} threads)`);
 
       // Create promises for all threads in the batch
@@ -277,26 +394,41 @@ serve(async (req: Request) => {
       for (const result of results) {
         if (result.success) {
           threadsSynced++;
+
+          if (result.lastMessageDate) {
+            const t = Date.parse(result.lastMessageDate);
+            if (!Number.isNaN(t)) {
+              if (batchLastMessageTime === null || t > batchLastMessageTime) {
+                batchLastMessageTime = t;
+              }
+            }
+          }
         }
         messagesSynced += result.messagesCount;
         errors.push(...result.errors);
       }
 
-      console.log(`✅ Batch ${Math.floor(i / BATCH_SIZE) + 1} completed. Progress: ${Math.min(i + BATCH_SIZE, threadIds.length)}/${threadIds.length} threads`);
+      console.log(`✅ Batch ${Math.floor(i / BATCH_SIZE) + 1} completed. Progress: ${Math.min(i + BATCH_SIZE, threadsToProcess.length)}/${threadsToProcess.length} threads in this run`);
     }
 
-    // Update last sync timestamp
-    const currentUTCTime = new Date().toISOString();
-    const { error: updateError } = await supabaseAdmin
-      .from('profiles')
-      .update({ threads_last_synced_at: currentUTCTime })
-      .eq('id', userId);
+    // Update last sync timestamp based on the last successfully processed message in this batch
+    if (batchLastMessageTime !== null) {
+      const nextCursorDate = new Date(batchLastMessageTime + 1000); // +1 second
+      const cursorIso = nextCursorDate.toISOString();
 
-    if (updateError) {
-      console.warn(`⚠️ Failed to update threads_last_synced_at: ${updateError.message}`);
-      // Don't fail the whole operation, just log the warning
+      const { error: updateError } = await supabaseAdmin
+        .from('profiles')
+        .update({ threads_last_synced_at: cursorIso })
+        .eq('id', userId);
+
+      if (updateError) {
+        console.warn(`⚠️ Failed to update threads_last_synced_at: ${updateError.message}`);
+        // Don't fail the whole operation, just log the warning
+      } else {
+        console.log(`✅ Updated threads_last_synced_at cursor to ${cursorIso} based on processed batch`);
+      }
     } else {
-      console.log(`✅ Updated threads_last_synced_at to ${currentUTCTime}`);
+      console.log("ℹ️ No threads were successfully processed in this run; not updating threads_last_synced_at cursor.");
     }
 
     // Update sync job to completed with summary
@@ -331,6 +463,7 @@ serve(async (req: Request) => {
       threads_synced: threadsSynced,
       messages_synced: messagesSynced,
       total_threads_fetched: threadIds.length,
+      hasMore,
       errors: errors.length > 0 ? errors : undefined
     }), {
       status: 200,
