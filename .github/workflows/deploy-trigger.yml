@@ -1,31 +1,28 @@
-name: Deploy Trigger.dev V3
+name: Deploy to Trigger.dev
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'src/trigger/'
       - 'trigger.config.ts'
-      - 'package.json'
-      - 'backend/'
+      - 'src/trigger/**'       # 👈 Fixed: Now watches files INSIDE the folder
+      - '.github/workflows/**' # 👈 Fixed: Watches changes to the workflow itself
+
+  # Manual button to force run from GitHub UI
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
     steps:
       - uses: actions/checkout@v3
 
-      - name: Install Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '20'
-
-      - name: Install Dependencies
+      - name: Install dependencies
         run: npm install
 
-      - name: Deploy to Trigger.dev
-        env:
-          TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
+      - name: Build and Deploy
+        # Pinning the CLI version to match your SDK (3.3.17)
         run: npx trigger.dev@3.3.17 deploy
-
