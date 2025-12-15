@@ -2,7 +2,7 @@ import { task } from "@trigger.dev/sdk/v3";
 import { createClient as createSupabaseClient, SupabaseClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import { htmlToText } from "html-to-text";
-import type { LLMSummary, NextStep } from "../lib/types/threads";
+import type { LLMSummary } from "../lib/types/threads";
 
 // --- Types for Gmail thread JSON and ETL ---
 

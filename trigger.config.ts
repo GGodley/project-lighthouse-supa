@@ -1,5 +1,4 @@
 import { defineConfig } from "@trigger.dev/sdk/v3";
-import { pythonExtension } from "@trigger.dev/python/extension";
 
 export default defineConfig({
   project: "proj_eqtonbbtdixgjipvdytd",
@@ -20,15 +19,6 @@ export default defineConfig({
     },
   },
   dirs: ["./src/trigger"],
-  build: {
-    extensions: [
-      pythonExtension({
-        devPythonBinaryPath: "./venv/bin/python",
-        requirementsFile: "requirements.txt",
-        scripts: ["backend/**/*.py"],
-      }),
-    ],
-  },
 });
 // Force deploy
 // Force deploy
