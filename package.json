@@ -37,19 +37,21 @@
     "react-chartjs-2": "^5.3.0",
     "react-dom": "19.1.2",
     "tailwind-merge": "^3.3.1",
-    "trigger.dev": "^3.3.17"
+    "trigger.dev": "^3.3.17",
+    "openai": "^4.20.1",
+    "html-to-text": "^9.0.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@trigger.dev/build": "^3.3.17",
-    "@trigger.dev/python": "^3.3.17",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.5.7",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "@types/html-to-text": "^9.0.4"
   }
 }

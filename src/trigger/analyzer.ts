@@ -1,6 +1,8 @@
 import { task } from "@trigger.dev/sdk/v3";
-import { python } from "@trigger.dev/python";
 import { createClient as createSupabaseClient, SupabaseClient } from "@supabase/supabase-js";
+import OpenAI from "openai";
+import { htmlToText } from "html-to-text";
+import type { LLMSummary, NextStep } from "../lib/types/threads";
 
 // --- Types for Gmail thread JSON and ETL ---
 
@@ -45,6 +47,33 @@ type ThreadMessageUpsert = {
   snippet: string | null;
   body_text: string | null;
   body_html: string | null;
+};
+
+type NextStepInsert = {
+  thread_id: string;
+  user_id: string;
+  description: string;
+  owner: string | null;
+  due_date: string | null;
+  status: "pending";
+};
+
+const getOpenAIClient = () => {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is required for analyzer");
+  }
+  return new OpenAI({ apiKey });
+};
+
+const parseDueDate = (raw: unknown): string | null => {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const ts = Date.parse(trimmed);
+  if (Number.isNaN(ts)) return null;
+  return new Date(ts).toISOString();
 };
 
 // --- Gmail parsing helpers (ported from Supabase edge function) ---
@@ -196,10 +225,22 @@ const runThreadEtl = async (
       : [];
 
     const bodies = collectBodies(payload);
-    const bodyText = bodies.text ?? null;
+    let bodyText = bodies.text ?? null;
     const bodyHtml = bodies.html ?? null;
 
+    // If no plain text but HTML exists, derive text from HTML
+    if (!bodyText && bodyHtml) {
+      try {
+        bodyText = htmlToText(bodyHtml, {
+          wordwrap: 120,
+        });
+      } catch (e) {
+        console.warn("ETL: Failed to convert HTML to text", e);
+      }
+    }
+
     let sentDateIso: string | null = null;
+    // STRICT: use Gmail internalDate only
     if (msg.internalDate) {
       const ms = Number(msg.internalDate);
       if (!Number.isNaN(ms)) {
@@ -236,7 +277,7 @@ const runThreadEtl = async (
   const flattenedBody =
     transcriptParts.length > 0 ? transcriptParts.join("\n\n") : null;
 
-  // Update threads row with subject, snippet, and body
+  // Update threads row with subject, snippet, body, and last_message_date
   const threadUpdatePayload: {
     subject: string | null;
     snippet: string | null;
@@ -316,94 +357,209 @@ export const analyzeThreadTask = task({
       supabaseServiceKey
     );
 
+    const openai = getOpenAIClient();
+
     try {
       // Step 0: ETL from raw_thread_data into threads + thread_messages
       await runThreadEtl(supabaseAdmin, userId, threadId);
 
-      // Step 1: Process Entities (extract participants, create/link companies and customers)
-      console.log(`Step 1: Processing entities for thread ${threadId}`);
-      const processorResult = await python.runScript(
-        "backend/services/processor.py",
-        [userId, threadId]
-      );
+      // Step 1: Fetch normalized thread with body and existing summary
+      const { data: threadRow, error: threadError } = await supabaseAdmin
+        .from("threads")
+        .select("thread_id, user_id, body, llm_summary, last_message_date")
+        .eq("thread_id", threadId)
+        .eq("user_id", userId)
+        .maybeSingle();
 
-      console.log("Entity processor stdout:", processorResult.stdout);
-      if (processorResult.stderr) {
-        console.error("Entity processor stderr:", processorResult.stderr);
-      }
-
-      // Check if processor succeeded
-      try {
-        const processorData = JSON.parse(processorResult.stdout || "{}");
-        if (!processorData.success) {
-          throw new Error(
-            `Entity processing failed: ${JSON.stringify(
-              processorData.errors || []
-            )}`
-          );
-        }
-        console.log(
-          `Entity processing completed: ${
-            processorData.companies_created || 0
-          } companies created, ${
-            processorData.customers_created || 0
-          } customers created`
+      if (threadError) {
+        throw new Error(
+          `Analyzer: Failed to fetch thread ${threadId}: ${threadError.message}`
         );
-      } catch {
-        // If stdout is not JSON, check exit code
-        if (processorResult.exitCode !== 0) {
-          throw new Error(
-            `Entity processing failed with exit code ${processorResult.exitCode}`
-          );
-        }
+      }
+      if (!threadRow) {
+        throw new Error(
+          `Analyzer: Thread ${threadId} not found for user ${userId}`
+        );
       }
 
-      // Step 2: Analyze Thread (AI analysis)
-      console.log(`Step 2: Analyzing thread ${threadId}`);
-      const analyzerResult = await python.runScript(
-        "backend/services/analyzer.py",
-        [userId, threadId]
-      );
+      const body: string | null = threadRow.body;
+      const existingSummary =
+        threadRow.llm_summary as LLMSummary | { error: string } | null;
 
-      console.log("Thread analyzer stdout:", analyzerResult.stdout);
-      if (analyzerResult.stderr) {
-        console.error("Thread analyzer stderr:", analyzerResult.stderr);
+      type AnalysisScenario = "fresh" | "update";
+
+      const isFresh =
+        !existingSummary ||
+        (typeof existingSummary === "object" &&
+          "error" in existingSummary &&
+          !!existingSummary.error);
+
+      const scenario: AnalysisScenario = isFresh ? "fresh" : "update";
+
+      let userPrompt: string;
+      if (scenario === "fresh") {
+        userPrompt = `
+Analyze this full thread history. Provide a comprehensive summary and identify all open next steps.
+
+Full Thread Transcript:
+${body ?? "(no body available)"}
+        `.trim();
+      } else {
+        userPrompt = `
+You are updating an existing analysis.
+
+Context: Previous Summary (JSON):
+${JSON.stringify(existingSummary)}
+
+Input: Full Thread Body:
+${body ?? "(no body available)"}
+
+Task:
+1. Update the summary to incorporate the new information.
+2. Generate Next Steps ONLY based on the new developments in the latest messages. Ignore older steps if they are now resolved.
+3. Return a single JSON object matching the existing summary schema, including a 'next_steps' array if there are any new next steps.
+        `.trim();
       }
 
-      // Check if analyzer succeeded
+      // Step 2: Call OpenAI in JSON mode
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4.1",
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a B2B customer success assistant. You summarize email threads and extract structured next steps for CSMs. Always respond with valid JSON only.",
+          },
+          { role: "user", content: userPrompt },
+        ],
+      });
+
+      const rawContent = completion.choices[0]?.message?.content;
+      if (!rawContent) {
+        throw new Error("Analyzer: OpenAI returned empty content");
+      }
+
+      let parsedSummary: LLMSummary | { error: string };
       try {
-        const analyzerData = JSON.parse(analyzerResult.stdout || "{}");
-        if (!analyzerData.success) {
+        parsedSummary = JSON.parse(rawContent);
+      } catch (e) {
+        parsedSummary = {
+          error: `Failed to parse LLM JSON: ${(e as Error).message}`,
+        };
+      }
+
+      const nowIso = new Date().toISOString();
+
+      // Step 3: Update threads.llm_summary + last_analyzed_at
+      const { error: summaryUpdateError } = await supabaseAdmin
+        .from("threads")
+        .update({
+          llm_summary: parsedSummary,
+          last_analyzed_at: nowIso,
+        })
+        .eq("thread_id", threadId)
+        .eq("user_id", userId);
+
+      if (summaryUpdateError) {
+        throw new Error(
+          `Analyzer: Failed to update llm_summary for ${threadId}: ${summaryUpdateError.message}`
+        );
+      }
+
+      // Step 4: Manual next_steps dedup + insert
+      const summaryAny = parsedSummary as LLMSummary | { [key: string]: any };
+      const nextStepsRaw = (summaryAny as any)?.next_steps as
+        | NextStep[]
+        | undefined;
+
+      if (Array.isArray(nextStepsRaw) && nextStepsRaw.length > 0) {
+        // Fetch existing next_steps for this thread
+        const { data: existingSteps, error: existingStepsError } =
+          await supabaseAdmin
+            .from("next_steps")
+            .select("description")
+            .eq("thread_id", threadId)
+            .eq("user_id", userId);
+
+        if (existingStepsError) {
           throw new Error(
-            `Thread analysis failed: ${JSON.stringify(
-              analyzerData.errors || []
-            )}`
+            `Analyzer: Failed to fetch existing next_steps for ${threadId}: ${existingStepsError.message}`
           );
         }
-      } catch {
-        // If stdout is not JSON, check exit code
-        if (analyzerResult.exitCode !== 0) {
-          throw new Error(
-            `Thread analysis failed with exit code ${analyzerResult.exitCode}`
+
+        const existingSet = new Set<string>();
+        for (const row of existingSteps ?? []) {
+          const desc = (row as { description: string | null }).description;
+          if (!desc) continue;
+          const normalized = desc.trim().toLowerCase();
+          if (normalized) existingSet.add(normalized);
+        }
+
+        const nextStepsToInsert: NextStepInsert[] = [];
+        for (const step of nextStepsRaw) {
+          const description =
+            typeof step?.text === "string" ? step.text.trim() : "";
+          if (!description) continue;
+
+          const normalized = description.toLowerCase();
+          if (existingSet.has(normalized)) {
+            // Duplicate, skip
+            continue;
+          }
+
+          existingSet.add(normalized);
+
+          const owner =
+            typeof step?.owner === "string" && step.owner.trim()
+              ? step.owner.trim()
+              : null;
+          const dueDate = parseDueDate(step?.due_date);
+
+          nextStepsToInsert.push({
+            thread_id: threadId,
+            user_id: userId,
+            description,
+            owner,
+            due_date: dueDate,
+            status: "pending",
+          });
+        }
+
+        if (nextStepsToInsert.length > 0) {
+          const { error: nextStepsInsertError } = await supabaseAdmin
+            .from("next_steps")
+            .insert(nextStepsToInsert);
+
+          if (nextStepsInsertError) {
+            throw new Error(
+              `Analyzer: Failed to insert next_steps for ${threadId}: ${nextStepsInsertError.message}`
+            );
+          }
+
+          console.log(
+            `Analyzer: Inserted ${nextStepsToInsert.length} next_steps for thread ${threadId}`
+          );
+        } else {
+          console.log(
+            `Analyzer: No new next_steps to insert for thread ${threadId} (all duplicates or empty)`
           );
         }
+      } else {
+        console.log(
+          `Analyzer: No next_steps returned by LLM for thread ${threadId}`
+        );
       }
 
       return {
         success: true,
-        processor: {
-          stdout: processorResult.stdout,
-          stderr: processorResult.stderr,
-          exitCode: processorResult.exitCode,
-        },
-        analyzer: {
-          stdout: analyzerResult.stdout,
-          stderr: analyzerResult.stderr,
-          exitCode: analyzerResult.exitCode,
-        },
+        scenario,
+        threadId,
+        userId,
       };
     } catch (error) {
-      console.error("Error executing pipeline:", error);
+      console.error("Error executing analyzer pipeline:", error);
       throw error;
     }
   },

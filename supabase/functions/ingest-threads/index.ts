@@ -166,43 +166,31 @@ serve(async (req: Request) => {
       throw new Error(`Failed to fetch user profile: ${profileError.message}`);
     }
 
-    const profileLastSyncedAt = profileData?.threads_last_synced_at;
+    const profileLastSyncedAt = profileData?.threads_last_synced_at as string | null;
 
-    // Determine sync time window with strict 90-day limit
-    // Calculate 90 days ago as the maximum lookback period
-    const ninetyDaysAgo = new Date();
-    ninetyDaysAgo.setUTCDate(ninetyDaysAgo.getUTCDate() - 90);
-
-    let lastSyncTime: Date;
-
+    // Build Gmail API query based on cursor
+    // If we have a previous cursor, use it to build an `after:` query.
+    // If not, leave q empty for full backfill.
+    let gmailQuery = "";
     if (profileLastSyncedAt) {
-      const lastSyncDate = new Date(profileLastSyncedAt);
-      
-      // Check if last sync is older than 90 days
-      if (lastSyncDate < ninetyDaysAgo) {
-        // Last sync is too old, use 90-day limit instead
-        lastSyncTime = new Date(ninetyDaysAgo);
-        console.log(`📅 Last sync time (${lastSyncDate.toISOString()}) is older than 90 days. Using 90-day limit: ${lastSyncTime.toISOString()}`);
+      const cursorDate = new Date(profileLastSyncedAt);
+      const ms = cursorDate.getTime();
+      if (!Number.isNaN(ms)) {
+        const unixSeconds = Math.floor(ms / 1000);
+        gmailQuery = `after:${unixSeconds}`;
+        console.log(
+          `📅 Using threads_last_synced_at cursor from profile: ${profileLastSyncedAt} (q="${gmailQuery}")`
+        );
       } else {
-        // Last sync is recent (within 90 days), use it
-        lastSyncTime = new Date(lastSyncDate);
-        console.log(`📅 Using recent last sync time (UTC): ${lastSyncTime.toISOString()}`);
+        console.warn(
+          `⚠️ Invalid threads_last_synced_at value "${profileLastSyncedAt}", falling back to full backfill (empty query)`
+        );
       }
     } else {
-      // No sync history exists, default to 90 days ago
-      lastSyncTime = new Date(ninetyDaysAgo);
-      console.log(`📅 No previous sync found. Starting from 90 days ago (UTC): ${lastSyncTime.toISOString()}`);
+      console.log(
+        "📅 No previous threads_last_synced_at found. Running in backfill mode with empty Gmail query."
+      );
     }
-
-    // Apply 1-day safety buffer to ensure we catch threads that were updated
-    // right at the boundary (Gmail's after: query is inclusive)
-    lastSyncTime = new Date(lastSyncTime.getTime() - (24 * 60 * 60 * 1000)); // Subtract 1 day
-    console.log(`📅 Final sync time with 1-day buffer (UTC): ${lastSyncTime.toISOString()}. Querying threads modified after this date.`);
-
-    // Build Gmail API query
-    // Gmail API expects Unix timestamp in seconds
-    const unixTimestamp = Math.floor(lastSyncTime.getTime() / 1000);
-    const baseQuery = `after:${unixTimestamp}`;
 
     // Fetch threads from Gmail API (with pagination support)
     let threadIds: string[] = [];
@@ -210,7 +198,10 @@ serve(async (req: Request) => {
     let totalThreadsFetched = 0;
 
     do {
-      let listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${encodeURIComponent(baseQuery)}&maxResults=500`;
+      const queryParam = gmailQuery
+        ? `q=${encodeURIComponent(gmailQuery)}&`
+        : "";
+      let listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/threads?${queryParam}maxResults=500`;
       
       if (nextPageToken) {
         listUrl += `&pageToken=${nextPageToken}`;
@@ -259,15 +250,105 @@ serve(async (req: Request) => {
       console.log("📭 No threads returned from Gmail; nothing to process in this run.");
     }
 
+    // If there are no threads at all, we can return early
+    if (threadIds.length === 0) {
+      console.log("📭 No threads returned from Gmail; nothing to process in this run.");
+
+      // Still update sync job as completed
+      if (jobId) {
+        const summaryDetails = JSON.stringify({
+          threads: 0,
+          messages: 0,
+          total_threads_fetched: 0,
+          errors_count: 0,
+        });
+
+        const { error: jobUpdateError } = await supabaseAdmin
+          .from("sync_jobs")
+          .update({
+            status: "completed",
+            details: summaryDetails,
+          })
+          .eq("id", jobId);
+
+        if (jobUpdateError) {
+          console.warn(
+            `⚠️ Failed to update sync job to completed when no threads: ${jobUpdateError.message}`,
+          );
+        } else {
+          console.log(`✅ Updated sync job ${jobId} to completed (no threads)`);
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          jobId,
+          threads_synced: 0,
+          messages_synced: 0,
+          total_threads_fetched: 0,
+          hasMore: false,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     // Process threads in parallel batches
     const BATCH_SIZE = 10;
     let threadsSynced = 0;
     let messagesSynced = 0;
     const errors: string[] = [];
-    let batchLastMessageTime: number | null = null;
+
+    // Smart filter: load existing threads to classify new/reply/duplicate
+    type ExistingThreadRow = {
+      thread_id: string;
+      last_message_date: string | null;
+    };
+
+    const existingById = new Map<string, number | null>();
+    if (threadsToProcess.length > 0) {
+      const { data: existingThreads, error: existingThreadsError } =
+        await supabaseAdmin
+          .from("threads")
+          .select("thread_id, last_message_date")
+          .eq("user_id", userId)
+          .in("thread_id", threadsToProcess);
+
+      if (existingThreadsError) {
+        throw new Error(
+          `Failed to fetch existing threads for smart filter: ${existingThreadsError.message}`,
+        );
+      }
+
+      for (const row of (existingThreads || []) as ExistingThreadRow[]) {
+        if (!row.thread_id) continue;
+        const iso = row.last_message_date;
+        if (!iso) {
+          existingById.set(row.thread_id, null);
+          continue;
+        }
+        const ms = Date.parse(iso);
+        existingById.set(row.thread_id, Number.isNaN(ms) ? null : ms);
+      }
+
+      console.log(
+        `🧠 Smart filter: loaded ${existingById.size} existing thread records for classification`,
+      );
+    }
 
     // Process thread function (extracted for reuse in batch processing)
-    const processThread = async (threadId: string): Promise<{ success: boolean; messagesCount: number; errors: string[]; lastMessageDate?: string }> => {
+    const processThread = async (
+      threadId: string,
+      existingLastMessageMs: number | null,
+    ): Promise<{
+      success: boolean;
+      messagesCount: number;
+      errors: string[];
+      lastMessageDateMs?: number | null;
+    }> => {
       const threadErrors: string[] = [];
       const messagesCount = 0;
 
@@ -293,32 +374,66 @@ serve(async (req: Request) => {
           messages?: { internalDate?: string }[];
           [key: string]: unknown;
         };
-
+        
         const threadJson = await threadResp.json() as GmailThreadJson;
-
-        // Compute last message date for this thread (based on internalDate of last message)
-        let lastMessageDate: string | undefined;
+        
+        // Compute last message timestamp for this thread based on Gmail internalDate
+        let lastMessageMs: number | null = null;
         const messagesForThread = Array.isArray(threadJson.messages)
           ? threadJson.messages
           : [];
-        if (messagesForThread.length > 0) {
-          const lastMessage = messagesForThread[messagesForThread.length - 1];
-          if (lastMessage.internalDate) {
-            const ms = Number(lastMessage.internalDate);
-            if (!Number.isNaN(ms)) {
-              lastMessageDate = new Date(ms).toISOString();
+        for (const msg of messagesForThread) {
+          if (!msg.internalDate) continue;
+          const ms = Number(msg.internalDate);
+          if (!Number.isNaN(ms)) {
+            if (lastMessageMs === null || ms > lastMessageMs) {
+              lastMessageMs = ms;
             }
           }
         }
 
+        // Smart filter classification: new vs reply vs duplicate
+        const hasExisting = existingLastMessageMs !== undefined;
+        const existingMs =
+          existingLastMessageMs === undefined ? null : existingLastMessageMs;
+
+        if (hasExisting && existingMs !== null && lastMessageMs !== null) {
+          if (lastMessageMs <= existingMs) {
+            console.log(
+              `🗑️ Skipping duplicate thread ${threadId} (gmailMs=${lastMessageMs}, dbMs=${existingMs})`,
+            );
+            return {
+              success: false,
+              messagesCount: 0,
+              errors: threadErrors,
+              lastMessageDateMs: lastMessageMs,
+            };
+          }
+          console.log(
+            `📝 Detected reply/update for thread ${threadId} (gmailMs=${lastMessageMs}, dbMs=${existingMs})`,
+          );
+        } else if (hasExisting) {
+          console.log(
+            `📝 Treating thread ${threadId} as update with missing timestamps (gmailMs=${lastMessageMs}, dbMs=${existingMs})`,
+          );
+        } else {
+          console.log(
+            `🆕 Detected new thread ${threadId} (gmailMs=${lastMessageMs})`,
+          );
+        }
+        
         // Upsert thread data as a dumb pipe: store raw JSON and leave parsing to downstream processors
+        const lastMessageIso =
+          lastMessageMs !== null ? new Date(lastMessageMs).toISOString() : null;
+
         const { error: threadError } = await supabaseAdmin
           .from('threads')
           .upsert({
             thread_id: threadId,
             user_id: userId,
             raw_thread_data: threadJson,
-            body: null
+            body: null,
+            last_message_date: lastMessageIso
           }, {
             onConflict: 'thread_id'
           });
@@ -370,12 +485,22 @@ serve(async (req: Request) => {
         }
 
         console.log(`✅ Successfully processed thread ${threadId} (raw JSON stored, parsing deferred)`);
-        return { success: true, messagesCount, errors: threadErrors, lastMessageDate };
+        return {
+          success: true,
+          messagesCount,
+          errors: threadErrors,
+          lastMessageDateMs: lastMessageMs,
+        };
 
       } catch (threadError) {
         console.error(`❌ Error processing thread ${threadId}:`, threadError);
         threadErrors.push(`Thread ${threadId}: ${threadError instanceof Error ? threadError.message : String(threadError)}`);
-        return { success: false, messagesCount: 0, errors: threadErrors };
+        return {
+          success: false,
+          messagesCount: 0,
+          errors: threadErrors,
+          lastMessageDateMs: undefined,
+        };
       }
     };
 
@@ -384,8 +509,13 @@ serve(async (req: Request) => {
       const batch = threadsToProcess.slice(i, i + BATCH_SIZE);
       console.log(`🔄 Processing batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} threads)`);
 
-      // Create promises for all threads in the batch
-      const promises = batch.map(threadId => processThread(threadId));
+      // Create promises for all threads in the batch (with smart filter context)
+      const promises = batch.map((threadId) =>
+        processThread(
+          threadId,
+          existingById.has(threadId) ? existingById.get(threadId) ?? null : undefined,
+        )
+      );
 
       // Process batch in parallel
       const results = await Promise.all(promises);
@@ -394,15 +524,6 @@ serve(async (req: Request) => {
       for (const result of results) {
         if (result.success) {
           threadsSynced++;
-
-          if (result.lastMessageDate) {
-            const t = Date.parse(result.lastMessageDate);
-            if (!Number.isNaN(t)) {
-              if (batchLastMessageTime === null || t > batchLastMessageTime) {
-                batchLastMessageTime = t;
-              }
-            }
-          }
         }
         messagesSynced += result.messagesCount;
         errors.push(...result.errors);
@@ -411,24 +532,75 @@ serve(async (req: Request) => {
       console.log(`✅ Batch ${Math.floor(i / BATCH_SIZE) + 1} completed. Progress: ${Math.min(i + BATCH_SIZE, threadsToProcess.length)}/${threadsToProcess.length} threads in this run`);
     }
 
-    // Update last sync timestamp based on the last successfully processed message in this batch
-    if (batchLastMessageTime !== null) {
-      const nextCursorDate = new Date(batchLastMessageTime + 1000); // +1 second
-      const cursorIso = nextCursorDate.toISOString();
+    // Update cursor based on the newest thread in the fetched batch,
+    // even if that thread was classified as a duplicate and skipped.
+    let cursorIso: string | null = null;
+    const newestThreadId =
+      threadIds.length > 0 ? threadIds[threadIds.length - 1] : null;
 
+    if (newestThreadId) {
+      try {
+        const cursorResp = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/threads/${newestThreadId}?format=metadata`,
+          {
+            headers: { Authorization: `Bearer ${providerToken}` },
+          },
+        );
+
+        if (!cursorResp.ok) {
+          const errorText = await cursorResp.text();
+          console.warn(
+            `⚠️ Failed to fetch newest thread ${newestThreadId} for cursor: ${errorText}`,
+          );
+        } else {
+          const cursorJson = await cursorResp.json() as {
+            messages?: { internalDate?: string }[];
+          };
+          let maxMs: number | null = null;
+          const msgs = Array.isArray(cursorJson.messages)
+            ? cursorJson.messages
+            : [];
+          for (const msg of msgs) {
+            if (!msg.internalDate) continue;
+            const ms = Number(msg.internalDate);
+            if (!Number.isNaN(ms)) {
+              if (maxMs === null || ms > maxMs) {
+                maxMs = ms;
+              }
+            }
+          }
+
+          if (maxMs !== null) {
+            cursorIso = new Date(maxMs).toISOString();
+          }
+        }
+      } catch (cursorError) {
+        console.warn(
+          `⚠️ Error while determining cursor from newest thread ${newestThreadId}:`,
+          cursorError,
+        );
+      }
+    }
+
+    if (cursorIso) {
       const { error: updateError } = await supabaseAdmin
-        .from('profiles')
+        .from("profiles")
         .update({ threads_last_synced_at: cursorIso })
-        .eq('id', userId);
+        .eq("id", userId);
 
       if (updateError) {
-        console.warn(`⚠️ Failed to update threads_last_synced_at: ${updateError.message}`);
-        // Don't fail the whole operation, just log the warning
+        console.warn(
+          `⚠️ Failed to update threads_last_synced_at: ${updateError.message}`,
+        );
       } else {
-        console.log(`✅ Updated threads_last_synced_at cursor to ${cursorIso} based on processed batch`);
+        console.log(
+          `✅ Updated threads_last_synced_at cursor to ${cursorIso} based on newest fetched thread ${newestThreadId}`,
+        );
       }
     } else {
-      console.log("ℹ️ No threads were successfully processed in this run; not updating threads_last_synced_at cursor.");
+      console.log(
+        "ℹ️ Could not determine a valid cursor from newest fetched thread; leaving threads_last_synced_at unchanged.",
+      );
     }
 
     // Update sync job to completed with summary

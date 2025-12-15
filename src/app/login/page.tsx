@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import AuthForm from '@/components/auth/AuthForm'
+import { login } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,5 +29,7 @@ export default async function LoginPage() {
 
   // Otherwise (no user OR missing Google token), show login form
   // This allows users with expired/missing Google tokens to re-authenticate
+  // OAuth login continues to use the existing AuthForm client logic.
+  // You can add a traditional email/password form bound to the `login` server action here if desired.
   return <AuthForm />
 }
