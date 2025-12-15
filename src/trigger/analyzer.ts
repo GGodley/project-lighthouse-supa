@@ -30,10 +30,6 @@ type GmailMessage = {
   payload?: GmailMessagePayload;
 };
 
-type GmailThreadData = {
-  snippet?: string;
-  messages?: GmailMessage[];
-};
 
 type ThreadMessageUpsert = {
   message_id: string;
@@ -469,10 +465,21 @@ Task:
       }
 
       // Step 4: Manual next_steps dedup + insert
-      const summaryAny = parsedSummary as LLMSummary | { [key: string]: any };
-      const nextStepsRaw = (summaryAny as any)?.next_steps as
-        | NextStep[]
-        | undefined;
+      // Type guard to check if parsedSummary is a valid LLMSummary with next_steps
+      const isValidSummary = (
+        summary: LLMSummary | { error: string } | null
+      ): summary is LLMSummary => {
+        return (
+          summary !== null &&
+          typeof summary === "object" &&
+          !("error" in summary) &&
+          "next_steps" in summary
+        );
+      };
+
+      const nextStepsRaw = isValidSummary(parsedSummary)
+        ? parsedSummary.next_steps
+        : undefined;
 
       if (Array.isArray(nextStepsRaw) && nextStepsRaw.length > 0) {
         // Fetch existing next_steps for this thread
