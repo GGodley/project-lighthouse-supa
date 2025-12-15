@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { useRouter } from 'next/navigation'
 import Sidebar from './Sidebar'
 import DashboardSyncManager from '@/components/DashboardSyncManager'
+import { useGmailSync } from '@/hooks/useGmailSync'
 import { Database } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -18,6 +19,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [loading, setLoading] = useState(true)
   const supabase = useSupabase()
   const router = useRouter()
+  const { triggerSync } = useGmailSync()
+  const hasSyncedRef = useRef(false)
 
   useEffect(() => {
     const getUser = async () => {
@@ -82,6 +85,39 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
     getUser()
   }, [supabase, router])
+
+  // Auto-trigger Gmail sync when user lands on dashboard
+  useEffect(() => {
+    // Prevent double-fires in React Strict Mode
+    if (hasSyncedRef.current) {
+      return
+    }
+
+    const autoSync = async () => {
+      try {
+        // Get current session
+        const { data: { session } } = await supabase.auth.getSession()
+
+        // Only trigger if:
+        // 1. Session exists
+        // 2. Provider token exists (Google access token)
+        // 3. We haven't synced yet
+        if (session?.provider_token && !hasSyncedRef.current) {
+          console.log('🔄 Auto-triggering Gmail sync on dashboard load...')
+          hasSyncedRef.current = true
+          await triggerSync()
+        }
+      } catch (error) {
+        // Log error but don't block UI
+        console.error('❌ Error in auto-sync:', error)
+      }
+    }
+
+    // Only run after loading is complete
+    if (!loading) {
+      autoSync()
+    }
+  }, [supabase, triggerSync, loading])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()

@@ -91,8 +91,8 @@ serve(async (req: Request) => {
       );
     }
 
-    // Construct Trigger.dev V3 API URL
-    const triggerUrl = `https://api.trigger.dev/api/v3/projects/${TRIGGER_PROJECT_ID}/tasks/analyze-thread/trigger`;
+    // Construct Trigger.dev V3 API URL (via HTTP v1 endpoint)
+    const triggerUrl = `https://api.trigger.dev/api/v1/tasks/analyze-thread/trigger`;
 
     // Prepare the request payload
     const triggerPayload = {

@@ -10,58 +10,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 
-// Helper function to decode Gmail's base64url encoded data
-const decodeBase64Url = (data: string | undefined): string | undefined => {
-  if (!data) return undefined;
-  try {
-    let base64 = data.replace(/-/g, '+').replace(/_/g, '/');
-    while(base64.length % 4){
-      base64 += '=';
-    }
-    // Decode base64 to binary string
-    const binaryString = atob(base64);
-    // Convert binary string to Uint8Array
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    // Decode Uint8Array to UTF-8 string using TextDecoder
-    const decoder = new TextDecoder('utf-8');
-    return decoder.decode(bytes);
-  } catch (e) {
-    console.error("Base64 decoding failed for data chunk.", e);
-    return undefined;
-  }
-};
-
-// Helper function to extract text/html bodies from Gmail payload structure
-const collectBodies = (payload: any): { text?: string, html?: string } => {
-  let text: string | undefined;
-  let html: string | undefined;
-  const partsToVisit = [payload, ...payload?.parts || []];
-  const findParts = (parts: any[]) => {
-    for (const part of parts){
-      if (part?.body?.data) {
-        const mimeType = part.mimeType || '';
-        const decodedData = decodeBase64Url(part.body.data);
-        if (decodedData) {
-          if (mimeType === 'text/plain' && !text) {
-            text = decodedData;
-          }
-          if (mimeType === 'text/html' && !html) {
-            html = decodedData;
-          }
-        }
-      }
-      if (part?.parts) {
-        findParts(part.parts);
-      }
-    }
-  };
-  findParts(partsToVisit);
-  return { text, html };
-};
-
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -224,7 +172,7 @@ serve(async (req: Request) => {
     // Process thread function (extracted for reuse in batch processing)
     const processThread = async (threadId: string): Promise<{ success: boolean; messagesCount: number; errors: string[] }> => {
       const threadErrors: string[] = [];
-      let messagesCount = 0;
+      const messagesCount = 0;
 
       try {
         console.log(`🧵 Processing thread: ${threadId}`);
@@ -245,28 +193,15 @@ serve(async (req: Request) => {
         }
 
         const threadJson = await threadResp.json();
-        const messages = threadJson.messages || [];
 
-        if (messages.length === 0) {
-          console.log(`⏭️ Skipping empty thread ${threadId}`);
-          return { success: false, messagesCount: 0, errors: threadErrors };
-        }
-
-        // Extract thread metadata
-        const firstMessage = messages[0];
-        const lastMessage = messages[messages.length - 1];
-        const headers = firstMessage.payload?.headers || [];
-        const subject = headers.find((h: any) => h.name.toLowerCase() === 'subject')?.value || 'No Subject';
-
-        // Upsert thread data
+        // Upsert thread data as a dumb pipe: store raw JSON and leave parsing to downstream processors
         const { error: threadError } = await supabaseAdmin
           .from('threads')
           .upsert({
             thread_id: threadId,
             user_id: userId,
-            subject: subject,
-            snippet: threadJson.snippet || null,
-            last_message_date: new Date(Number(lastMessage.internalDate)).toISOString()
+            raw_thread_data: threadJson,
+            body: null
           }, {
             onConflict: 'thread_id'
           });
@@ -317,50 +252,7 @@ serve(async (req: Request) => {
           }
         }
 
-        // Process and upsert messages
-        for (const msg of messages) {
-          try {
-            const msgHeaders = msg.payload?.headers || [];
-            const bodies = collectBodies(msg.payload);
-
-            // Parse to_addresses and cc_addresses
-            const toValue = msgHeaders.find((h: any) => h.name.toLowerCase() === 'to')?.value || '';
-            const ccValue = msgHeaders.find((h: any) => h.name.toLowerCase() === 'cc')?.value || '';
-
-            const toAddresses = toValue ? toValue.split(',').map((e: string) => e.trim()) : [];
-            const ccAddresses = ccValue ? ccValue.split(',').map((e: string) => e.trim()) : [];
-
-            const { error: messageError } = await supabaseAdmin
-              .from('thread_messages')
-              .upsert({
-                message_id: msg.id,
-                thread_id: threadId,
-                user_id: userId,
-                customer_id: null, // No entity creation
-                from_address: msgHeaders.find((h: any) => h.name.toLowerCase() === 'from')?.value || null,
-                to_addresses: toAddresses.length > 0 ? toAddresses : null,
-                cc_addresses: ccAddresses.length > 0 ? ccAddresses : null,
-                sent_date: new Date(Number(msg.internalDate)).toISOString(),
-                snippet: msg.snippet || null,
-                body_text: bodies.text || null,
-                body_html: bodies.html || null
-              }, {
-                onConflict: 'message_id'
-              });
-
-            if (messageError) {
-              console.warn(`⚠️ Failed to upsert message ${msg.id}: ${messageError.message}`);
-              threadErrors.push(`Message ${msg.id}: ${messageError.message}`);
-            } else {
-              messagesCount++;
-            }
-          } catch (msgError) {
-            console.error(`❌ Error processing message ${msg.id}:`, msgError);
-            threadErrors.push(`Message ${msg.id}: ${msgError instanceof Error ? msgError.message : String(msgError)}`);
-          }
-        }
-
-        console.log(`✅ Successfully processed thread ${threadId} with ${messages.length} messages`);
+        console.log(`✅ Successfully processed thread ${threadId} (raw JSON stored, parsing deferred)`);
         return { success: true, messagesCount, errors: threadErrors };
 
       } catch (threadError) {
