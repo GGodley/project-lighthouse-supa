@@ -2,6 +2,51 @@ import { task } from "@trigger.dev/sdk/v3";
 import { python } from "@trigger.dev/python";
 import { createClient as createSupabaseClient, SupabaseClient } from "@supabase/supabase-js";
 
+// --- Types for Gmail thread JSON and ETL ---
+
+type GmailHeader = {
+  name: string;
+  value: string;
+};
+
+type GmailMessagePart = {
+  mimeType?: string;
+  body?: { data?: string };
+  parts?: GmailMessagePart[];
+};
+
+type GmailMessagePayload = {
+  headers?: GmailHeader[];
+  body?: { data?: string };
+  parts?: GmailMessagePart[];
+};
+
+type GmailMessage = {
+  id: string;
+  internalDate?: string;
+  snippet?: string;
+  payload?: GmailMessagePayload;
+};
+
+type GmailThreadData = {
+  snippet?: string;
+  messages?: GmailMessage[];
+};
+
+type ThreadMessageUpsert = {
+  message_id: string;
+  thread_id: string;
+  user_id: string;
+  customer_id: string | null;
+  from_address: string | null;
+  to_addresses: string[] | null;
+  cc_addresses: string[] | null;
+  sent_date: string | null;
+  snippet: string | null;
+  body_text: string | null;
+  body_html: string | null;
+};
+
 // --- Gmail parsing helpers (ported from Supabase edge function) ---
 
 const decodeBase64Url = (data: string | undefined): string | undefined => {
@@ -22,12 +67,14 @@ const decodeBase64Url = (data: string | undefined): string | undefined => {
 };
 
 const collectBodies = (
-  payload: any
+  payload: GmailMessagePayload | undefined
 ): { text?: string; html?: string } => {
   let text: string | undefined;
   let html: string | undefined;
 
-  const visitPart = (part: any) => {
+  const visitPart = (part: GmailMessagePart | undefined) => {
+    if (!part) return;
+
     if (part?.body?.data) {
       const mimeType = part.mimeType || "";
       const decodedData = decodeBase64Url(part.body.data);
@@ -51,21 +98,19 @@ const collectBodies = (
 
   if (payload) {
     visitPart(payload);
-    if (Array.isArray(payload.parts)) {
-      for (const part of payload.parts) {
-        visitPart(part);
-      }
-    }
   }
 
   return { text, html };
 };
 
-const getHeader = (headers: any[], name: string): string | undefined => {
-  if (!Array.isArray(headers)) return undefined;
+const getHeader = (
+  headers: GmailHeader[] | undefined,
+  name: string
+): string | undefined => {
+  if (!headers || !Array.isArray(headers)) return undefined;
   const lower = name.toLowerCase();
   const header = headers.find(
-    (h: any) => typeof h?.name === "string" && h.name.toLowerCase() === lower
+    (h) => typeof h.name === "string" && h.name.toLowerCase() === lower
   );
   return header?.value;
 };
@@ -97,7 +142,7 @@ const runThreadEtl = async (
     throw new Error(`ETL: Thread ${threadId} not found for user ${userId}`);
   }
 
-  const rawThreadData = threadRow.raw_thread_data as any;
+  const rawThreadData = threadRow.raw_thread_data;
 
   if (!rawThreadData || typeof rawThreadData !== "object") {
     throw new Error(
@@ -105,8 +150,8 @@ const runThreadEtl = async (
     );
   }
 
-  const messages: any[] = Array.isArray(rawThreadData.messages)
-    ? rawThreadData.messages
+  const messages: GmailMessage[] = Array.isArray(rawThreadData.messages)
+    ? rawThreadData.messages!
     : [];
 
   if (messages.length === 0) {
@@ -118,12 +163,11 @@ const runThreadEtl = async (
   }
 
   // Derive subject and snippet
-  let subject: string | null =
-    (threadRow as any).subject ?? null;
-  let snippet: string | null =
-    (threadRow as any).snippet ??
-    (rawThreadData.snippet as string | null) ??
-    (messages[0]?.snippet as string | null) ??
+  let subject: string | null = threadRow.subject ?? null;
+  const snippet: string | null =
+    threadRow.snippet ??
+    rawThreadData.snippet ??
+    messages[0]?.snippet ??
     null;
 
   if (!subject && messages.length > 0) {
@@ -132,13 +176,13 @@ const runThreadEtl = async (
   }
 
   // Parse messages and build thread body + bulk upsert payload
-  const messagesToUpsert: any[] = [];
+  const messagesToUpsert: ThreadMessageUpsert[] = [];
   const transcriptParts: string[] = [];
   let lastMessageDate: string | null = null;
 
   for (const msg of messages) {
-    const payload = msg.payload ?? {};
-    const headers = payload.headers ?? [];
+    const payload = msg.payload;
+    const headers = payload?.headers;
 
     const fromAddress = getHeader(headers, "from") ?? null;
     const toValue = getHeader(headers, "to") ?? "";
@@ -166,7 +210,7 @@ const runThreadEtl = async (
       }
     }
 
-    const messageSnippet = (msg.snippet as string | undefined) ?? null;
+    const messageSnippet = msg.snippet ?? null;
 
     messagesToUpsert.push({
       message_id: msg.id,
@@ -193,7 +237,12 @@ const runThreadEtl = async (
     transcriptParts.length > 0 ? transcriptParts.join("\n\n") : null;
 
   // Update threads row with subject, snippet, and body
-  const threadUpdatePayload: any = {
+  const threadUpdatePayload: {
+    subject: string | null;
+    snippet: string | null;
+    body: string | null;
+    last_message_date?: string | null;
+  } = {
     subject: subject ?? null,
     snippet,
     body: flattenedBody,
@@ -300,7 +349,7 @@ export const analyzeThreadTask = task({
             processorData.customers_created || 0
           } customers created`
         );
-      } catch (parseError) {
+      } catch {
         // If stdout is not JSON, check exit code
         if (processorResult.exitCode !== 0) {
           throw new Error(
@@ -331,7 +380,7 @@ export const analyzeThreadTask = task({
             )}`
           );
         }
-      } catch (parseError) {
+      } catch {
         // If stdout is not JSON, check exit code
         if (analyzerResult.exitCode !== 0) {
           throw new Error(
