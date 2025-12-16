@@ -596,9 +596,11 @@ const getThreadParticipants = async (
         } else {
           // Create new customer
           // Note: company_id can be null for generic domains, but CustomerInsert requires string
-          // We use Partial to make it optional, then cast to allow null
+          // Also, user_id is required in the database but missing from generated types
+          // We extend the type to include both company_id (nullable) and user_id
           const customerData: Omit<CustomerInsert, "company_id"> & {
             company_id: string | null;
+            user_id: string;
           } = {
             email,
             full_name: customerName,
