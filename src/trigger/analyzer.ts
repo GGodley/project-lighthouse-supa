@@ -1,8 +1,30 @@
 import { task } from "@trigger.dev/sdk/v3";
-import { createClient as createSupabaseClient, SupabaseClient } from "@supabase/supabase-js";
+import { createClient as createSupabaseClient, SupabaseClient, PostgrestError } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import { htmlToText } from "html-to-text";
 import type { LLMSummary } from "../lib/types/threads";
+import type { Database } from "../types/database";
+
+// Type aliases for database tables
+type CompanyRow = Database["public"]["Tables"]["companies"]["Row"];
+type CompanyInsert = Database["public"]["Tables"]["companies"]["Insert"];
+type CustomerRow = Database["public"]["Tables"]["customers"]["Row"];
+type CustomerInsert = Database["public"]["Tables"]["customers"]["Insert"];
+
+// Type for thread_participants (not in generated types yet)
+type ThreadParticipantInsert = {
+  thread_id: string;
+  customer_id: string;
+  user_id: string;
+};
+
+// Type for sanitized LLM response
+type SanitizedLLMResponse = LLMSummary | {
+  error: string;
+  summary?: string;
+  customer_sentiment?: string;
+  parsing_error?: boolean;
+};
 
 // --- Types for Gmail thread JSON and ETL ---
 
@@ -72,6 +94,32 @@ const parseDueDate = (raw: unknown): string | null => {
   return new Date(ts).toISOString();
 };
 
+function sanitizeLLMResponse(rawContent: string | null): SanitizedLLMResponse {
+  if (!rawContent) {
+    return { error: "Empty response from AI", summary: "No summary available." };
+  }
+
+  try {
+    // 1. Try to parse the string into an Object
+    const parsed = JSON.parse(rawContent) as unknown;
+    // Validate it's an object
+    if (typeof parsed === "object" && parsed !== null) {
+      return parsed as SanitizedLLMResponse;
+    }
+    throw new Error("Parsed result is not an object");
+  } catch (e) {
+    // 2. If parsing fails (e.g. AI returned plain text or conversational filler),
+    // wrap the raw text inside a valid Object structure.
+    console.warn("Failed to parse LLM JSON, falling back to text wrapper", e);
+    return {
+      error: "Failed to parse LLM response",
+      summary: rawContent, // Save the raw text here so we don't lose it
+      customer_sentiment: "Neutral", // Default fallback
+      parsing_error: true,
+    };
+  }
+}
+
 // --- Gmail parsing helpers (ported from Supabase edge function) ---
 
 const decodeBase64Url = (data: string | undefined): string | undefined => {
@@ -138,6 +186,575 @@ const getHeader = (
     (h) => typeof h.name === "string" && h.name.toLowerCase() === lower
   );
   return header?.value;
+};
+
+// Generic email provider domains - do not create companies for these
+const GENERIC_DOMAINS = new Set([
+  "gmail.com",
+  "yahoo.com",
+  "hotmail.com",
+  "outlook.com",
+  "icloud.com",
+  "aol.com",
+]);
+
+/**
+ * Extract email address from a string that may contain name and email.
+ * Examples: "John Doe <john@example.com>" -> "john@example.com"
+ *           "john@example.com" -> "john@example.com"
+ */
+const extractEmailFromAddress = (address: string | null | undefined): string | null => {
+  if (!address) return null;
+  const trimmed = address.trim();
+  if (!trimmed) return null;
+
+  // Check if address contains <email>
+  if (trimmed.includes("<") && trimmed.includes(">")) {
+    const start = trimmed.indexOf("<") + 1;
+    const end = trimmed.indexOf(">");
+    if (start > 0 && end > start) {
+      return trimmed.substring(start, end).trim().toLowerCase();
+    }
+  }
+
+  // Try regex match for email pattern
+  const emailMatch = trimmed.match(/[\w.-]+@[\w.-]+\.\w+/);
+  if (emailMatch) {
+    return emailMatch[0].toLowerCase();
+  }
+
+  // Otherwise, return the address as-is if it looks like an email
+  if (trimmed.includes("@")) {
+    return trimmed.toLowerCase();
+  }
+
+  return null;
+};
+
+/**
+ * Extract all email addresses from a header value (may contain multiple emails separated by commas)
+ */
+const extractEmailsFromHeader = (headerValue: string | null | undefined): Set<string> => {
+  const emails = new Set<string>();
+  if (!headerValue) return emails;
+
+  // Split by comma and process each part
+  const parts = headerValue.split(",");
+  for (const part of parts) {
+    const email = extractEmailFromAddress(part);
+    if (email) {
+      emails.add(email);
+    }
+  }
+
+  return emails;
+};
+
+/**
+ * Extract name from email header (e.g., "John Doe <john@example.com>" -> "John Doe")
+ */
+const extractNameFromAddress = (address: string | null | undefined): string | null => {
+  if (!address) return null;
+  const trimmed = address.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.includes("<") && trimmed.includes(">")) {
+    const namePart = trimmed.substring(0, trimmed.indexOf("<")).trim();
+    // Remove quotes
+    return namePart.replace(/^["']|["']$/g, "").trim() || null;
+  }
+
+  return null;
+};
+
+/**
+ * Format domain name into a readable company name
+ * Example: "client-co.com" -> "Client Co"
+ */
+const formatCompanyName = (domain: string): string => {
+  // Remove TLD and split by dots/hyphens
+  const parts = domain.split(".")[0].split(/[-_]/);
+  return parts
+    .map((part) => {
+      // Capitalize first letter of each part
+      if (!part) return "";
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    })
+    .filter(Boolean)
+    .join(" ");
+};
+
+/**
+ * Format email local part into a readable name
+ * Example: "bob.smith@example.com" -> "Bob Smith"
+ */
+const formatCustomerName = (email: string): string => {
+  const localPart = email.split("@")[0];
+  const parts = localPart.split(/[._-]/);
+  return parts
+    .map((part) => {
+      if (!part) return "";
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    })
+    .filter(Boolean)
+    .join(" ");
+};
+
+/**
+ * Get thread participants, upsert companies/customers, and generate context string
+ */
+const getThreadParticipants = async (
+  supabaseAdmin: SupabaseClient,
+  userId: string,
+  threadId: string,
+  messages: GmailMessage[]
+): Promise<{ contextString: string; participantCount: number }> => {
+  console.log(
+    `Participants: Starting participant resolution for thread ${threadId} (user: ${userId})`
+  );
+
+  // Step 1: Get user's email to determine their domain
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from("profiles")
+    .select("email")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profileError) {
+    throw new Error(
+      `Participants: Failed to fetch user profile: ${profileError.message}`
+    );
+  }
+
+  if (!profile?.email) {
+    throw new Error(`Participants: User ${userId} has no email in profile`);
+  }
+
+  const userEmail = profile.email.toLowerCase();
+  const userDomain = userEmail.split("@")[1]?.toLowerCase();
+  if (!userDomain) {
+    throw new Error(`Participants: Invalid user email format: ${userEmail}`);
+  }
+
+  console.log(`Participants: User domain is ${userDomain}`);
+
+  // Step 2: Harvest all unique emails from thread
+  const allEmails = new Set<string>();
+  const emailToName = new Map<string, string | null>();
+
+  for (const msg of messages) {
+    const headers = msg.payload?.headers || [];
+
+    // Extract from address
+    const fromHeader = getHeader(headers, "from");
+    if (fromHeader) {
+      const fromEmails = extractEmailsFromHeader(fromHeader);
+      fromEmails.forEach((email) => {
+        allEmails.add(email);
+        // Try to extract name from header
+        const name = extractNameFromAddress(fromHeader);
+        if (name && !emailToName.has(email)) {
+          emailToName.set(email, name);
+        }
+      });
+    }
+
+    // Extract to addresses
+    const toHeader = getHeader(headers, "to");
+    if (toHeader) {
+      const toEmails = extractEmailsFromHeader(toHeader);
+      toEmails.forEach((email) => {
+        allEmails.add(email);
+        const name = extractNameFromAddress(toHeader);
+        if (name && !emailToName.has(email)) {
+          emailToName.set(email, name);
+        }
+      });
+    }
+
+    // Extract cc addresses
+    const ccHeader = getHeader(headers, "cc");
+    if (ccHeader) {
+      const ccEmails = extractEmailsFromHeader(ccHeader);
+      ccEmails.forEach((email) => {
+        allEmails.add(email);
+        const name = extractNameFromAddress(ccHeader);
+        if (name && !emailToName.has(email)) {
+          emailToName.set(email, name);
+        }
+      });
+    }
+  }
+
+  console.log(`Participants: Found ${allEmails.size} unique email addresses`);
+
+  // Step 3: Filter internal emails (matching user domain)
+  const externalEmails = new Set<string>();
+  for (const email of allEmails) {
+    const domain = email.split("@")[1]?.toLowerCase();
+    if (domain && domain !== userDomain) {
+      externalEmails.add(email);
+    }
+  }
+
+  console.log(
+    `Participants: ${externalEmails.size} external emails after filtering`
+  );
+
+  if (externalEmails.size === 0) {
+    return {
+      contextString: "Participants: None (internal thread only)",
+      participantCount: 0,
+    };
+  }
+
+  // Step 4: Group emails by domain
+  const domainToEmails = new Map<string, Set<string>>();
+  const emailToDomain = new Map<string, string>();
+
+  for (const email of externalEmails) {
+    const domain = email.split("@")[1]?.toLowerCase();
+    if (!domain) continue;
+
+    emailToDomain.set(email, domain);
+
+    if (!domainToEmails.has(domain)) {
+      domainToEmails.set(domain, new Set());
+    }
+    domainToEmails.get(domain)!.add(email);
+  }
+
+  console.log(`Participants: Found ${domainToEmails.size} unique domains`);
+
+  // Step 5: Upsert companies and customers
+  const domainToCompanyId = new Map<string, string | null>();
+  const emailToCustomerId = new Map<string, string>();
+  const companyIdToCompanyName = new Map<string, string>();
+
+  // Process each domain
+  for (const [domain, emails] of domainToEmails.entries()) {
+    let companyId: string | null = null;
+    const isGenericDomain = GENERIC_DOMAINS.has(domain);
+
+    if (!isGenericDomain) {
+      // Step 5a: Check if company exists
+      const { data: existingCompany, error: companyFetchError } =
+        await supabaseAdmin
+          .from("companies")
+          .select("company_id, company_name")
+          .eq("domain_name", domain)
+          .eq("user_id", userId)
+          .maybeSingle();
+
+      if (companyFetchError && companyFetchError.code !== "PGRST116") {
+        // PGRST116 is "not found" which is fine
+        console.error(
+          `Participants: Error fetching company for domain ${domain}:`,
+          companyFetchError
+        );
+      }
+
+      if (existingCompany?.company_id) {
+        companyId = existingCompany.company_id;
+        companyIdToCompanyName.set(companyId, existingCompany.company_name);
+        console.log(
+          `Participants: Found existing company ${companyId} for domain ${domain}`
+        );
+      } else {
+        // Step 5b: Create new company
+        const companyName = formatCompanyName(domain);
+        const { data: newCompany, error: companyCreateError } =
+          await supabaseAdmin
+            .from("companies")
+            .upsert(
+              {
+                domain_name: domain,
+                company_name: companyName,
+                user_id: userId,
+              },
+              {
+                onConflict: "user_id, domain_name",
+                ignoreDuplicates: false,
+              }
+            )
+            .select("company_id, company_name")
+            .single();
+
+        if (companyCreateError) {
+          // If duplicate key error, try to fetch again
+          if (
+            companyCreateError.code === "23505" ||
+            companyCreateError.message?.includes("duplicate key")
+          ) {
+            const { data: retryCompany } = await supabaseAdmin
+              .from("companies")
+              .select("company_id, company_name")
+              .eq("domain_name", domain)
+              .eq("user_id", userId)
+              .maybeSingle();
+
+            if (retryCompany?.company_id) {
+              companyId = retryCompany.company_id;
+              companyIdToCompanyName.set(
+                companyId,
+                retryCompany.company_name
+              );
+              console.log(
+                `Participants: Retried and found company ${companyId} for domain ${domain}`
+              );
+            } else {
+              console.error(
+                `Participants: Failed to create/find company for domain ${domain}:`,
+                companyCreateError
+              );
+              continue; // Skip this domain
+            }
+          } else {
+            console.error(
+              `Participants: Failed to create company for domain ${domain}:`,
+              companyCreateError
+            );
+            continue; // Skip this domain
+          }
+        } else if (newCompany?.company_id) {
+          companyId = newCompany.company_id;
+          companyIdToCompanyName.set(companyId, newCompany.company_name);
+          console.log(
+            `Participants: Created company ${companyId} (${companyName}) for domain ${domain}`
+          );
+        }
+      }
+    } else {
+      console.log(
+        `Participants: Domain ${domain} is generic, skipping company creation`
+      );
+    }
+
+    domainToCompanyId.set(domain, companyId);
+
+    // Step 5c: Upsert customers for this domain
+    for (const email of emails) {
+      try {
+        // Get customer name from header or format from email
+        let customerName = emailToName.get(email);
+        if (!customerName) {
+          customerName = formatCustomerName(email);
+        }
+
+        // Check if customer exists
+        const customerQuery = supabaseAdmin
+          .from("customers")
+          .select("customer_id, company_id")
+          .eq("email", email)
+          .eq("user_id", userId);
+
+        if (companyId) {
+          customerQuery.eq("company_id", companyId);
+        } else {
+          customerQuery.is("company_id", null);
+        }
+
+        const { data: existingCustomer, error: customerFetchError } =
+          await customerQuery.maybeSingle();
+
+        let customerId: string | null = null;
+
+        if (existingCustomer?.customer_id) {
+          customerId = existingCustomer.customer_id;
+          // Update company_id if it changed (e.g., from null to a company_id)
+          if (existingCustomer.company_id !== companyId) {
+            await supabaseAdmin
+              .from("customers")
+              .update({ company_id: companyId })
+              .eq("customer_id", customerId);
+            console.log(
+              `Participants: Updated customer ${customerId} company_id from ${existingCustomer.company_id} to ${companyId}`
+            );
+          }
+          console.log(
+            `Participants: Found existing customer ${customerId} for email ${email}`
+          );
+        } else {
+          // Create new customer
+          // Note: company_id can be null for generic domains, but CustomerInsert requires string
+          // We use Partial to make it optional, then cast to allow null
+          const customerData: Omit<CustomerInsert, "company_id"> & {
+            company_id: string | null;
+          } = {
+            email,
+            full_name: customerName,
+            company_id: companyId, // Can be null for generic domains
+            user_id: userId,
+          };
+
+          // When company_id is not null, use upsert with the company_id+email constraint
+          // When company_id is null, insert directly (we already checked for existence above)
+          let newCustomer: { customer_id: string } | null = null;
+          let customerCreateError: PostgrestError | null = null;
+
+          if (companyId) {
+            // Use upsert with constraint
+            const result = await supabaseAdmin
+              .from("customers")
+              .upsert(customerData, {
+                onConflict: "company_id, email",
+                ignoreDuplicates: false,
+              })
+              .select("customer_id")
+              .single();
+            newCustomer = result.data;
+            customerCreateError = result.error;
+          } else {
+            // Insert directly (no constraint to use for null company_id)
+            const result = await supabaseAdmin
+              .from("customers")
+              .insert(customerData)
+              .select("customer_id")
+              .single();
+            newCustomer = result.data;
+            customerCreateError = result.error;
+          }
+
+          if (customerCreateError) {
+            // If duplicate key error, try to fetch again
+            if (
+              customerCreateError.code === "23505" ||
+              customerCreateError.message?.includes("duplicate key")
+            ) {
+              const retryQuery = supabaseAdmin
+                .from("customers")
+                .select("customer_id")
+                .eq("email", email)
+                .eq("user_id", userId);
+
+              if (companyId) {
+                retryQuery.eq("company_id", companyId);
+              } else {
+                retryQuery.is("company_id", null);
+              }
+
+              const { data: retryCustomer } = await retryQuery.maybeSingle();
+
+              if (retryCustomer?.customer_id) {
+                customerId = retryCustomer.customer_id;
+                console.log(
+                  `Participants: Retried and found customer ${customerId} for email ${email}`
+                );
+              } else {
+                console.error(
+                  `Participants: Failed to create/find customer for email ${email}:`,
+                  customerCreateError
+                );
+                continue; // Skip this email
+              }
+            } else {
+              console.error(
+                `Participants: Failed to create customer for email ${email}:`,
+                customerCreateError
+              );
+              continue; // Skip this email
+            }
+          } else if (newCustomer?.customer_id) {
+            customerId = newCustomer.customer_id;
+            console.log(
+              `Participants: Created customer ${customerId} (${customerName}) for email ${email}`
+            );
+          }
+        }
+
+        if (customerId) {
+          emailToCustomerId.set(email, customerId);
+        }
+      } catch (error) {
+        console.error(
+          `Participants: Error processing customer for email ${email}:`,
+          error
+        );
+        // Continue with other emails
+      }
+    }
+  }
+
+  // Step 6: Link customers to thread via thread_participants
+  const participantLinks: ThreadParticipantInsert[] = [];
+
+  for (const customerId of emailToCustomerId.values()) {
+    participantLinks.push({
+      thread_id: threadId,
+      customer_id: customerId,
+      user_id: userId,
+    });
+  }
+
+  if (participantLinks.length > 0) {
+    const { error: linkError } = await supabaseAdmin
+      .from("thread_participants")
+      .upsert(participantLinks, {
+        onConflict: "thread_id, customer_id",
+        ignoreDuplicates: false,
+      });
+
+    if (linkError) {
+      console.error(
+        `Participants: Error linking participants to thread:`,
+        linkError
+      );
+      // Don't throw - this is not critical
+    } else {
+      console.log(
+        `Participants: Linked ${participantLinks.length} participants to thread ${threadId}`
+      );
+    }
+  }
+
+  // Step 7: Generate context string
+  // Group customers by company
+  const companyToCustomers = new Map<
+    string | null,
+    Array<{ name: string; email: string }>
+  >();
+
+  for (const [email, customerId] of emailToCustomerId.entries()) {
+    const domain = emailToDomain.get(email);
+    const companyId = domain ? domainToCompanyId.get(domain) ?? null : null;
+    const customerName = emailToName.get(email) || formatCustomerName(email);
+
+    if (!companyToCustomers.has(companyId)) {
+      companyToCustomers.set(companyId, []);
+    }
+    companyToCustomers.get(companyId)!.push({ name: customerName, email });
+  }
+
+  // Build context string
+  const contextParts: string[] = [];
+
+  // Process companies first
+  for (const [companyId, customers] of companyToCustomers.entries()) {
+    if (companyId === null) continue; // Handle generic domains separately
+
+    const companyName = companyIdToCompanyName.get(companyId) || "Unknown Company";
+    const customerNames = customers.map((c) => c.name).join(", ");
+    contextParts.push(`${companyName} (${customerNames})`);
+  }
+
+  // Handle generic domain customers (no company)
+  const genericCustomers = companyToCustomers.get(null);
+  if (genericCustomers && genericCustomers.length > 0) {
+    const genericNames = genericCustomers.map((c) => c.name).join(", ");
+    contextParts.push(`Individual (${genericNames})`);
+  }
+
+  const contextString =
+    contextParts.length > 0
+      ? `Participants: ${contextParts.join(", ")}`
+      : "Participants: None";
+
+  console.log(`Participants: Generated context: ${contextString}`);
+
+  return {
+    contextString,
+    participantCount: emailToCustomerId.size,
+  };
 };
 
 const runThreadEtl = async (
@@ -359,6 +976,45 @@ export const analyzeThreadTask = task({
       // Step 0: ETL from raw_thread_data into threads + thread_messages
       await runThreadEtl(supabaseAdmin, userId, threadId);
 
+      // Step 0.5: Get thread participants and upsert companies/customers
+      // Fetch raw_thread_data to extract messages for participant resolution
+      const { data: threadRowForParticipants, error: participantsFetchError } =
+        await supabaseAdmin
+          .from("threads")
+          .select("raw_thread_data")
+          .eq("thread_id", threadId)
+          .eq("user_id", userId)
+          .maybeSingle();
+
+      let participantContext = "Participants: None";
+      if (!participantsFetchError && threadRowForParticipants?.raw_thread_data) {
+        const rawThreadData = threadRowForParticipants.raw_thread_data;
+        const messages: GmailMessage[] = Array.isArray(rawThreadData.messages)
+          ? rawThreadData.messages
+          : [];
+
+        if (messages.length > 0) {
+          try {
+            const participantsResult = await getThreadParticipants(
+              supabaseAdmin,
+              userId,
+              threadId,
+              messages
+            );
+            participantContext = participantsResult.contextString;
+            console.log(
+              `Analyzer: Participant resolution complete. Context: ${participantContext}`
+            );
+          } catch (participantError) {
+            console.error(
+              `Analyzer: Error in participant resolution:`,
+              participantError
+            );
+            // Don't fail the entire analysis if participant resolution fails
+          }
+        }
+      }
+
       // Step 1: Fetch normalized thread with body and existing summary
       const { data: threadRow, error: threadError } = await supabaseAdmin
         .from("threads")
@@ -395,6 +1051,8 @@ export const analyzeThreadTask = task({
       let userPrompt: string;
       if (scenario === "fresh") {
         userPrompt = `
+${participantContext}
+
 Analyze this full thread history. Provide a comprehensive summary and identify all open next steps.
 
 Full Thread Transcript:
@@ -402,6 +1060,8 @@ ${body ?? "(no body available)"}
         `.trim();
       } else {
         userPrompt = `
+${participantContext}
+
 You are updating an existing analysis.
 
 Context: Previous Summary (JSON):
@@ -432,19 +1092,8 @@ Task:
         ],
       });
 
-      const rawContent = completion.choices[0]?.message?.content;
-      if (!rawContent) {
-        throw new Error("Analyzer: OpenAI returned empty content");
-      }
-
-      let parsedSummary: LLMSummary | { error: string };
-      try {
-        parsedSummary = JSON.parse(rawContent);
-      } catch (e) {
-        parsedSummary = {
-          error: `Failed to parse LLM JSON: ${(e as Error).message}`,
-        };
-      }
+      const content = completion.choices[0]?.message?.content;
+      const cleanSummary = sanitizeLLMResponse(content);
 
       const nowIso = new Date().toISOString();
 
@@ -452,7 +1101,7 @@ Task:
       const { error: summaryUpdateError } = await supabaseAdmin
         .from("threads")
         .update({
-          llm_summary: parsedSummary,
+          llm_summary: cleanSummary,
           last_analyzed_at: nowIso,
         })
         .eq("thread_id", threadId)
@@ -465,20 +1114,21 @@ Task:
       }
 
       // Step 4: Manual next_steps dedup + insert
-      // Type guard to check if parsedSummary is a valid LLMSummary with next_steps
+      // Type guard to check if cleanSummary is a valid LLMSummary with next_steps
       const isValidSummary = (
-        summary: LLMSummary | { error: string } | null
+        summary: SanitizedLLMResponse | null
       ): summary is LLMSummary => {
         return (
           summary !== null &&
           typeof summary === "object" &&
           !("error" in summary) &&
-          "next_steps" in summary
+          "next_steps" in summary &&
+          Array.isArray(summary.next_steps)
         );
       };
 
-      const nextStepsRaw = isValidSummary(parsedSummary)
-        ? parsedSummary.next_steps
+      const nextStepsRaw = isValidSummary(cleanSummary)
+        ? cleanSummary.next_steps
         : undefined;
 
       if (Array.isArray(nextStepsRaw) && nextStepsRaw.length > 0) {
