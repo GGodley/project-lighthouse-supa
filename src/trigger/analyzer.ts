@@ -6,7 +6,6 @@ import type { LLMSummary } from "../lib/types/threads";
 import type { Database } from "../types/database";
 
 // Type aliases for database tables
-type CompanyInsert = Database["public"]["Tables"]["companies"]["Insert"];
 type CustomerInsert = Database["public"]["Tables"]["customers"]["Insert"];
 
 // Type for thread_participants (not in generated types yet)
@@ -454,8 +453,8 @@ const getThreadParticipants = async (
 
       if (existingCompany?.company_id) {
         companyId = existingCompany.company_id;
-        // company_name can be null, so we use a fallback
-        const companyName = existingCompany.company_name || formatCompanyName(domain);
+        // company_name can be null, so we use a fallback - ensure it's always a string
+        const companyName: string = existingCompany.company_name || formatCompanyName(domain);
         companyIdToCompanyName.set(companyId, companyName);
         console.log(
           `Participants: Found existing company ${companyId} for domain ${domain}`
@@ -495,7 +494,7 @@ const getThreadParticipants = async (
 
             if (retryCompany?.company_id) {
               companyId = retryCompany.company_id;
-              const retryCompanyName = retryCompany.company_name || formatCompanyName(domain);
+              const retryCompanyName: string = retryCompany.company_name || formatCompanyName(domain);
               companyIdToCompanyName.set(companyId, retryCompanyName);
               console.log(
                 `Participants: Retried and found company ${companyId} for domain ${domain}`
@@ -516,7 +515,7 @@ const getThreadParticipants = async (
           }
         } else if (newCompany?.company_id) {
           companyId = newCompany.company_id;
-          const newCompanyName = newCompany.company_name || companyName;
+          const newCompanyName: string = newCompany.company_name || companyName;
           companyIdToCompanyName.set(companyId, newCompanyName);
           console.log(
             `Participants: Created company ${companyId} (${newCompanyName}) for domain ${domain}`
