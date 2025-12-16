@@ -453,10 +453,15 @@ const getThreadParticipants = async (
 
       if (existingCompany?.company_id) {
         companyId = existingCompany.company_id;
+        // Ensure companyId is not null before using it
+        if (!companyId) {
+          console.warn(
+            `Participants: Warning - companyId is null for domain ${domain} after assignment`
+          );
+          continue;
+        }
         // company_name can be null, so we use a fallback - ensure it's always a string
-        const companyName: string = existingCompany.company_name 
-          ? existingCompany.company_name 
-          : formatCompanyName(domain);
+        const companyName = (existingCompany.company_name ?? formatCompanyName(domain)) as string;
         companyIdToCompanyName.set(companyId, companyName);
         console.log(
           `Participants: Found existing company ${companyId} for domain ${domain}`
@@ -496,9 +501,14 @@ const getThreadParticipants = async (
 
             if (retryCompany?.company_id) {
               companyId = retryCompany.company_id;
-              const retryCompanyName: string = retryCompany.company_name 
-                ? retryCompany.company_name 
-                : formatCompanyName(domain);
+              // Ensure companyId is not null before using it
+              if (!companyId) {
+                console.warn(
+                  `Participants: Warning - companyId is null for domain ${domain} after retry`
+                );
+                continue;
+              }
+              const retryCompanyName = (retryCompany.company_name ?? formatCompanyName(domain)) as string;
               companyIdToCompanyName.set(companyId, retryCompanyName);
               console.log(
                 `Participants: Retried and found company ${companyId} for domain ${domain}`
@@ -519,9 +529,14 @@ const getThreadParticipants = async (
           }
         } else if (newCompany?.company_id) {
           companyId = newCompany.company_id;
-          const newCompanyName: string = newCompany.company_name 
-            ? newCompany.company_name 
-            : companyName;
+          // Ensure companyId is not null before using it
+          if (!companyId) {
+            console.warn(
+              `Participants: Warning - companyId is null for domain ${domain} after creation`
+            );
+            continue;
+          }
+          const newCompanyName = (newCompany.company_name ?? companyName) as string;
           companyIdToCompanyName.set(companyId, newCompanyName);
           console.log(
             `Participants: Created company ${companyId} (${newCompanyName}) for domain ${domain}`
