@@ -6,9 +6,7 @@ import type { LLMSummary } from "../lib/types/threads";
 import type { Database } from "../types/database";
 
 // Type aliases for database tables
-type CompanyRow = Database["public"]["Tables"]["companies"]["Row"];
 type CompanyInsert = Database["public"]["Tables"]["companies"]["Insert"];
-type CustomerRow = Database["public"]["Tables"]["customers"]["Row"];
 type CustomerInsert = Database["public"]["Tables"]["customers"]["Insert"];
 
 // Type for thread_participants (not in generated types yet)
@@ -456,7 +454,9 @@ const getThreadParticipants = async (
 
       if (existingCompany?.company_id) {
         companyId = existingCompany.company_id;
-        companyIdToCompanyName.set(companyId, existingCompany.company_name);
+        // company_name can be null, so we use a fallback
+        const companyName = existingCompany.company_name || formatCompanyName(domain);
+        companyIdToCompanyName.set(companyId, companyName);
         console.log(
           `Participants: Found existing company ${companyId} for domain ${domain}`
         );
@@ -495,10 +495,8 @@ const getThreadParticipants = async (
 
             if (retryCompany?.company_id) {
               companyId = retryCompany.company_id;
-              companyIdToCompanyName.set(
-                companyId,
-                retryCompany.company_name
-              );
+              const retryCompanyName = retryCompany.company_name || formatCompanyName(domain);
+              companyIdToCompanyName.set(companyId, retryCompanyName);
               console.log(
                 `Participants: Retried and found company ${companyId} for domain ${domain}`
               );
@@ -518,9 +516,10 @@ const getThreadParticipants = async (
           }
         } else if (newCompany?.company_id) {
           companyId = newCompany.company_id;
-          companyIdToCompanyName.set(companyId, newCompany.company_name);
+          const newCompanyName = newCompany.company_name || companyName;
+          companyIdToCompanyName.set(companyId, newCompanyName);
           console.log(
-            `Participants: Created company ${companyId} (${companyName}) for domain ${domain}`
+            `Participants: Created company ${companyId} (${newCompanyName}) for domain ${domain}`
           );
         }
       }
@@ -554,7 +553,7 @@ const getThreadParticipants = async (
           customerQuery.is("company_id", null);
         }
 
-        const { data: existingCustomer, error: customerFetchError } =
+        const { data: existingCustomer } =
           await customerQuery.maybeSingle();
 
         let customerId: string | null = null;
@@ -714,7 +713,7 @@ const getThreadParticipants = async (
     Array<{ name: string; email: string }>
   >();
 
-  for (const [email, customerId] of emailToCustomerId.entries()) {
+  for (const [email] of emailToCustomerId.entries()) {
     const domain = emailToDomain.get(email);
     const companyId = domain ? domainToCompanyId.get(domain) ?? null : null;
     const customerName = emailToName.get(email) || formatCustomerName(email);
