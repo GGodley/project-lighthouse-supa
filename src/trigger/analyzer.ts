@@ -2,7 +2,7 @@ import { task } from "@trigger.dev/sdk/v3";
 import { createClient as createSupabaseClient, SupabaseClient, PostgrestError } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import { htmlToText } from "html-to-text";
-import type { LLMSummary } from "../lib/types/threads";
+import type { LLMSummary, NextStep } from "../lib/types/threads";
 import type { Database } from "../types/database";
 
 // Type aliases for database tables
@@ -18,8 +18,10 @@ type ThreadParticipantInsert = {
 // Type for sanitized LLM response
 type SanitizedLLMResponse = LLMSummary | {
   error: string;
-  summary?: string;
+  timeline_summary?: string;
+  problem_statement?: string | null;
   customer_sentiment?: string;
+  next_steps?: NextStep[];
   parsing_error?: boolean;
 };
 
@@ -93,7 +95,14 @@ const parseDueDate = (raw: unknown): string | null => {
 
 function sanitizeLLMResponse(rawContent: string | null): SanitizedLLMResponse {
   if (!rawContent) {
-    return { error: "Empty response from AI", summary: "No summary available." };
+    return {
+      error: "Empty response from AI",
+      timeline_summary: "No summary available.",
+      problem_statement: null,
+      customer_sentiment: "Neutral",
+      next_steps: [],
+      parsing_error: true,
+    };
   }
 
   try {
@@ -101,7 +110,12 @@ function sanitizeLLMResponse(rawContent: string | null): SanitizedLLMResponse {
     const parsed = JSON.parse(rawContent) as unknown;
     // Validate it's an object
     if (typeof parsed === "object" && parsed !== null) {
-      return parsed as SanitizedLLMResponse;
+      const result = parsed as Record<string, any>;
+      // Ensure customer_sentiment exists, default to "Neutral" if missing
+      if (!result.customer_sentiment) {
+        result.customer_sentiment = "Neutral";
+      }
+      return result as SanitizedLLMResponse;
     }
     throw new Error("Parsed result is not an object");
   } catch (e) {
@@ -110,8 +124,10 @@ function sanitizeLLMResponse(rawContent: string | null): SanitizedLLMResponse {
     console.warn("Failed to parse LLM JSON, falling back to text wrapper", e);
     return {
       error: "Failed to parse LLM response",
-      summary: rawContent, // Save the raw text here so we don't lose it
+      timeline_summary: rawContent || "No summary available", // Save the raw text here so we don't lose it
+      problem_statement: null,
       customer_sentiment: "Neutral", // Default fallback
+      next_steps: [],
       parsing_error: true,
     };
   }
