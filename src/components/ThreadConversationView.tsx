@@ -170,33 +170,34 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
             </div>
           ) : threadSummary ? (
             <div className="space-y-4">
-              {/* Problem Statement - show if exists and not empty */}
-              {threadSummary.problem_statement && threadSummary.problem_statement.trim() && (
-                <div className="glass-card rounded-xl p-4">
-                  <h5 className="font-semibold mb-2 text-base">Problem Statement</h5>
-                  <p className="text-sm">{threadSummary.problem_statement}</p>
-                </div>
-              )}
-
-              {/* Summary - primary field, show if problem_statement is missing */}
-              {(!threadSummary.problem_statement || !threadSummary.problem_statement.trim()) && 
-               threadSummary.summary && 
-               threadSummary.summary.trim() && (
-                <div className="glass-card rounded-xl p-4">
-                  <h5 className="font-semibold mb-2 text-base">Summary</h5>
-                  <p className="text-sm">{threadSummary.summary}</p>
-                </div>
-              )}
-
-              {/* Timeline Summary - show prominently, prioritize this for main summary */}
-              {threadSummary.timeline_summary && threadSummary.timeline_summary.trim() && (
-                <div className="glass-card rounded-xl p-4">
-                  <h5 className="font-semibold mb-2 text-base">
-                    {threadSummary.problem_statement && threadSummary.problem_statement.trim() ? 'Timeline' : 'Summary'}
-                  </h5>
-                  <p className="text-sm">{threadSummary.timeline_summary}</p>
-                </div>
-              )}
+              {/* Summary Block - Prioritize: problem_statement > summary > timeline_summary */}
+              {(() => {
+                // Determine which summary field to display and its title
+                const problemStatement = threadSummary.problem_statement?.trim();
+                const summary = threadSummary.summary?.trim();
+                const timelineSummary = threadSummary.timeline_summary?.trim();
+                
+                let displayText: string | null = null;
+                let displayTitle: string = 'Summary';
+                
+                if (problemStatement) {
+                  displayText = problemStatement;
+                  displayTitle = 'Problem Statement';
+                } else if (summary) {
+                  displayText = summary;
+                  displayTitle = 'Summary';
+                } else if (timelineSummary) {
+                  displayText = timelineSummary;
+                  displayTitle = 'Summary';
+                }
+                
+                return displayText ? (
+                  <div className="glass-card rounded-xl p-4">
+                    <h5 className="font-semibold mb-2 text-base">{displayTitle}</h5>
+                    <p className="text-sm">{displayText}</p>
+                  </div>
+                ) : null;
+              })()}
 
               {threadSummary.key_participants && Array.isArray(threadSummary.key_participants) && threadSummary.key_participants.length > 0 && (
                 <div className="glass-card rounded-xl p-4">

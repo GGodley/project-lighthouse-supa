@@ -41,6 +41,10 @@ export async function getThreadIdsForCompany(
  * Type-safe helper to query threads table
  * Note: This table is not yet in generated database types.
  * Uses type assertion through unknown (safer than any) to access untyped tables.
+ * 
+ * IMPORTANT: This function only selects lightweight columns for list/sidebar display.
+ * It explicitly excludes 'raw_thread_data' and 'body' to avoid timeout issues.
+ * For full thread data, use getThreadById() instead.
  */
 export async function getThreadsByIds(
   supabase: SupabaseClient,
@@ -59,9 +63,11 @@ export async function getThreadsByIds(
 
   const client = supabase as unknown as UntypedSupabase;
 
+  // Only select lightweight columns needed for list/sidebar display
+  // Explicitly exclude raw_thread_data and body to prevent timeout
   return await client
     .from('threads')
-    .select('*')
+    .select('thread_id, user_id, subject, snippet, last_message_date, llm_summary, llm_summary_updated_at, created_at')
     .in('thread_id', threadIds)
     .order('last_message_date', { ascending: false });
 }
