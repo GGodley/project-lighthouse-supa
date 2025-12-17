@@ -170,10 +170,31 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
             </div>
           ) : threadSummary ? (
             <div className="space-y-4">
-              {threadSummary.problem_statement && (
+              {/* Problem Statement - show if exists and not empty */}
+              {threadSummary.problem_statement && threadSummary.problem_statement.trim() && (
                 <div className="glass-card rounded-xl p-4">
                   <h5 className="font-semibold mb-2 text-base">Problem Statement</h5>
                   <p className="text-sm">{threadSummary.problem_statement}</p>
+                </div>
+              )}
+
+              {/* Summary - primary field, show if problem_statement is missing */}
+              {(!threadSummary.problem_statement || !threadSummary.problem_statement.trim()) && 
+               threadSummary.summary && 
+               threadSummary.summary.trim() && (
+                <div className="glass-card rounded-xl p-4">
+                  <h5 className="font-semibold mb-2 text-base">Summary</h5>
+                  <p className="text-sm">{threadSummary.summary}</p>
+                </div>
+              )}
+
+              {/* Timeline Summary - show prominently, prioritize this for main summary */}
+              {threadSummary.timeline_summary && threadSummary.timeline_summary.trim() && (
+                <div className="glass-card rounded-xl p-4">
+                  <h5 className="font-semibold mb-2 text-base">
+                    {threadSummary.problem_statement && threadSummary.problem_statement.trim() ? 'Timeline' : 'Summary'}
+                  </h5>
+                  <p className="text-sm">{threadSummary.timeline_summary}</p>
                 </div>
               )}
 
@@ -185,13 +206,6 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
                       <li key={idx}>{participant}</li>
                     ))}
                   </ul>
-                </div>
-              )}
-
-              {threadSummary.timeline_summary && (
-                <div className="glass-card rounded-xl p-4">
-                  <h5 className="font-semibold mb-2 text-base">Timeline</h5>
-                  <p className="text-sm">{threadSummary.timeline_summary}</p>
                 </div>
               )}
 
@@ -209,29 +223,38 @@ export default function ThreadConversationView({ threadId, threadSummary, onClos
                 </div>
               )}
 
-              {threadSummary.next_steps && Array.isArray(threadSummary.next_steps) && threadSummary.next_steps.length > 0 && (
-                <div className="glass-card rounded-xl p-4">
-                  <h5 className="font-semibold mb-3 text-base">Next Steps</h5>
-                  <ul className="space-y-3">
-                    {threadSummary.next_steps.map((step: NextStep, idx: number) => (
-                      <li key={idx} className="text-sm">
-                        <div className="flex items-start gap-2">
-                          <span className="text-blue-600 dark:text-blue-400 mt-1 font-bold">•</span>
-                          <div className="flex-1">
-                            <p className="text-sm">{step.text}</p>
-                            {(step.owner || step.due_date) && (
-                              <div className="mt-1 flex flex-wrap gap-2 text-xs">
-                                {step.owner && <span>Owner: {step.owner}</span>}
-                                {step.due_date && <span>Due: {new Date(step.due_date).toLocaleDateString()}</span>}
-                              </div>
-                            )}
+              {/* Next Steps - check both next_steps and open_next_steps */}
+              {(() => {
+                // Combine next_steps and open_next_steps, prioritizing next_steps
+                const allNextSteps = [
+                  ...(threadSummary.next_steps && Array.isArray(threadSummary.next_steps) ? threadSummary.next_steps : []),
+                  ...(threadSummary.open_next_steps && Array.isArray(threadSummary.open_next_steps) ? threadSummary.open_next_steps : [])
+                ];
+                
+                return allNextSteps.length > 0 ? (
+                  <div className="glass-card rounded-xl p-4">
+                    <h5 className="font-semibold mb-3 text-base">Next Steps</h5>
+                    <ul className="space-y-3">
+                      {allNextSteps.map((step: NextStep, idx: number) => (
+                        <li key={idx} className="text-sm">
+                          <div className="flex items-start gap-2">
+                            <span className="text-blue-600 dark:text-blue-400 mt-1 font-bold">•</span>
+                            <div className="flex-1">
+                              <p className="text-sm">{step.text}</p>
+                              {(step.owner || step.due_date) && (
+                                <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                                  {step.owner && <span>Owner: {step.owner}</span>}
+                                  {step.due_date && <span>Due: {new Date(step.due_date).toLocaleDateString()}</span>}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null;
+              })()}
               
               {threadSummary.csm_next_step && (
                 <div className="glass-card rounded-xl p-4">

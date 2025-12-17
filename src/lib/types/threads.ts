@@ -7,13 +7,16 @@ export type NextStep = {
 
 // The structured JSON summary from the LLM
 export type LLMSummary = {
-  problem_statement: string;
-  key_participants: string[];
-  timeline_summary: string;
-  resolution_status: string;
-  customer_sentiment: string;
-  sentiment_score: number;
-  next_steps: NextStep[];
+  problem_statement?: string;
+  key_participants?: string[];
+  timeline_summary?: string;
+  resolution_status?: string;
+  customer_sentiment?: string;
+  sentiment_score?: number;
+  next_steps?: NextStep[];
+  // Alternative field names that may be used
+  summary?: string; // Primary summary field (alternative to problem_statement)
+  open_next_steps?: NextStep[]; // Alternative to next_steps
   // Legacy field for backward compatibility (deprecated)
   csm_next_step?: string;
 };
