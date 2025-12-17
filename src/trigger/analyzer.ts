@@ -110,7 +110,14 @@ function sanitizeLLMResponse(rawContent: string | null): SanitizedLLMResponse {
     const parsed = JSON.parse(rawContent) as unknown;
     // Validate it's an object
     if (typeof parsed === "object" && parsed !== null) {
-      const result = parsed as Record<string, any>;
+      const result = parsed as Partial<LLMSummary> & {
+        error?: string;
+        timeline_summary?: string;
+        problem_statement?: string | null;
+        customer_sentiment?: string;
+        next_steps?: NextStep[];
+        parsing_error?: boolean;
+      };
       // Ensure customer_sentiment exists, default to "Neutral" if missing
       if (!result.customer_sentiment) {
         result.customer_sentiment = "Neutral";
