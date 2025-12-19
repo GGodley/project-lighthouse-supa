@@ -17,8 +17,8 @@ serve(async (req: Request) => {
   try {
     const { provider_token, userId } = await req.json();
 
-    if (!provider_token || !userId) {
-      throw new Error("Missing provider_token or userId in request body.");
+    if (!userId) {
+      throw new Error("Missing userId in request body.");
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -31,6 +31,24 @@ serve(async (req: Request) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     });
+
+    // Get provider_token from request, or fall back to database
+    let effectiveToken = provider_token;
+    if (!effectiveToken) {
+      // Fetch from user's profile as fallback
+      const { data: profileData, error: profileError } = await supabaseAdmin
+        .from('profiles')
+        .select('gmail_access_token')
+        .eq('id', userId)
+        .single();
+
+      if (profileError || !profileData?.gmail_access_token) {
+        throw new Error("Missing provider_token in request and no gmail_access_token found in user profile. Please re-authenticate with Google.");
+      }
+
+      effectiveToken = profileData.gmail_access_token;
+      console.log('✅ Using gmail_access_token from database profile as fallback');
+    }
 
     // Create sync_job record
     const { data: syncJob, error: jobError } = await supabaseAdmin
@@ -56,7 +74,7 @@ serve(async (req: Request) => {
       .insert({
         sync_job_id: jobId,
         user_id: userId,
-        provider_token: provider_token, // In production, encrypt this
+        provider_token: effectiveToken, // Use effective token (from request or database)
         page_number: 1,
         idempotency_key: idempotencyKey,
         next_retry_at: new Date().toISOString() // Set to NOW() so it's immediately processable

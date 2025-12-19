@@ -57,131 +57,57 @@ const CustomerThreadsPage: React.FC = () => {
   const supabase = useSupabase()
   const router = useRouter()
 
-  // Get auth session for provider token and user email
+  // Get auth session - only check for valid session/user, provider_token is optional
   useEffect(() => {
     let mounted = true
-    let redirectTimeout: NodeJS.Timeout | null = null
     
-    // First, try to get session immediately
+    // Check for valid session on mount
     const getAuthData = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       
-      if (!session) {
-        console.log('CustomerThreadsPage: No session found')
+      if (!session || !session.user) {
+        console.log('CustomerThreadsPage: No session or user found, redirecting to login')
+        router.push('/login')
         return
       }
       
-      // Log session details for debugging
-      console.log('CustomerThreadsPage: Initial session check:', {
-        hasUser: !!session.user,
-        hasEmail: !!session.user?.email,
-        hasProviderToken: !!session.provider_token,
-        providerTokenLength: session.provider_token?.length || 0,
-      })
-      
-      // If we have both, set them immediately
-      if (session.user?.email && session.provider_token) {
-        console.log('CustomerThreadsPage: Got provider_token on initial check')
-        if (mounted) {
+      // Optionally set provider_token and email if available, but don't block access if missing
+      if (mounted) {
+        if (session.provider_token) {
           setProviderToken(session.provider_token)
+        }
+        if (session.user.email) {
           setUserEmail(session.user.email)
-          setIsRedirecting(false)
         }
-        return
-      }
-      
-      // If missing, try refreshing the session (forces re-read from cookies)
-      if (!session.provider_token) {
-        console.log('CustomerThreadsPage: No provider_token in initial session, refreshing...')
-        const { data: { session: refreshedSession } } = await supabase.auth.refreshSession()
-        if (refreshedSession?.provider_token && refreshedSession?.user?.email) {
-          console.log('CustomerThreadsPage: Got provider_token after refresh')
-          if (mounted) {
-            setProviderToken(refreshedSession.provider_token)
-            setUserEmail(refreshedSession.user.email)
-            setIsRedirecting(false)
-          }
-          return
-        }
+        setIsRedirecting(false)
       }
     }
     
     getAuthData()
 
-    // Listen for auth state changes - this is the KEY: wait for INITIAL_SESSION
+    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('CustomerThreadsPage: Auth state change:', event, session ? 'Session exists' : 'No session')
+      if (!mounted) return
       
-      // Handle INITIAL_SESSION, SIGNED_IN, and TOKEN_REFRESHED events
-      if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
-        // Log session details for debugging
-        console.log('CustomerThreadsPage: Session from auth event:', {
-          event,
-          hasUser: !!session.user,
-          hasEmail: !!session.user?.email,
-          hasProviderToken: !!session.provider_token,
-          providerTokenLength: session.provider_token?.length || 0,
-        })
-        
-        if (session.user?.email && session.provider_token) {
-          console.log('CustomerThreadsPage: Setting provider token and email from auth state change')
-          if (mounted) {
-            setProviderToken(session.provider_token)
-            setUserEmail(session.user.email)
-            setIsRedirecting(false) // Cancel any pending redirect
-            if (redirectTimeout) {
-              clearTimeout(redirectTimeout)
-              redirectTimeout = null
-            }
-          }
-        } else if (event === 'INITIAL_SESSION' && !session.provider_token) {
-          // INITIAL_SESSION without provider_token - try refreshing
-          console.log('CustomerThreadsPage: INITIAL_SESSION without provider_token, refreshing session...')
-          const { data: { session: refreshedSession } } = await supabase.auth.refreshSession()
-          if (refreshedSession?.provider_token && refreshedSession?.user?.email) {
-            console.log('CustomerThreadsPage: Got provider_token after refresh from INITIAL_SESSION')
-            if (mounted) {
-              setProviderToken(refreshedSession.provider_token)
-              setUserEmail(refreshedSession.user.email)
-              setIsRedirecting(false)
-              if (redirectTimeout) {
-                clearTimeout(redirectTimeout)
-                redirectTimeout = null
-              }
-            }
-          } else {
-            // After INITIAL_SESSION, if still no token, it's genuinely missing
-            console.warn('CustomerThreadsPage: provider_token still missing after INITIAL_SESSION and refresh')
-            // Don't redirect immediately - give it one more check after a delay
-            if (redirectTimeout) {
-              clearTimeout(redirectTimeout)
-            }
-            redirectTimeout = setTimeout(async () => {
-              if (!mounted) return
-              const { data: { session: finalCheck } } = await supabase.auth.getSession()
-              if (finalCheck?.provider_token && finalCheck?.user?.email) {
-                console.log('CustomerThreadsPage: Got provider_token on delayed check')
-                setProviderToken(finalCheck.provider_token)
-                setUserEmail(finalCheck.user.email)
-                setIsRedirecting(false)
-              } else {
-                console.warn('CustomerThreadsPage: Missing provider_token after all checks. Redirecting to login.')
-                const currentPath = '/dashboard/customer-threads'
-                const returnUrl = encodeURIComponent(currentPath)
-                setIsRedirecting(true)
-                router.push(`/login?returnUrl=${returnUrl}`)
-              }
-            }, 2000) // 2 second delay for final check
-          }
-        }
+      // Handle sign out - redirect to login
+      if (event === 'SIGNED_OUT' || !session || !session.user) {
+        console.log('CustomerThreadsPage: User signed out or session invalid')
+        router.push('/login')
+        return
       }
+      
+      // For valid sessions, optionally update provider_token and email if available
+      if (session.provider_token) {
+        setProviderToken(session.provider_token)
+      }
+      if (session.user.email) {
+        setUserEmail(session.user.email)
+      }
+      setIsRedirecting(false)
     })
 
     return () => {
       mounted = false
-      if (redirectTimeout) {
-        clearTimeout(redirectTimeout)
-      }
       subscription.unsubscribe()
     }
   }, [supabase, router])

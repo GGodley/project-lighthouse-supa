@@ -30,48 +30,26 @@ export function useThreadSync(provider_token: string | null | undefined, user_em
   }, []);
 
   const startSync = useCallback(async () => {
-    // Get the latest session to check for provider_token
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    // Use provider_token from session if available, otherwise use prop
-    const currentProviderToken = session?.provider_token || provider_token;
-    const currentUserEmail = session?.user?.email || user_email;
-    
-    if (!currentProviderToken || !currentUserEmail) {
-      setSyncStatus('failed');
-      setSyncDetails('Missing provider token or user email');
-      console.error('Missing provider token or user email', {
-        hasProviderToken: !!currentProviderToken,
-        hasUserEmail: !!currentUserEmail,
-        sessionHasProviderToken: !!session?.provider_token,
-        sessionHasUser: !!session?.user
-      });
-      return;
-    }
-
     try {
+      // Get the latest session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.user?.id) {
+        throw new Error('No authenticated user found. Please log in.');
+      }
+
+      // Get provider_token from session if available (optional - orchestrator will fetch from DB if missing)
+      const currentProviderToken = session?.provider_token || provider_token;
+      
       setSyncStatus('creating_job');
       setSyncDetails('Creating sync job...');
 
-      // Use the session we already fetched, or get it again
-      const currentSession = session || (await supabase.auth.getSession()).data.session;
-      if (!currentSession?.user?.id) {
-        throw new Error('No authenticated user found');
-      }
-      
-      // Use the provider_token from session (it's more up-to-date)
-      const tokenToUse = currentSession.provider_token || currentProviderToken;
-      if (!tokenToUse) {
-        throw new Error('Provider token not available in session');
-      }
-
-      setSyncDetails('Creating sync job and starting sync...');
-
       // Invoke sync-threads-orchestrator function (creates job and initial page queue)
+      // provider_token is optional - orchestrator will fetch from database profile if not provided
       const { data: invokeData, error: invokeError } = await supabase.functions.invoke('sync-threads-orchestrator', {
         body: { 
-          provider_token: tokenToUse,
-          userId: currentSession.user.id
+          provider_token: currentProviderToken || undefined, // Pass undefined if not available, orchestrator will use DB fallback
+          userId: session.user.id
         }
       });
 
@@ -93,7 +71,7 @@ export function useThreadSync(provider_token: string | null | undefined, user_em
       setSyncStatus('failed');
       setSyncDetails(error instanceof Error ? error.message : 'Failed to start sync');
     }
-  }, [provider_token, user_email, supabase]);
+  }, [provider_token, supabase]);
 
   // Polling logic
   useEffect(() => {
