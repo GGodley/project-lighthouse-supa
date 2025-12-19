@@ -1302,6 +1302,18 @@ export const analyzeThreadTask = task({
       const existingSummary =
         threadRow.llm_summary as LLMSummary | { error: string } | null;
 
+      // Helper to check if body has actual content (not null and not empty string)
+      const hasBodyContent = (body: string | null): boolean => {
+        return body !== null && body.trim().length > 0;
+      };
+
+      // Validate that body exists before proceeding
+      if (!hasBodyContent(body)) {
+        throw new Error(
+          `Analyzer: Thread ${threadId} has no body content available for analysis`
+        );
+      }
+
       type AnalysisScenario = "fresh" | "update";
 
       const isFresh =
@@ -1320,7 +1332,7 @@ ${participantContext}
 Analyze this full thread history. Provide a comprehensive summary and identify all open next steps.
 
 Full Thread Transcript:
-${body ?? "(no body available)"}
+${body}
         `.trim();
       } else {
         userPrompt = `
@@ -1332,7 +1344,7 @@ Context: Previous Summary (JSON):
 ${JSON.stringify(existingSummary)}
 
 Input: Full Thread Body:
-${body ?? "(no body available)"}
+${body}
 
 Task:
 1. Update the summary to incorporate the new information.
