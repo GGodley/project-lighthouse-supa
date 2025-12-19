@@ -328,7 +328,12 @@ const getThreadParticipants = async (
   userId: string,
   threadId: string,
   messages: GmailMessage[]
-): Promise<{ contextString: string; participantCount: number }> => {
+): Promise<{
+  contextString: string;
+  participantCount: number;
+  companyIds: string[];
+  customerIds: string[];
+}> => {
   console.log(
     `Participants: Starting participant resolution for thread ${threadId} (user: ${userId})`
   );
@@ -425,6 +430,8 @@ const getThreadParticipants = async (
     return {
       contextString: "Participants: None (internal thread only)",
       participantCount: 0,
+      companyIds: [],
+      customerIds: [],
     };
   }
 
@@ -838,57 +845,112 @@ const propagateInteractionTime = async (
     return;
   }
 
-  // Use Promise.allSettled to ensure both updates attempt even if one fails
-  const updatePromises = [];
+  // Fetch companies and customers that need updating in parallel
+  const fetchPromises = [];
 
-  // Update companies if we have any
   if (companyIds.length > 0) {
-    const companyUpdatePromise = supabaseAdmin
-      .from("companies")
-      .update({ last_interaction_at: threadDate })
-      .in("company_id", companyIds)
-      .or(`last_interaction_at.is.null,last_interaction_at.lt.${threadDate}`);
-
-    updatePromises.push(
-      companyUpdatePromise.then((result) => {
-        if (result.error) {
-          console.error(
-            `InteractionTime: Error updating companies:`,
-            result.error
-          );
-        } else {
-          console.log(
-            `InteractionTime: Updated last_interaction_at for ${companyIds.length} companies`
-          );
-        }
-        return result;
-      })
+    fetchPromises.push(
+      supabaseAdmin
+        .from("companies")
+        .select("company_id")
+        .in("company_id", companyIds)
+        .or(`last_interaction_at.is.null,last_interaction_at.lt.${threadDate}`)
+        .then((result) => ({ type: "companies" as const, ...result }))
     );
   }
 
-  // Update customers if we have any
   if (customerIds.length > 0) {
-    const customerUpdatePromise = supabaseAdmin
-      .from("customers")
-      .update({ last_interaction_at: threadDate })
-      .in("customer_id", customerIds)
-      .or(`last_interaction_at.is.null,last_interaction_at.lt.${threadDate}`);
-
-    updatePromises.push(
-      customerUpdatePromise.then((result) => {
-        if (result.error) {
-          console.error(
-            `InteractionTime: Error updating customers:`,
-            result.error
-          );
-        } else {
-          console.log(
-            `InteractionTime: Updated last_interaction_at for ${customerIds.length} customers`
-          );
-        }
-        return result;
-      })
+    fetchPromises.push(
+      supabaseAdmin
+        .from("customers")
+        .select("customer_id")
+        .in("customer_id", customerIds)
+        .or(`last_interaction_at.is.null,last_interaction_at.lt.${threadDate}`)
+        .then((result) => ({ type: "customers" as const, ...result }))
     );
+  }
+
+  // Wait for all fetches to complete
+  const fetchResults = await Promise.allSettled(fetchPromises);
+
+  // Process fetch results and prepare update promises
+  const updatePromises = [];
+
+  for (const result of fetchResults) {
+    if (result.status === "fulfilled" && result.value.type === "companies") {
+      const { data: companiesToUpdate, error: fetchError } = result.value;
+      if (fetchError) {
+        console.error(
+          `InteractionTime: Error fetching companies to update:`,
+          fetchError
+        );
+      } else if (companiesToUpdate && companiesToUpdate.length > 0) {
+        const companyIdsToUpdate = companiesToUpdate.map((c) => c.company_id);
+        const companyUpdatePromise = supabaseAdmin
+          .from("companies")
+          .update({ last_interaction_at: threadDate })
+          .in("company_id", companyIdsToUpdate);
+
+        updatePromises.push(
+          companyUpdatePromise.then((updateResult) => {
+            if (updateResult.error) {
+              console.error(
+                `InteractionTime: Error updating companies:`,
+                updateResult.error
+              );
+            } else {
+              console.log(
+                `InteractionTime: Updated last_interaction_at for ${companyIdsToUpdate.length} companies`
+              );
+            }
+            return updateResult;
+          })
+        );
+      } else {
+        console.log(
+          `InteractionTime: No companies need updating (all have newer or equal timestamps)`
+        );
+      }
+    } else if (result.status === "fulfilled" && result.value.type === "customers") {
+      const { data: customersToUpdate, error: fetchError } = result.value;
+      if (fetchError) {
+        console.error(
+          `InteractionTime: Error fetching customers to update:`,
+          fetchError
+        );
+      } else if (customersToUpdate && customersToUpdate.length > 0) {
+        const customerIdsToUpdate = customersToUpdate.map((c) => c.customer_id);
+        const customerUpdatePromise = supabaseAdmin
+          .from("customers")
+          .update({ last_interaction_at: threadDate })
+          .in("customer_id", customerIdsToUpdate);
+
+        updatePromises.push(
+          customerUpdatePromise.then((updateResult) => {
+            if (updateResult.error) {
+              console.error(
+                `InteractionTime: Error updating customers:`,
+                updateResult.error
+              );
+            } else {
+              console.log(
+                `InteractionTime: Updated last_interaction_at for ${customerIdsToUpdate.length} customers`
+              );
+            }
+            return updateResult;
+          })
+        );
+      } else {
+        console.log(
+          `InteractionTime: No customers need updating (all have newer or equal timestamps)`
+        );
+      }
+    } else if (result.status === "rejected") {
+      console.error(
+        `InteractionTime: Error in fetch operation:`,
+        result.reason
+      );
+    }
   }
 
   // Wait for all updates to complete (or fail)
@@ -1149,6 +1211,36 @@ export const analyzeThreadTask = task({
             console.log(
               `Analyzer: Participant resolution complete. Context: ${participantContext}`
             );
+
+            // Step 0.6: Propagate interaction time to linked companies and customers
+            // Fetch last_message_date from the thread (already set by runThreadEtl)
+            const { data: threadWithDate } = await supabaseAdmin
+              .from("threads")
+              .select("last_message_date")
+              .eq("thread_id", threadId)
+              .eq("user_id", userId)
+              .maybeSingle();
+
+            if (threadWithDate?.last_message_date) {
+              try {
+                await propagateInteractionTime(
+                  supabaseAdmin,
+                  threadWithDate.last_message_date,
+                  participantsResult.companyIds,
+                  participantsResult.customerIds
+                );
+              } catch (interactionTimeError) {
+                console.error(
+                  `Analyzer: Error propagating interaction time:`,
+                  interactionTimeError
+                );
+                // Don't fail the entire analysis if interaction time propagation fails
+              }
+            } else {
+              console.log(
+                `Analyzer: No last_message_date found for thread ${threadId}, skipping interaction time propagation`
+              );
+            }
           } catch (participantError) {
             console.error(
               `Analyzer: Error in participant resolution:`,
