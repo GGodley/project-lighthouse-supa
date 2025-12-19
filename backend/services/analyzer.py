@@ -613,8 +613,40 @@ The "customer" is any participant who is NOT the "CSM"."""
                 next_steps_to_insert.append(step_data)
             
             if next_steps_to_insert:
-                supabase.table("next_steps").insert(next_steps_to_insert).execute()
+                insert_response = supabase.table("next_steps").insert(next_steps_to_insert).execute()
                 logger.info(f"Inserted {len(next_steps_to_insert)} next_steps ({skipped_count} skipped as duplicates)")
+                
+                # Create assignments for each inserted next step
+                if insert_response and insert_response.data:
+                    inserted_steps = insert_response.data if isinstance(insert_response.data, list) else [insert_response.data]
+                    
+                    # Get all customers from thread_participants for this thread
+                    participants_response = supabase.table("thread_participants").select("customer_id").eq("thread_id", thread_id).eq("user_id", user_id).execute()
+                    
+                    customer_ids = []
+                    if participants_response and participants_response.data:
+                        # Get distinct customer_ids
+                        customer_ids = list(set([p.get("customer_id") for p in participants_response.data if p.get("customer_id")]))
+                    
+                    # Create assignments for each next step and customer combination
+                    if customer_ids:
+                        assignments = []
+                        for step in inserted_steps:
+                            step_id = step.get("step_id") or step.get("id")  # Handle both column names
+                            if step_id:
+                                for customer_id in customer_ids:
+                                    assignments.append({
+                                        "next_step_id": step_id,
+                                        "customer_id": customer_id
+                                    })
+                        
+                        if assignments:
+                            try:
+                                supabase.table("next_step_assignments").insert(assignments).execute()
+                                logger.info(f"Created {len(assignments)} next step assignments for thread {thread_id}")
+                            except Exception as assignment_error:
+                                logger.warning(f"Error creating next step assignments: {assignment_error}")
+                                # Don't fail the entire process if assignments fail
             elif skipped_count > 0:
                 logger.info(f"All {skipped_count} next_steps were duplicates - nothing to insert")
         

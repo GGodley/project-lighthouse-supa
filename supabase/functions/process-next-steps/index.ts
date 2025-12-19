@@ -182,15 +182,115 @@ serve(async (req) => {
     }
 
     if (inserts.length > 0) {
-      const { error: insertError } = await supabase
+      const { data: insertedSteps, error: insertError } = await supabase
         .from('next_steps')
-        .insert(inserts);
+        .insert(inserts)
+        .select('step_id, id, source_type, source_id');
 
       if (insertError) {
         throw new Error(`Failed to insert next steps: ${insertError.message}`);
       }
 
       console.log(`Inserted ${inserts.length} next steps for ${companyIds.length} company/companies`);
+
+      // Create assignments for each inserted next step
+      if (insertedSteps && insertedSteps.length > 0) {
+        const assignments: Array<{ next_step_id: string; customer_id: string }> = [];
+
+        for (const step of insertedSteps) {
+          // Handle both step_id and id column names
+          const stepId = (step as any).step_id || (step as any).id;
+          if (!stepId) {
+            console.warn('Could not find step_id or id in inserted step:', step);
+            continue;
+          }
+
+          let customerIds: string[] = [];
+
+          if (step.source_type === 'thread') {
+            // Get all customers from thread_participants
+            const { data: participants, error: participantsError } = await supabase
+              .from('thread_participants')
+              .select('customer_id')
+              .eq('thread_id', step.source_id)
+              .eq('user_id', userId);
+
+            if (participantsError) {
+              console.error('Error fetching thread participants:', participantsError);
+            } else if (participants) {
+              // Get distinct customer_ids
+              customerIds = [...new Set(participants.map(p => p.customer_id).filter((id): id is string => Boolean(id)))];
+            }
+          } else if (step.source_type === 'meeting') {
+            // Get meeting attendees and match to customers
+            const { data: meeting, error: meetingError } = await supabase
+              .from('meetings')
+              .select('attendees, user_id')
+              .eq('google_event_id', step.source_id)
+              .eq('user_id', userId)
+              .single();
+
+            if (meetingError || !meeting) {
+              console.error('Error fetching meeting for assignments:', meetingError);
+            } else if (meeting.attendees) {
+              // Extract email addresses from attendees
+              const attendeeEmails: string[] = [];
+              
+              if (Array.isArray(meeting.attendees)) {
+                for (const attendee of meeting.attendees) {
+                  if (typeof attendee === 'string') {
+                    attendeeEmails.push(attendee);
+                  } else if (attendee && typeof attendee === 'object') {
+                    // Handle object format: { email: "...", name: "..." }
+                    const email = (attendee as any).email;
+                    if (typeof email === 'string') {
+                      attendeeEmails.push(email);
+                    }
+                  }
+                }
+              }
+
+              // Match emails to customers and get distinct customer_ids
+              if (attendeeEmails.length > 0) {
+                const { data: customers, error: customersError } = await supabase
+                  .from('customers')
+                  .select('customer_id')
+                  .in('email', attendeeEmails)
+                  .eq('user_id', userId);
+
+                if (customersError) {
+                  console.error('Error fetching customers for meeting attendees:', customersError);
+                } else if (customers) {
+                  // Get distinct customer_ids to avoid unique constraint violations
+                  customerIds = [...new Set(customers.map(c => c.customer_id).filter((id): id is string => Boolean(id)))];
+                }
+              }
+            }
+          }
+
+          // Create assignments for each customer
+          for (const customerId of customerIds) {
+            assignments.push({
+              next_step_id: stepId,
+              customer_id: customerId
+            });
+          }
+        }
+
+        // Insert assignments in batch
+        if (assignments.length > 0) {
+          const { error: assignmentError } = await supabase
+            .from('next_step_assignments')
+            .insert(assignments);
+
+          if (assignmentError) {
+            console.error('Error inserting next step assignments:', assignmentError);
+            // Don't throw - assignments are not critical for the main flow
+          } else {
+            console.log(`Created ${assignments.length} next step assignments`);
+          }
+        }
+      }
     }
 
     return new Response(
