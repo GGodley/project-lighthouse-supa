@@ -1421,9 +1421,10 @@ Task:
         }
 
         if (nextStepsToInsert.length > 0) {
-          const { error: nextStepsInsertError } = await supabaseAdmin
+          const { data: insertedSteps, error: nextStepsInsertError } = await supabaseAdmin
             .from("next_steps")
-            .insert(nextStepsToInsert);
+            .insert(nextStepsToInsert)
+            .select("step_id, id, thread_id");
 
           if (nextStepsInsertError) {
             throw new Error(
@@ -1434,6 +1435,71 @@ Task:
           console.log(
             `Analyzer: Inserted ${nextStepsToInsert.length} next_steps for thread ${threadId}`
           );
+
+          // Create assignments for each inserted next step
+          if (insertedSteps && insertedSteps.length > 0) {
+            // Get all customers from thread_participants for this thread
+            const { data: participants, error: participantsError } = await supabaseAdmin
+              .from("thread_participants")
+              .select("customer_id")
+              .eq("thread_id", threadId)
+              .eq("user_id", userId);
+
+            if (participantsError) {
+              console.error(
+                `Analyzer: Error fetching thread participants for assignments:`,
+                participantsError
+              );
+            } else if (participants && participants.length > 0) {
+              // Get distinct customer_ids
+              const customerIds = [
+                ...new Set(
+                  participants
+                    .map((p) => p.customer_id)
+                    .filter((id): id is string => Boolean(id))
+                ),
+              ];
+
+              // Create assignments for each next step and customer combination
+              const assignments: Array<{
+                next_step_id: string;
+                customer_id: string;
+              }> = [];
+
+              for (const step of insertedSteps) {
+                // Handle both possible column names from Supabase insert response
+                type StepWithId = { step_id?: string; id?: string };
+                const stepWithId = step as StepWithId;
+                const stepId = stepWithId.step_id || stepWithId.id;
+                if (stepId) {
+                  for (const customerId of customerIds) {
+                    assignments.push({
+                      next_step_id: stepId,
+                      customer_id: customerId,
+                    });
+                  }
+                }
+              }
+
+              if (assignments.length > 0) {
+                const { error: assignmentError } = await supabaseAdmin
+                  .from("next_step_assignments")
+                  .insert(assignments);
+
+                if (assignmentError) {
+                  console.error(
+                    `Analyzer: Error creating next step assignments:`,
+                    assignmentError
+                  );
+                  // Don't throw - assignments are not critical for the main flow
+                } else {
+                  console.log(
+                    `Analyzer: Created ${assignments.length} next step assignments for thread ${threadId}`
+                  );
+                }
+              }
+            }
+          }
         } else {
           console.log(
             `Analyzer: No new next_steps to insert for thread ${threadId} (all duplicates or empty)`

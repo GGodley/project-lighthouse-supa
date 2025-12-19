@@ -2,6 +2,16 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import type { Database } from '@/types/database';
+
+// Type for customer with joined company data from Supabase query
+// Supabase returns companies as an array for joins, but we expect a single company or null
+type CustomerWithCompany = Database['public']['Tables']['customers']['Row'] & {
+  companies: {
+    company_id: string;
+    company_name: string | null;
+  }[] | null;
+};
 
 export async function GET(request: Request) {
   const cookieStore = await cookies();
@@ -77,17 +87,24 @@ export async function GET(request: Request) {
     }
 
     // Transform the data to flatten company information
-    const customersWithCompanies = (allCustomers || []).map((customer: any) => ({
-      customer_id: customer.customer_id,
-      full_name: customer.full_name,
-      email: customer.email,
-      company_id: customer.company_id,
-      company_name: customer.companies?.company_name || null,
-      health_score: customer.health_score,
-      overall_sentiment: customer.overall_sentiment,
-      last_interaction_at: customer.last_interaction_at,
-      created_at: customer.created_at,
-    }));
+    const customersWithCompanies = (allCustomers || []).map((customer: CustomerWithCompany) => {
+      // Handle companies as array (Supabase join) or single object
+      const company = Array.isArray(customer.companies) 
+        ? customer.companies[0] || null
+        : customer.companies;
+      
+      return {
+        customer_id: customer.customer_id,
+        full_name: customer.full_name,
+        email: customer.email,
+        company_id: customer.company_id,
+        company_name: company?.company_name || null,
+        health_score: customer.health_score,
+        overall_sentiment: customer.overall_sentiment,
+        last_interaction_at: customer.last_interaction_at,
+        created_at: customer.created_at,
+      };
+    });
 
     // Limit to 30 results for performance
     const limitedResults = customersWithCompanies.slice(0, 30);
