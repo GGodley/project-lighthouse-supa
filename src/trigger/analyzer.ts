@@ -810,6 +810,34 @@ const getThreadParticipants = async (
   // Collect all customer IDs
   const customerIds = Array.from(emailToCustomerId.values());
 
+  // Step 7.5: Link companies to thread via thread_company_link
+  const companyLinks = companyIds.map((companyId) => ({
+    thread_id: threadId,
+    company_id: companyId,
+    user_id: userId,
+  }));
+
+  if (companyLinks.length > 0) {
+    const { error: companyLinkError } = await supabaseAdmin
+      .from("thread_company_link")
+      .upsert(companyLinks, {
+        onConflict: "thread_id, company_id",
+        ignoreDuplicates: false,
+      });
+
+    if (companyLinkError) {
+      console.error(
+        `Participants: Error linking companies to thread:`,
+        companyLinkError
+      );
+      // Don't throw - this is not critical
+    } else {
+      console.log(
+        `Participants: Linked ${companyLinks.length} companies to thread ${threadId}`
+      );
+    }
+  }
+
   return {
     contextString,
     participantCount: emailToCustomerId.size,
