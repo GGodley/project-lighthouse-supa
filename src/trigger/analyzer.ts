@@ -795,10 +795,110 @@ const getThreadParticipants = async (
 
   console.log(`Participants: Generated context: ${contextString}`);
 
+  // Collect all company IDs (excluding null values for generic domains)
+  const companyIds = Array.from(domainToCompanyId.values()).filter(
+    (id): id is string => id !== null
+  );
+
+  // Collect all customer IDs
+  const customerIds = Array.from(emailToCustomerId.values());
+
   return {
     contextString,
     participantCount: emailToCustomerId.size,
+    companyIds,
+    customerIds,
   };
+};
+
+/**
+ * Propagate interaction time to linked companies and customers
+ * Updates last_interaction_at only if it's null or older than the thread date
+ */
+const propagateInteractionTime = async (
+  supabaseAdmin: SupabaseClient,
+  threadDate: string | null,
+  companyIds: string[],
+  customerIds: string[]
+): Promise<void> => {
+  // Skip if threadDate is null or invalid
+  if (!threadDate) {
+    console.log(
+      "InteractionTime: Skipping propagation - threadDate is null"
+    );
+    return;
+  }
+
+  // Validate threadDate is a valid ISO string
+  const dateObj = new Date(threadDate);
+  if (Number.isNaN(dateObj.getTime())) {
+    console.warn(
+      `InteractionTime: Invalid threadDate format: ${threadDate}, skipping propagation`
+    );
+    return;
+  }
+
+  // Use Promise.allSettled to ensure both updates attempt even if one fails
+  const updatePromises = [];
+
+  // Update companies if we have any
+  if (companyIds.length > 0) {
+    const companyUpdatePromise = supabaseAdmin
+      .from("companies")
+      .update({ last_interaction_at: threadDate })
+      .in("company_id", companyIds)
+      .or(`last_interaction_at.is.null,last_interaction_at.lt.${threadDate}`);
+
+    updatePromises.push(
+      companyUpdatePromise.then((result) => {
+        if (result.error) {
+          console.error(
+            `InteractionTime: Error updating companies:`,
+            result.error
+          );
+        } else {
+          console.log(
+            `InteractionTime: Updated last_interaction_at for ${companyIds.length} companies`
+          );
+        }
+        return result;
+      })
+    );
+  }
+
+  // Update customers if we have any
+  if (customerIds.length > 0) {
+    const customerUpdatePromise = supabaseAdmin
+      .from("customers")
+      .update({ last_interaction_at: threadDate })
+      .in("customer_id", customerIds)
+      .or(`last_interaction_at.is.null,last_interaction_at.lt.${threadDate}`);
+
+    updatePromises.push(
+      customerUpdatePromise.then((result) => {
+        if (result.error) {
+          console.error(
+            `InteractionTime: Error updating customers:`,
+            result.error
+          );
+        } else {
+          console.log(
+            `InteractionTime: Updated last_interaction_at for ${customerIds.length} customers`
+          );
+        }
+        return result;
+      })
+    );
+  }
+
+  // Wait for all updates to complete (or fail)
+  if (updatePromises.length > 0) {
+    await Promise.allSettled(updatePromises);
+  } else {
+    console.log(
+      "InteractionTime: No companies or customers to update"
+    );
+  }
 };
 
 const runThreadEtl = async (
