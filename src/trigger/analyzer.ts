@@ -190,7 +190,18 @@ const collectBodies = (
   };
 
   if (payload) {
+    // First, try to process parts recursively (existing logic)
     visitPart(payload);
+    
+    // Fallback: If no body was found in parts, check payload.body.data directly
+    // This handles simple Gmail messages where body is stored directly in payload.body.data
+    if (!text && !html && payload.body?.data) {
+      const decodedData = decodeBase64Url(payload.body.data);
+      if (decodedData) {
+        // Default to text/plain for simple messages when mimeType is unknown
+        text = decodedData;
+      }
+    }
   }
 
   return { text, html };
