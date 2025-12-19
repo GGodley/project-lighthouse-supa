@@ -5,22 +5,21 @@ import Link from 'next/link'
 import { Loader2, XCircle, Building2 } from 'lucide-react'
 import HealthScoreBar from '@/components/ui/HealthScoreBar'
 
-// Company type matching the API response
-type Company = {
+// Customer type matching the API response
+type Customer = {
+  customer_id: string
+  full_name: string | null
+  email: string
   company_id: string
   company_name: string | null
-  domain_name: string
   health_score: number | null
   overall_sentiment: string | null
-  status: string | null
-  mrr: number | null
-  renewal_date: string | null
   last_interaction_at: string | null
   created_at: string | null
 }
 
 interface TouchingBaseResponse {
-  companies: Company[]
+  customers: Customer[]
   totalCount: number
 }
 
@@ -37,13 +36,13 @@ const TIME_PERIODS: TimePeriod[] = [
 ]
 
 const ConsiderTouchingBase: React.FC = () => {
-  const [companies, setCompanies] = useState<Company[]>([])
+  const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedDays, setSelectedDays] = useState<number>(30) // Default to 30 days (1 month)
 
   useEffect(() => {
-    const fetchTouchingBaseCompanies = async () => {
+    const fetchTouchingBaseCustomers = async () => {
       try {
         setLoading(true)
         setError(null)
@@ -51,20 +50,20 @@ const ConsiderTouchingBase: React.FC = () => {
         const resp = await fetch(`/api/customers/touching-base?days=${selectedDays}`, { cache: 'no-store' })
         if (!resp.ok) {
           const msg = await resp.text()
-          setError(msg || 'Failed to fetch companies')
+          setError(msg || 'Failed to fetch customers')
           return
         }
         const json: TouchingBaseResponse = await resp.json()
-        setCompanies(json.companies || [])
+        setCustomers(json.customers || [])
       } catch (err) {
-        console.error('Error fetching touching base companies:', err)
+        console.error('Error fetching touching base customers:', err)
         setError('An unexpected error occurred')
       } finally {
         setLoading(false)
       }
     }
 
-    fetchTouchingBaseCompanies()
+    fetchTouchingBaseCustomers()
   }, [selectedDays])
 
   const statusPillStyles: { [key: string]: string } = {
@@ -80,11 +79,11 @@ const ConsiderTouchingBase: React.FC = () => {
   }
 
   const getDescriptionText = (days: number) => {
-    if (days === 7) return "Companies that haven't had an interaction in 1 week"
-    if (days === 14) return "Companies that haven't had an interaction in 2+ weeks"
-    if (days === 30) return "Companies that haven't had an interaction in 1 month"
-    if (days === 60) return "Companies that haven't had an interaction in 2 months"
-    return `Companies that haven't had an interaction in ${days} days`
+    if (days === 7) return "Customers that haven't had an interaction in 1 week"
+    if (days === 14) return "Customers that haven't had an interaction in 2+ weeks"
+    if (days === 30) return "Customers that haven't had an interaction in 1 month"
+    if (days === 60) return "Customers that haven't had an interaction in 2 months"
+    return `Customers that haven't had an interaction in ${days} days`
   }
 
   return (
@@ -124,6 +123,9 @@ const ConsiderTouchingBase: React.FC = () => {
             <thead className="glass-table-header sticky top-0 z-10">
               <tr className="bg-inherit">
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  Customer Name
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                   Company Name
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
@@ -140,50 +142,53 @@ const ConsiderTouchingBase: React.FC = () => {
             <tbody className="space-y-2">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="text-center p-8 text-gray-600">
+                  <td colSpan={5} className="text-center p-8 text-gray-600">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-                    <p>Loading companies...</p>
+                    <p>Loading customers...</p>
                   </td>
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan={4} className="text-center p-8 text-red-600">
+                  <td colSpan={5} className="text-center p-8 text-red-600">
                     <XCircle className="h-6 w-6 mx-auto mb-2" />
                     <p>{error}</p>
                   </td>
                 </tr>
-              ) : companies.length === 0 ? (
+              ) : customers.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="text-center p-8 text-gray-500">
+                  <td colSpan={5} className="text-center p-8 text-gray-500">
                     <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p className="text-lg font-medium">All caught up!</p>
-                    <p className="text-sm mt-2">No companies need touching base at this time.</p>
+                    <p className="text-sm mt-2">No customers need touching base at this time.</p>
                   </td>
                 </tr>
               ) : (
-                companies.map((company, index) => (
-                  <tr key={company.company_id || index} className="glass-bar-row">
+                customers.map((customer, index) => (
+                  <tr key={customer.customer_id || index} className="glass-bar-row">
                     <td className="px-6 py-5">
                       <Link 
-                        href={`/dashboard/customer-threads/${company.company_id}`} 
+                        href={`/dashboard/customer-threads/${customer.company_id}`} 
                         className="font-semibold text-gray-900 hover:text-blue-600 transition-colors text-base"
                       >
-                        {company.company_name || 'Unnamed Company'}
+                        {customer.full_name || customer.email || 'Unnamed Customer'}
                       </Link>
                     </td>
+                    <td className="px-6 py-5 text-gray-700">
+                      {customer.company_name || 'No Company'}
+                    </td>
                     <td className="px-6 py-5">
-                      <HealthScoreBar score={company.health_score} showLabel={true} />
+                      <HealthScoreBar score={customer.health_score} showLabel={true} />
                     </td>
                     <td className="px-6 py-5">
                       <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
-                        statusPillStyles[company.overall_sentiment || ''] || 'bg-gray-100 text-gray-800'
+                        statusPillStyles[customer.overall_sentiment || ''] || 'bg-gray-100 text-gray-800'
                       }`}>
-                        {company.overall_sentiment || 'Not set'}
+                        {customer.overall_sentiment || 'Not set'}
                       </span>
                     </td>
                     <td className="px-6 py-5 text-gray-600">
-                      {company.last_interaction_at ? (
-                        new Date(company.last_interaction_at).toLocaleDateString('en-CA')
+                      {customer.last_interaction_at ? (
+                        new Date(customer.last_interaction_at).toLocaleDateString('en-CA')
                       ) : (
                         <span className="text-gray-400">Never</span>
                       )}
