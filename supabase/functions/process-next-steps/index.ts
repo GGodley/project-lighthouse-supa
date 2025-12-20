@@ -345,11 +345,11 @@ serve(async (req) => {
       }));
 
     // Get meeting id if source is a meeting (for meeting_id foreign key)
-    let meetingIdForInsert: number | null = null;
+    let meetingIdForInsert: string | null = null;
     if (source_type === 'meeting') {
       const { data: meetingData, error: meetingIdError } = await supabase
         .from('meetings')
-        .select('id')
+        .select('meeting_uuid_id')
         .eq('google_event_id', source_id)
         .eq('user_id', userId!)
         .single();
@@ -358,8 +358,8 @@ serve(async (req) => {
         console.error('Error fetching meeting id:', meetingIdError);
         // Continue without meeting_id - it's nullable
       } else {
-        // meeting_id is BIGINT, so use the number directly
-        meetingIdForInsert = meetingData.id || null;
+        // meeting_id is UUID, so use the string directly
+        meetingIdForInsert = meetingData.meeting_uuid_id || null;
       }
     }
 
@@ -400,7 +400,7 @@ serve(async (req) => {
           assigned_to_user_id: string | null;
           priority: 'high' | 'medium' | 'low';
           status: 'todo';
-          meeting_id?: number | null;
+          meeting_id?: string | null;
         };
 
         const insertData: NextStepInsert = {

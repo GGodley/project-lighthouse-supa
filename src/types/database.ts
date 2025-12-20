@@ -355,6 +355,7 @@ export type Database = {
       meetings: {
         Row: {
           id: number
+          meeting_uuid_id: string
           user_id: string
           google_event_id: string
           title: string | null
@@ -385,6 +386,7 @@ export type Database = {
         }
         Insert: {
           id?: never
+          meeting_uuid_id?: string
           user_id: string
           google_event_id: string
           title?: string | null
@@ -706,7 +708,7 @@ export type Database = {
           due_date: string | null
           created_at: string | null
           customer_id: string | null
-          meeting_id: number | null
+          meeting_id: string | null
           requested_by_contact_id: string | null
           assigned_to_user_id: string | null
           priority: Database["public"]["Enums"]["task_priority"]
@@ -721,7 +723,7 @@ export type Database = {
           due_date?: string | null
           created_at?: string | null
           customer_id?: string | null
-          meeting_id?: number | null
+          meeting_id?: string | null
           requested_by_contact_id?: string | null
           assigned_to_user_id?: string | null
           priority?: Database["public"]["Enums"]["task_priority"]
@@ -736,7 +738,7 @@ export type Database = {
           due_date?: string | null
           created_at?: string | null
           customer_id?: string | null
-          meeting_id?: number | null
+          meeting_id?: string | null
           requested_by_contact_id?: string | null
           assigned_to_user_id?: string | null
           priority?: Database["public"]["Enums"]["task_priority"]

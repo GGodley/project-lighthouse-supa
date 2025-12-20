@@ -48,29 +48,25 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
 
       try {
         // Query next_steps linked to this meeting
-        // Note: There may be a schema mismatch - meetings.id is BIGINT but next_steps.meeting_id might be UUID
-        // For now, we'll query by thread_id being NULL and try to match by meeting context
-        // Alternatively, if meeting_id references google_event_id as a string, we'd need to adjust
-        // For now, query all next_steps for this user and filter client-side by meeting context
-        // This is a temporary workaround until the schema is clarified
-        
-        // Get the meeting's id (BIGINT) to use for matching
+        // Get the meeting's meeting_uuid_id (UUID) to use for matching
         const { data: meetingData } = await supabase
           .from('meetings')
-          .select('id')
+          .select('meeting_uuid_id')
           .eq('google_event_id', meeting.google_event_id)
           .single();
 
-        // Query next_steps - try both approaches
+        // Query next_steps linked to this meeting via meeting_uuid_id
         let query = supabase
           .from('next_steps')
           .select('step_id, description, status, owner, due_date, thread_id, meeting_id, created_at')
           .is('thread_id', null); // Only meeting-linked next steps
 
-        // If we have meeting id, try to match (though type might not match)
-        if (meetingData?.id) {
-          // Try as string since meeting_id might be stored as string representation of BIGINT
-          query = query.or(`meeting_id.eq.${meetingData.id},meeting_id.is.null`);
+        // If we have meeting_uuid_id, match it to next_steps.meeting_id
+        if (meetingData?.meeting_uuid_id) {
+          query = query.eq('meeting_id', meetingData.meeting_uuid_id);
+        } else {
+          // If no meeting_uuid_id found, return empty results
+          query = query.is('meeting_id', null);
         }
 
         const { data, error } = await query.order('created_at', { ascending: false });
@@ -87,7 +83,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
             owner: string | null;
             due_date: string | null;
             thread_id: string | null;
-            meeting_id: number | null;
+            meeting_id: string | null;
             created_at: string | null;
           };
           setNextSteps((data || []).map((step: NextStepRow) => ({
