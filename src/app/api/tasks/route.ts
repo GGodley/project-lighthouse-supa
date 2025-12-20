@@ -125,7 +125,8 @@ export async function GET(request: Request) {
     }
 
     // Transform the nested data structure to flat structure
-    const tasksWithCompanies: TaskResponse[] = (tasks || []).map((task: TaskWithNested) => {
+    const tasksArray = (tasks || []) as TaskWithNested[];
+    const tasksWithCompanies: TaskResponse[] = tasksArray.map((task: TaskWithNested, index: number) => {
       // Extract company information from nested structure
       // Structure: task.threads.thread_company_link[0].companies.company_name
       let companyName: string | null = null;
@@ -158,7 +159,7 @@ export async function GET(request: Request) {
       }
       
       // #region agent log
-      if (tasks && tasks.length > 0 && tasks.indexOf(task) === 0) {
+      if (index === 0) {
         fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tasks/route.ts:120',message:'Extracting company from nested structure',data:{taskStepId:task.step_id,threadsCount:threads.length,hasThreadCompanyLink:!!threads[0]?.thread_company_link,companyName},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
       }
       // #endregion
