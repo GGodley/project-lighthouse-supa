@@ -1738,7 +1738,7 @@ The "customer" is any participant who is NOT the "CSM".`;
         }
 
         // Fetch participants to determine requestor and owner
-        const { data: threadParticipants, error: participantsError } = await supabaseAdmin
+        const { data: threadParticipants } = await supabaseAdmin
           .from("thread_participants")
           .select("customer_id, user_id")
           .eq("thread_id", threadId);

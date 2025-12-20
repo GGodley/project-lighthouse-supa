@@ -32,7 +32,6 @@ const CustomerThreadsPage: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [providerToken, setProviderToken] = useState<string | null>(null)
-  const [userEmail, setUserEmail] = useState<string | null>(null)
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([])
   const [selectedArchivedCompanies, setSelectedArchivedCompanies] = useState<string[]>([])
   const [isMainTableCollapsed, setIsMainTableCollapsed] = useState(false)
@@ -76,9 +75,6 @@ const CustomerThreadsPage: React.FC = () => {
         if (session.provider_token) {
           setProviderToken(session.provider_token)
         }
-        if (session.user.email) {
-          setUserEmail(session.user.email)
-        }
         setIsRedirecting(false)
       }
     }
@@ -96,12 +92,9 @@ const CustomerThreadsPage: React.FC = () => {
         return
       }
       
-      // For valid sessions, optionally update provider_token and email if available
+      // For valid sessions, optionally update provider_token if available
       if (session.provider_token) {
         setProviderToken(session.provider_token)
-      }
-      if (session.user.email) {
-        setUserEmail(session.user.email)
       }
       setIsRedirecting(false)
     })

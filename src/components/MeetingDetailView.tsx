@@ -55,7 +55,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
         // This is a temporary workaround until the schema is clarified
         
         // Get the meeting's id (BIGINT) to use for matching
-        const { data: meetingData, error: meetingError } = await supabase
+        const { data: meetingData } = await supabase
           .from('meetings')
           .select('id')
           .eq('google_event_id', meeting.google_event_id)
@@ -80,14 +80,24 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
           setNextSteps([]);
         } else {
           // Map database schema to component interface
-          setNextSteps((data || []).map((step: any) => ({
+          type NextStepRow = {
+            step_id: string;
+            description: string;
+            status: 'todo' | 'in_progress' | 'done';
+            owner: string | null;
+            due_date: string | null;
+            thread_id: string | null;
+            meeting_id: number | null;
+            created_at: string | null;
+          };
+          setNextSteps((data || []).map((step: NextStepRow) => ({
             id: step.step_id,
             text: step.description,
             status: step.status,
             owner: step.owner,
             due_date: step.due_date,
             source_type: step.meeting_id ? 'meeting' : 'thread' as 'thread' | 'meeting',
-            created_at: step.created_at,
+            created_at: step.created_at || '',
           })));
         }
       } catch (err) {
