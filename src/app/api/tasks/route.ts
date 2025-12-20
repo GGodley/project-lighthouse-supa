@@ -62,7 +62,7 @@ export async function GET(request: Request) {
         priority,
         company_id,
         created_at,
-        companies(
+        companies:company_id(
           company_id,
           company_name
         )
