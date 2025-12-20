@@ -2,6 +2,32 @@ import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 
+// Type for nested company data from Supabase join
+type CompanyNested = {
+  company_id: string;
+  company_name: string | null;
+};
+
+type ThreadCompanyLinkNested = {
+  company_id: string;
+  companies: CompanyNested | CompanyNested[] | null;
+};
+
+type ThreadNested = {
+  thread_company_link: ThreadCompanyLinkNested | ThreadCompanyLinkNested[] | null;
+};
+
+// Type for raw task data from Supabase query with nested relationships
+type TaskWithNested = {
+  step_id: string;
+  description: string;
+  owner: string | null;
+  due_date: string | null;
+  priority: 'high' | 'medium' | 'low';
+  created_at: string;
+  threads: ThreadNested | ThreadNested[] | null;
+};
+
 // Type for transformed task data
 type TaskResponse = {
   step_id: string;
@@ -9,7 +35,7 @@ type TaskResponse = {
   owner: string | null;
   due_date: string | null;
   priority: 'high' | 'medium' | 'low';
-  company_id: string;
+  company_id: string | null;
   company_name: string | null;
   created_at: string;
 };
@@ -35,13 +61,29 @@ export async function GET(request: Request) {
     }
 
     // Build query - fetch incomplete next steps (status != 'done')
-    // Fetch next_steps without join to avoid PostgREST relationship issues
+    // Use threads relationship to get company information via thread_company_link
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tasks/route.ts:55',message:'Fetching next_steps without join',data:{userId:user.id,sortParam},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tasks/route.ts:55',message:'Fetching next_steps with threads relationship',data:{userId:user.id,sortParam},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
     // #endregion
     let query = supabase
       .from('next_steps')
-      .select('step_id, description, owner, due_date, priority, company_id, created_at')
+      .select(`
+        step_id,
+        description,
+        priority,
+        due_date,
+        owner,
+        created_at,
+        threads (
+          thread_company_link (
+            company_id,
+            companies (
+              company_id,
+              company_name
+            )
+          )
+        )
+      `)
       .eq('user_id', user.id)
       .neq('status', 'done')
       .order('created_at', { ascending: false });
@@ -67,59 +109,68 @@ export async function GET(request: Request) {
     }
 
     // #region agent log
-    const selectString = 'step_id, description, owner, due_date, priority, company_id, created_at';
-    fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tasks/route.ts:86',message:'About to execute next_steps query',data:{userId:user.id,sortParam,selectString},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tasks/route.ts:86',message:'About to execute next_steps query with threads join',data:{userId:user.id,sortParam},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
     // #endregion
     const { data: tasks, error } = await query;
 
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tasks/route.ts:91',message:'Next_steps query result',data:{error:error?.message,errorCode:error?.code,errorDetails:error?.details,hasData:!!tasks,dataLength:tasks?.length,firstTask:tasks?.[0]},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tasks/route.ts:91',message:'Next_steps query result',data:{error:error?.message,errorCode:error?.code,errorDetails:error?.details,hasData:!!tasks,dataLength:tasks?.length,firstTaskStructure:tasks?.[0] ? Object.keys(tasks[0]) : null},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
     // #endregion
     if (error) {
       console.error('Error fetching tasks:', error);
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tasks/route.ts:96',message:'Next_steps query error',data:{errorMessage:error.message,errorCode:error.code,errorDetails:error.details,errorHint:error.hint},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tasks/route.ts:96',message:'Next_steps query error',data:{errorMessage:error.message,errorCode:error.code,errorDetails:error.details,errorHint:error.hint},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
       // #endregion
       return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 
-    // Fetch companies separately to avoid PostgREST join issues
-    const companyIds = [...new Set((tasks || []).map((task: { company_id: string }) => task.company_id).filter(Boolean))];
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tasks/route.ts:104',message:'Fetching companies separately',data:{companyIdsCount:companyIds.length,companyIds:companyIds.slice(0,5)},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-    
-    const companyMap = new Map<string, string | null>();
-    if (companyIds.length > 0) {
-      const { data: companies, error: companiesError } = await supabase
-        .from('companies')
-        .select('company_id, company_name')
-        .in('company_id', companyIds)
-        .eq('user_id', user.id);
+    // Transform the nested data structure to flat structure
+    const tasksWithCompanies: TaskResponse[] = (tasks || []).map((task: TaskWithNested) => {
+      // Extract company information from nested structure
+      // Structure: task.threads.thread_company_link[0].companies.company_name
+      let companyName: string | null = null;
+      let companyId: string | null = null;
+      
+      // Handle threads as array or single object
+      const threads = Array.isArray(task.threads) ? task.threads : (task.threads ? [task.threads] : []);
+      
+      // Get first thread's first company link's first company
+      if (threads.length > 0 && threads[0].thread_company_link) {
+        const threadCompanyLinks = Array.isArray(threads[0].thread_company_link) 
+          ? threads[0].thread_company_link 
+          : [threads[0].thread_company_link];
+        
+        if (threadCompanyLinks.length > 0) {
+          // Get company_id directly from thread_company_link
+          companyId = threadCompanyLinks[0].company_id || null;
+          
+          if (threadCompanyLinks[0].companies) {
+            const companies = Array.isArray(threadCompanyLinks[0].companies)
+              ? threadCompanyLinks[0].companies
+              : [threadCompanyLinks[0].companies];
+            
+            if (companies.length > 0) {
+              const firstCompany = companies[0];
+              companyName = firstCompany?.company_name || null;
+            }
+          }
+        }
+      }
       
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tasks/route.ts:116',message:'Companies query result',data:{error:companiesError?.message,companiesCount:companies?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
+      if (tasks && tasks.length > 0 && tasks.indexOf(task) === 0) {
+        fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tasks/route.ts:120',message:'Extracting company from nested structure',data:{taskStepId:task.step_id,threadsCount:threads.length,hasThreadCompanyLink:!!threads[0]?.thread_company_link,companyName},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
+      }
       // #endregion
       
-      if (companiesError) {
-        console.error('Error fetching companies:', companiesError);
-      } else if (companies) {
-        companies.forEach(company => {
-          companyMap.set(company.company_id, company.company_name);
-        });
-      }
-    }
-
-    // Transform the data to include company information
-    const tasksWithCompanies: TaskResponse[] = (tasks || []).map((task: { step_id: string; description: string; owner: string | null; due_date: string | null; priority: 'high' | 'medium' | 'low'; company_id: string; created_at: string }) => {
       return {
         step_id: task.step_id,
         description: task.description,
         owner: task.owner,
         due_date: task.due_date,
         priority: task.priority,
-        company_id: task.company_id,
-        company_name: companyMap.get(task.company_id) || null,
+        company_id: companyId,
+        company_name: companyName,
         created_at: task.created_at,
       };
     });
