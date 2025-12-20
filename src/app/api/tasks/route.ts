@@ -1,22 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
-// Type for company data from Supabase join
-type CompanyData = {
-  company_id: string;
-  company_name: string | null;
-};
-
-// Type for raw task data from Supabase query (without join)
-type TaskRaw = {
-  step_id: string;
-  description: string;
-  owner: string | null;
-  due_date: string | null;
-  priority: 'high' | 'medium' | 'low';
-  company_id: string;
-  created_at: string;
-};
 
 // Type for transformed task data
 type TaskResponse = {
@@ -105,7 +89,7 @@ export async function GET(request: Request) {
     fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tasks/route.ts:104',message:'Fetching companies separately',data:{companyIdsCount:companyIds.length,companyIds:companyIds.slice(0,5)},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
     // #endregion
     
-    let companyMap = new Map<string, string | null>();
+    const companyMap = new Map<string, string | null>();
     if (companyIds.length > 0) {
       const { data: companies, error: companiesError } = await supabase
         .from('companies')
