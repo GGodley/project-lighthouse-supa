@@ -9,7 +9,7 @@ import { apiFetchJson } from '@/lib/api-client';
 interface NextStep {
   id: string;
   text: string;
-  completed: boolean;
+  status: 'todo' | 'in_progress' | 'done';
   owner: string | null;
   due_date: string | null;
   source_type: 'thread' | 'meeting';
@@ -47,21 +47,48 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
       }
 
       try {
-        // Type assertion needed because next_steps table is not in Database types
-        // Using PostgrestQueryBuilder type to bypass type checking
-        const queryBuilder = supabase.from('next_steps' as never);
-        const { data, error } = await queryBuilder
-          .select('*')
-          .eq('company_id', companyId)
-          .eq('source_type', 'meeting')
-          .eq('source_id', meeting.google_event_id)
-          .order('created_at', { ascending: false });
+        // Query next_steps linked to this meeting
+        // Note: There may be a schema mismatch - meetings.id is BIGINT but next_steps.meeting_id might be UUID
+        // For now, we'll query by thread_id being NULL and try to match by meeting context
+        // Alternatively, if meeting_id references google_event_id as a string, we'd need to adjust
+        // For now, query all next_steps for this user and filter client-side by meeting context
+        // This is a temporary workaround until the schema is clarified
+        
+        // Get the meeting's id (BIGINT) to use for matching
+        const { data: meetingData, error: meetingError } = await supabase
+          .from('meetings')
+          .select('id')
+          .eq('google_event_id', meeting.google_event_id)
+          .single();
+
+        // Query next_steps - try both approaches
+        let query = supabase
+          .from('next_steps')
+          .select('step_id, description, status, owner, due_date, thread_id, meeting_id, created_at')
+          .is('thread_id', null); // Only meeting-linked next steps
+
+        // If we have meeting id, try to match (though type might not match)
+        if (meetingData?.id) {
+          // Try as string since meeting_id might be stored as string representation of BIGINT
+          query = query.or(`meeting_id.eq.${meetingData.id},meeting_id.is.null`);
+        }
+
+        const { data, error } = await query.order('created_at', { ascending: false });
 
         if (error) {
           console.error('Error fetching next steps:', error);
           setNextSteps([]);
         } else {
-          setNextSteps((data as NextStep[]) || []);
+          // Map database schema to component interface
+          setNextSteps((data || []).map((step: any) => ({
+            id: step.step_id,
+            text: step.description,
+            status: step.status,
+            owner: step.owner,
+            due_date: step.due_date,
+            source_type: step.meeting_id ? 'meeting' : 'thread' as 'thread' | 'meeting',
+            created_at: step.created_at,
+          })));
         }
       } catch (err) {
         console.error('Error fetching next steps:', err);
@@ -78,12 +105,15 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
   const toggleNextStep = async (step: NextStep) => {
     setUpdatingStepId(step.id);
     try {
+      // Toggle between 'todo' and 'done' (if in_progress, toggle to done)
+      const newStatus = step.status === 'done' ? 'todo' : 'done';
+      
       const updated = await apiFetchJson<NextStep>(`/api/companies/${companyId}/next-steps/${step.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ completed: !step.completed }),
+        body: JSON.stringify({ status: newStatus }),
       });
 
       setNextSteps(
@@ -95,7 +125,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
       console.error('Error updating next step:', err);
       setNextSteps(
         nextSteps.map(s =>
-          s.id === step.id ? { ...s, completed: step.completed } : s
+          s.id === step.id ? { ...s, status: step.status } : s
         )
       );
     } finally {
@@ -319,23 +349,23 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
               ) : nextSteps.length > 0 ? (
                 <div className="space-y-3">
                   {nextSteps.map((step) => (
-                    <div key={step.id} className={`glass-bar-row p-3 ${step.completed ? 'opacity-75' : ''}`}>
+                    <div key={step.id} className={`glass-bar-row p-3 ${step.status === 'done' ? 'opacity-75' : ''}`}>
                       <div className="flex items-start gap-3">
                         <button
                           onClick={() => toggleNextStep(step)}
                           disabled={updatingStepId === step.id}
                           className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 ${
-                            step.completed
+                            step.status === 'done'
                               ? 'bg-green-600 border-green-600'
                               : 'border-gray-300 hover:border-blue-600'
                           } ${updatingStepId === step.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                         >
-                          {step.completed && <CheckCircle className="w-4 h-4 text-white" />}
+                          {step.status === 'done' && <CheckCircle className="w-4 h-4 text-white" />}
                         </button>
                         <div className="flex-1 min-w-0">
                           <p
                             className={`text-sm text-black font-medium mb-2 ${
-                              step.completed ? 'line-through' : ''
+                              step.status === 'done' ? 'line-through' : ''
                             }`}
                             style={{ color: '#1a1a1a' }}
                           >

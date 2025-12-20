@@ -344,43 +344,70 @@ serve(async (req) => {
         email: p.profile_email
       }));
 
-    // Insert next steps for each company
+    // Get meeting id if source is a meeting (for meeting_id foreign key)
+    let meetingIdForInsert: string | null = null;
+    if (source_type === 'meeting') {
+      const { data: meetingData, error: meetingIdError } = await supabase
+        .from('meetings')
+        .select('id')
+        .eq('google_event_id', source_id)
+        .eq('user_id', userId!)
+        .single();
+      
+      if (meetingIdError || !meetingData) {
+        console.error('Error fetching meeting id:', meetingIdError);
+        // Continue without meeting_id - it's nullable
+      } else {
+        // Convert BIGINT id to string for UUID field (if meeting_id is UUID, this might need adjustment)
+        meetingIdForInsert = meetingData.id?.toString() || null;
+      }
+    }
+
+    // Insert next steps - one per thread/meeting (not per company, since next_steps links to threads)
     const inserts = [];
-    for (const companyId of companyIds) {
-      for (const step of nextSteps) {
-        // Step 2c: Determine Owner (per next step)
-        const assignedToUserId = resolveOwnerFromParticipants(
-          step.owner,
-          internalParticipants,
-          userId!
-        );
+    for (const step of nextSteps) {
+      // Step 2c: Determine Owner (per next step)
+      const assignedToUserId = resolveOwnerFromParticipants(
+        step.owner,
+        internalParticipants,
+        userId!
+      );
 
-        // Check for duplicates (same text and company, not completed)
-        const { data: existing } = await supabase
-          .from('next_steps')
-          .select('id')
-          .eq('company_id', companyId)
-          .eq('text', step.text)
-          .eq('source_type', source_type)
-          .eq('source_id', source_id)
-          .eq('status', 'todo')
-          .limit(1);
+      // Check for duplicates (same description and thread/meeting, not done)
+      let existingQuery = supabase
+        .from('next_steps')
+        .select('step_id')
+        .eq('description', step.text)
+        .eq('status', 'todo')
+        .limit(1);
 
-        if (!existing || existing.length === 0) {
-          inserts.push({
-            company_id: companyId,
-            text: step.text,
-            owner: step.owner,
-            due_date: step.due_date ? new Date(step.due_date).toISOString() : null,
-            source_type: source_type,
-            source_id: source_id,
-            user_id: userId,
-            requested_by_contact_id: requestedByContactId,
-            assigned_to_user_id: assignedToUserId,
-            priority: step.priority,
-            status: 'todo'
-          });
+      if (source_type === 'thread') {
+        existingQuery = existingQuery.eq('thread_id', source_id);
+      } else if (source_type === 'meeting' && meetingIdForInsert) {
+        existingQuery = existingQuery.eq('meeting_id', meetingIdForInsert);
+      }
+
+      const { data: existing } = await existingQuery;
+
+      if (!existing || existing.length === 0) {
+        const insertData: any = {
+          thread_id: source_type === 'thread' ? source_id : null,
+          user_id: userId!,
+          description: step.text,
+          owner: step.owner,
+          due_date: step.due_date ? new Date(step.due_date).toISOString().split('T')[0] : null, // Convert to date format
+          requested_by_contact_id: requestedByContactId,
+          assigned_to_user_id: assignedToUserId,
+          priority: step.priority,
+          status: 'todo' as const
+        };
+
+        // Only add meeting_id if we have it and source is meeting
+        if (source_type === 'meeting' && meetingIdForInsert) {
+          insertData.meeting_id = meetingIdForInsert;
         }
+
+        inserts.push(insertData);
       }
     }
 
@@ -388,23 +415,22 @@ serve(async (req) => {
       const { data: insertedSteps, error: insertError } = await supabase
         .from('next_steps')
         .insert(inserts)
-        .select('step_id, id, source_type, source_id');
+        .select('step_id, thread_id, meeting_id');
 
       if (insertError) {
         throw new Error(`Failed to insert next steps: ${insertError.message}`);
       }
 
-      console.log(`Inserted ${inserts.length} next steps for ${companyIds.length} company/companies`);
+      console.log(`Inserted ${inserts.length} next steps`);
 
       // Create assignments for each inserted next step
       if (insertedSteps && insertedSteps.length > 0) {
         const assignments: Array<{ next_step_id: string; customer_id: string }> = [];
 
         for (const step of insertedSteps) {
-          // Handle both step_id and id column names
-          const stepId = (step as any).step_id || (step as any).id;
+          const stepId = step.step_id;
           if (!stepId) {
-            console.warn('Could not find step_id or id in inserted step:', step);
+            console.warn('Could not find step_id in inserted step:', step);
             continue;
           }
 

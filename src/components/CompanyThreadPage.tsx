@@ -49,7 +49,7 @@ interface ProductFeedback {
 interface NextStep {
   id: string;
   text: string;
-  completed: boolean;
+  status: 'todo' | 'in_progress' | 'done';
   owner: string | null;
   due_date: string | null;
   source_type: 'thread' | 'meeting';
@@ -103,13 +103,16 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
   const toggleNextStep = async (step: NextStep) => {
     setUpdatingStepId(step.id);
     try {
+      // Toggle between 'todo' and 'done' (if in_progress, toggle to done)
+      const newStatus = step.status === 'done' ? 'todo' : 'done';
+      
       // Use the centralized API client for automatic 401 handling
       const updated = await apiFetchJson<NextStep>(`/api/companies/${companyId}/next-steps/${step.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ completed: !step.completed }),
+        body: JSON.stringify({ status: newStatus }),
       });
       
       // Update local state
@@ -123,7 +126,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
       // Revert on error
       setNextSteps(
         nextSteps.map(s => 
-          s.id === step.id ? { ...s, completed: step.completed } : s
+          s.id === step.id ? { ...s, status: step.status } : s
         )
       );
     } finally {
@@ -578,7 +581,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                 </div>
                 
                 {/* Active Next Steps - Collapsible */}
-                {nextSteps.filter(s => !s.completed).length > 0 && (
+                {nextSteps.filter(s => s.status !== 'done').length > 0 && (
                   <div className="mb-6">
                     <button
                       onClick={() => setActiveExpanded(!activeExpanded)}
@@ -587,14 +590,14 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                       <Users className="h-5 w-5 text-gray-600" />
                       <h4 className="font-semibold text-gray-900">Active Next Steps</h4>
                       <span className="ml-auto text-sm text-gray-600">
-                        ({nextSteps.filter(s => !s.completed).length})
+                        ({nextSteps.filter(s => s.status !== 'done').length})
                         {activeExpanded ? <ChevronDown className="w-4 h-4 inline ml-1" /> : <ChevronRight className="w-4 h-4 inline ml-1" />}
                       </span>
                     </button>
                     
                     {activeExpanded && (
                     <ul className="space-y-3">
-                      {nextSteps.filter(s => !s.completed).map((step) => {
+                      {nextSteps.filter(s => s.status !== 'done').map((step) => {
                         const isClickable = step.source_id !== null && step.source_id !== undefined;
                         return (
                         <li key={step.id} className="glass-bar-row p-4">
@@ -606,12 +609,12 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                             }}
                             disabled={updatingStepId === step.id}
                               className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 ${
-                              step.completed
+                              step.status === 'done'
                                   ? 'bg-blue-600 border-blue-600'
                                   : 'border-gray-300 hover:border-blue-600'
                             } ${updatingStepId === step.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                           >
-                              {step.completed && <CheckCircle className="w-4 h-4 text-white" />}
+                              {step.status === 'done' && <CheckCircle className="w-4 h-4 text-white" />}
                           </button>
                           
                           <div 
@@ -650,7 +653,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                 )}
 
                 {/* Completed Next Steps - Collapsible */}
-                {nextSteps.filter(s => s.completed).length > 0 && (
+                {nextSteps.filter(s => s.status === 'done').length > 0 && (
                   <div>
                     <button
                       onClick={() => setCompletedExpanded(!completedExpanded)}
@@ -659,14 +662,14 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                       <Users className="h-5 w-5 text-gray-600" />
                       <h4 className="font-semibold text-gray-900">Completed Next Steps</h4>
                       <span className="ml-auto text-sm text-gray-600">
-                        ({nextSteps.filter(s => s.completed).length})
+                        ({nextSteps.filter(s => s.status === 'done').length})
                         {completedExpanded ? <ChevronDown className="w-4 h-4 inline ml-1" /> : <ChevronRight className="w-4 h-4 inline ml-1" />}
                       </span>
                     </button>
                     
                     {completedExpanded && (
                       <div className="max-h-96 overflow-y-auto space-y-3">
-                          {nextSteps.filter(s => s.completed).map((step) => {
+                          {nextSteps.filter(s => s.status === 'done').map((step) => {
                             const isClickable = step.source_id !== null && step.source_id !== undefined;
                             return (
                           <div key={step.id} className="glass-bar-row p-4 opacity-75">
@@ -678,12 +681,12 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                                 }}
                                 disabled={updatingStepId === step.id}
                                 className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 ${
-                                  step.completed
+                                  step.status === 'done'
                                     ? 'bg-green-600 border-green-600'
                                     : 'border-gray-300 hover:border-blue-600'
                                 } ${updatingStepId === step.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                               >
-                                {step.completed && <CheckCircle className="w-4 h-4 text-white" />}
+                                {step.status === 'done' && <CheckCircle className="w-4 h-4 text-white" />}
                               </button>
                               
                               <div 

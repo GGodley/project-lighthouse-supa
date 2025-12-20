@@ -671,6 +671,83 @@ export type Database = {
           },
         ]
       }
+      next_steps: {
+        Row: {
+          step_id: string
+          thread_id: string
+          user_id: string
+          description: string
+          owner: string | null
+          due_date: string | null
+          created_at: string | null
+          customer_id: string | null
+          meeting_id: string | null
+          requested_by_contact_id: string | null
+          assigned_to_user_id: string | null
+          priority: Database["public"]["Enums"]["task_priority"]
+          status: Database["public"]["Enums"]["task_status"]
+        }
+        Insert: {
+          step_id?: string
+          thread_id: string
+          user_id: string
+          description: string
+          owner?: string | null
+          due_date?: string | null
+          created_at?: string | null
+          customer_id?: string | null
+          meeting_id?: string | null
+          requested_by_contact_id?: string | null
+          assigned_to_user_id?: string | null
+          priority?: Database["public"]["Enums"]["task_priority"]
+          status?: Database["public"]["Enums"]["task_status"]
+        }
+        Update: {
+          step_id?: string
+          thread_id?: string
+          user_id?: string
+          description?: string
+          owner?: string | null
+          due_date?: string | null
+          created_at?: string | null
+          customer_id?: string | null
+          meeting_id?: string | null
+          requested_by_contact_id?: string | null
+          assigned_to_user_id?: string | null
+          priority?: Database["public"]["Enums"]["task_priority"]
+          status?: Database["public"]["Enums"]["task_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "next_steps_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "threads"
+            referencedColumns: ["thread_id"]
+          },
+          {
+            foreignKeyName: "next_steps_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "next_steps_assigned_to_user_id_fkey"
+            columns: ["assigned_to_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "next_steps_requested_by_contact_id_fkey"
+            columns: ["requested_by_contact_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["customer_id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -698,6 +775,8 @@ export type Database = {
       customer_status: "Healthy" | "Needs Attention" | "At Risk"
       feature_request_source: "email" | "meeting" | "manual" | "thread"
       urgency_level: "Low" | "Medium" | "High"
+      task_priority: "high" | "medium" | "low"
+      task_status: "todo" | "in_progress" | "done"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -828,6 +907,8 @@ export const Constants = {
       customer_status: ["Healthy", "Needs Attention", "At Risk"],
       feature_request_source: ["email", "meeting", "manual", "thread"],
       urgency_level: ["Low", "Medium", "High"],
+      task_priority: ["high", "medium", "low"],
+      task_status: ["todo", "in_progress", "done"],
     },
   },
 } as const
