@@ -354,76 +354,94 @@ export type Database = {
       }
       meetings: {
         Row: {
+          id: number
+          user_id: string
+          google_event_id: string
+          title: string | null
+          description: string | null
+          start_time: string | null
+          end_time: string | null
+          hangout_link: string | null
           attendees: Json | null
           created_at: string
-          customer_id: string | null
-          customer_sentiment: string | null
-          description: string | null
-          dispatch_status: string | null
-          end_time: string | null
-          google_event_id: string
-          hangout_link: string | null
+          updated_at: string | null
           meeting_customer: string | null
-          meeting_type: string | null
-          meeting_url: string | null
-          next_steps: string | null
-          recall_bot_id: string | null
-          sentiment_score: number | null
-          start_time: string | null
+          customer_id: string | null
           status: string | null
           summary: string | null
-          title: string | null
+          customer_sentiment: string | null
+          next_steps: Json | null
+          recall_bot_id: string | null
+          dispatch_status: string | null
+          company_id: string | null
+          sentiment_score: number | null
+          meeting_type: string | null
+          meeting_url: string | null
+          error_details: Json | null
+          last_error_at: string | null
+          retry_count: number | null
+          last_reschedule_attempt: string | null
           transcript: string | null
-          updated_at: string | null
-          user_id: string
         }
         Insert: {
+          id?: never
+          user_id: string
+          google_event_id: string
+          title?: string | null
+          description?: string | null
+          start_time?: string | null
+          end_time?: string | null
+          hangout_link?: string | null
           attendees?: Json | null
           created_at?: string
-          customer_id?: string | null
-          customer_sentiment?: string | null
-          description?: string | null
-          dispatch_status?: string | null
-          end_time?: string | null
-          google_event_id: string
-          hangout_link?: string | null
+          updated_at?: string | null
           meeting_customer?: string | null
-          meeting_type?: string | null
-          meeting_url?: string | null
-          next_steps?: string | null
-          recall_bot_id?: string | null
-          sentiment_score?: number | null
-          start_time?: string | null
+          customer_id?: string | null
           status?: string | null
           summary?: string | null
-          title?: string | null
+          customer_sentiment?: string | null
+          next_steps?: Json | null
+          recall_bot_id?: string | null
+          dispatch_status?: string | null
+          company_id?: string | null
+          sentiment_score?: number | null
+          meeting_type?: string | null
+          meeting_url?: string | null
+          error_details?: Json | null
+          last_error_at?: string | null
+          retry_count?: number | null
+          last_reschedule_attempt?: string | null
           transcript?: string | null
-          updated_at?: string | null
-          user_id: string
         }
         Update: {
+          id?: never
+          user_id?: string
+          google_event_id?: string
+          title?: string | null
+          description?: string | null
+          start_time?: string | null
+          end_time?: string | null
+          hangout_link?: string | null
           attendees?: Json | null
           created_at?: string
-          customer_id?: string | null
-          customer_sentiment?: string | null
-          description?: string | null
-          dispatch_status?: string | null
-          end_time?: string | null
-          google_event_id?: string
-          hangout_link?: string | null
+          updated_at?: string | null
           meeting_customer?: string | null
-          meeting_type?: string | null
-          meeting_url?: string | null
-          next_steps?: string | null
-          recall_bot_id?: string | null
-          sentiment_score?: number | null
-          start_time?: string | null
+          customer_id?: string | null
           status?: string | null
           summary?: string | null
-          title?: string | null
+          customer_sentiment?: string | null
+          next_steps?: Json | null
+          recall_bot_id?: string | null
+          dispatch_status?: string | null
+          company_id?: string | null
+          sentiment_score?: number | null
+          meeting_type?: string | null
+          meeting_url?: string | null
+          error_details?: Json | null
+          last_error_at?: string | null
+          retry_count?: number | null
+          last_reschedule_attempt?: string | null
           transcript?: string | null
-          updated_at?: string | null
-          user_id?: string
         }
         Relationships: [
           {
@@ -432,6 +450,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "customers"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "meetings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -681,7 +706,7 @@ export type Database = {
           due_date: string | null
           created_at: string | null
           customer_id: string | null
-          meeting_id: string | null
+          meeting_id: number | null
           requested_by_contact_id: string | null
           assigned_to_user_id: string | null
           priority: Database["public"]["Enums"]["task_priority"]
@@ -696,7 +721,7 @@ export type Database = {
           due_date?: string | null
           created_at?: string | null
           customer_id?: string | null
-          meeting_id?: string | null
+          meeting_id?: number | null
           requested_by_contact_id?: string | null
           assigned_to_user_id?: string | null
           priority?: Database["public"]["Enums"]["task_priority"]
@@ -711,7 +736,7 @@ export type Database = {
           due_date?: string | null
           created_at?: string | null
           customer_id?: string | null
-          meeting_id?: string | null
+          meeting_id?: number | null
           requested_by_contact_id?: string | null
           assigned_to_user_id?: string | null
           priority?: Database["public"]["Enums"]["task_priority"]
