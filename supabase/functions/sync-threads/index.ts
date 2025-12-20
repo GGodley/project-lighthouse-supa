@@ -184,7 +184,8 @@ Return a JSON object with the following structure:
     {
       "text": "Action item description",
       "owner": "Name or email of person responsible (or null if not mentioned)",
-      "due_date": "YYYY-MM-DD or null if not mentioned"
+      "due_date": "YYYY-MM-DD or null if not mentioned",
+      "priority": "The urgency level ('high', 'medium', 'low')"
     }
   ],
   "feature_requests": [
@@ -234,6 +235,7 @@ CRITICAL INSTRUCTIONS FOR NEXT STEPS:
 • If no next steps are mentioned, return an empty array []
 • For owner: Extract the name or email of the person responsible. If not mentioned, use null
 • For due_date: Extract the date in YYYY-MM-DD format if mentioned. If not mentioned, use null
+• For priority: Assess the urgency level based on context. Use 'high' for time-sensitive or blocking items, 'medium' for important but not urgent items, 'low' for nice-to-have items. If unclear, default to 'medium'
 • Do not hallucinate or make up next steps
 
 Sentiment Categories & Scores:
@@ -340,7 +342,8 @@ Return a JSON object with the following structure:
     {
       "text": "Action item description",
       "owner": "Name or email of person responsible (or null if not mentioned)",
-      "due_date": "YYYY-MM-DD or null if not mentioned"
+      "due_date": "YYYY-MM-DD or null if not mentioned",
+      "priority": "The urgency level ('high', 'medium', 'low')"
     }
   ],
   "feature_requests": [
@@ -390,6 +393,7 @@ CRITICAL INSTRUCTIONS FOR NEXT STEPS:
 • If no next steps are mentioned, return an empty array []
 • For owner: Extract the name or email of the person responsible. If not mentioned, use null
 • For due_date: Extract the date in YYYY-MM-DD format if mentioned. If not mentioned, use null
+• For priority: Assess the urgency level based on context. Use 'high' for time-sensitive or blocking items, 'medium' for important but not urgent items, 'low' for nice-to-have items. If unclear, default to 'medium'
 • Do not hallucinate or make up next steps
 
 Sentiment Categories & Scores:
@@ -471,7 +475,8 @@ Return a JSON object with the following structure:
     {
       "text": "Action item description",
       "owner": "Name or email of person responsible (or null if not mentioned)",
-      "due_date": "YYYY-MM-DD or null if not mentioned"
+      "due_date": "YYYY-MM-DD or null if not mentioned",
+      "priority": "The urgency level ('high', 'medium', 'low')"
     }
   ],
   "feature_requests": [
@@ -521,6 +526,7 @@ CRITICAL INSTRUCTIONS FOR NEXT STEPS:
 • If no next steps are mentioned, return an empty array []
 • For owner: Extract the name or email of the person responsible. If not mentioned, use null
 • For due_date: Extract the date in YYYY-MM-DD format if mentioned. If not mentioned, use null
+• For priority: Assess the urgency level based on context. Use 'high' for time-sensitive or blocking items, 'medium' for important but not urgent items, 'low' for nice-to-have items. If unclear, default to 'medium'
 • Do not hallucinate or make up next steps
 • Update existing next steps if they are mentioned in new messages, or add new ones if explicitly stated
 

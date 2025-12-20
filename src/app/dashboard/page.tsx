@@ -6,6 +6,7 @@ import SyncEmailsButton from '@/components/SyncEmailsButton'
 import ConsiderTouchingBase from '@/components/ConsiderTouchingBase'
 import FeatureRequestsSection from '@/components/FeatureRequestsSection'
 import HealthDistributionChart from '@/components/HealthDistributionChart'
+import Tasks from '@/components/Tasks'
 
 export const dynamic = 'force-dynamic'
 
@@ -480,14 +481,17 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((stat) => {
           const isPositive = stat.change?.startsWith('+') || (stat.trend === 'up' && stat.change !== 'N/A')
           const isNegative = stat.change?.startsWith('-') || stat.trend === 'down'
           const showTrendIcon = stat.trend && stat.trend !== 'neutral' && stat.change !== 'N/A'
           
+          // Determine column span: Total Customers gets 2 columns, others get 1
+          const colSpan = stat.title === 'Total Customers' ? 'lg:col-span-2' : 'lg:col-span-1'
+          
           return (
-            <div key={stat.title} className="bg-white rounded-lg shadow p-6">
+            <div key={stat.title} className={`bg-white rounded-lg shadow p-6 ${colSpan}`}>
               <div className="flex items-center">
                 <div className={`p-3 rounded-full ${stat.color}`}>
                   {'iconType' in stat && stat.iconType === 'emoji' ? (
@@ -529,6 +533,10 @@ export default async function DashboardPage() {
             </div>
           )
         })}
+            {/* Tasks Component - spans 2 columns on large screens */}
+            <div className="lg:col-span-2">
+              <Tasks />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
