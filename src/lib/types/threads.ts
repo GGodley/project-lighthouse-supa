@@ -3,6 +3,7 @@ export type NextStep = {
   text: string;
   owner: string | null;
   due_date: string | null; // YYYY-MM-DD format or null
+  priority?: string | null; // 'high', 'medium', 'low' or null
 };
 
 // The structured JSON summary from the LLM

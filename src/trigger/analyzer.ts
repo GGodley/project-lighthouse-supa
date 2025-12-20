@@ -72,6 +72,7 @@ type NextStepInsert = {
   description: string;
   owner: string | null;
   due_date: string | null;
+  priority: string | null; // 'high', 'medium', 'low' or null
   status: "pending";
 };
 
@@ -1290,10 +1291,10 @@ export const analyzeThreadTask = task({
         }
       }
 
-      // Step 1: Fetch normalized thread with body and existing summary
+      // Step 1: Fetch normalized thread with body, existing summary, and last_analyzed_at
       const { data: threadRow, error: threadError } = await supabaseAdmin
         .from("threads")
-        .select("thread_id, user_id, body, llm_summary, last_message_date")
+        .select("thread_id, user_id, body, llm_summary, last_analyzed_at, summary")
         .eq("thread_id", threadId)
         .eq("user_id", userId)
         .maybeSingle();
@@ -1309,71 +1310,362 @@ export const analyzeThreadTask = task({
         );
       }
 
-      const body: string | null = threadRow.body;
+      const lastAnalyzedAt: string | null = threadRow.last_analyzed_at;
+      const oldSummary = threadRow.summary || null;
       const existingSummary =
         threadRow.llm_summary as LLMSummary | { error: string } | null;
 
-      // Helper to check if body has actual content (not null and not empty string)
-      const hasBodyContent = (body: string | null): boolean => {
-        return body !== null && body.trim().length > 0;
+      // Step 1.5: Determine analysis mode (matching Python logic)
+      const analysisMode: "full" | "incremental" =
+        lastAnalyzedAt === null ? "full" : "incremental";
+
+      console.log(`Analyzer: Analysis mode: ${analysisMode}`);
+
+      // Step 2: Fetch and filter messages for incremental mode
+      type MessageForAnalysis = {
+        message_id: string;
+        from_address: string | null;
+        body_text: string | null;
+        body_html: string | null;
+        sent_date: string | null;
+        customer_id: string | null;
       };
 
-      // Validate that body exists before proceeding
-      if (!hasBodyContent(body)) {
+      let messagesToAnalyze: MessageForAnalysis[] = [];
+
+      if (analysisMode === "incremental") {
+        // Fetch all messages ordered by sent_date
+        const { data: allMessages, error: messagesError } = await supabaseAdmin
+          .from("thread_messages")
+          .select(
+            "message_id, from_address, body_text, body_html, sent_date, customer_id"
+          )
+          .eq("thread_id", threadId)
+          .eq("user_id", userId)
+          .order("sent_date", { ascending: true });
+
+        if (messagesError) {
+          throw new Error(
+            `Analyzer: Failed to fetch messages for ${threadId}: ${messagesError.message}`
+          );
+        }
+
+        if (!allMessages || allMessages.length === 0) {
+          throw new Error(`Analyzer: No messages found for thread ${threadId}`);
+        }
+
+        // Filter messages sent after last_analyzed_at
+        const lastAnalyzedDate = new Date(lastAnalyzedAt!);
+        const filteredMessages = allMessages.filter((msg) => {
+          if (!msg.sent_date) {
+            // If no date, include it to be safe
+            console.warn(
+              `Analyzer: Message ${msg.message_id} has no sent_date, including it`
+            );
+            return true;
+          }
+          const msgDate = new Date(msg.sent_date);
+          return msgDate > lastAnalyzedDate;
+        });
+
+        if (filteredMessages.length === 0) {
+          console.log(
+            `Analyzer: No new messages since last analysis - skipping analysis`
+          );
+          // Update thread_processing_stages to completed if it exists
+          try {
+            const { error: stageUpdateError } = await supabaseAdmin
+              .from("thread_processing_stages")
+              .update({ current_stage: "completed" })
+              .eq("thread_id", threadId)
+              .eq("user_id", userId);
+
+            if (stageUpdateError) {
+              console.warn(
+                `Analyzer: Could not update processing stage: ${stageUpdateError.message}`
+              );
+            } else {
+              console.log(`Analyzer: Updated processing stage to completed`);
+            }
+          } catch (err: any) {
+            console.warn(
+              `Analyzer: Could not update processing stage: ${err?.message || String(err)}`
+            );
+          }
+
+          return {
+            success: true,
+            thread_id: threadId,
+            analysis: {
+              mode: "incremental",
+              skipped: true,
+              reason: "No new messages",
+            },
+          };
+        }
+
+        messagesToAnalyze = filteredMessages;
+        console.log(
+          `Analyzer: Filtered to ${messagesToAnalyze.length} new messages for incremental analysis`
+        );
+      } else {
+        // For full mode, fetch all messages for transcript construction
+        const { data: allMessages, error: messagesError } = await supabaseAdmin
+          .from("thread_messages")
+          .select(
+            "message_id, from_address, body_text, body_html, sent_date, customer_id"
+          )
+          .eq("thread_id", threadId)
+          .eq("user_id", userId)
+          .order("sent_date", { ascending: true });
+
+        if (messagesError) {
+          throw new Error(
+            `Analyzer: Failed to fetch messages for ${threadId}: ${messagesError.message}`
+          );
+        }
+
+        messagesToAnalyze = allMessages || [];
+      }
+
+      // Step 3: Construct transcript from messages (matching Python's construct_transcript)
+      // First, get participant info for transcript formatting
+      const participantsMap: Record<
+        string,
+        { customer_name: string; company_name: string }
+      > = {};
+
+      // Fetch thread participants with customer and company info
+      const { data: participantsData } = await supabaseAdmin
+        .from("thread_participants")
+        .select("customer_id")
+        .eq("thread_id", threadId);
+
+      const customerIds = (participantsData || [])
+        .map((p) => p.customer_id)
+        .filter((id): id is string => id !== null);
+
+      if (customerIds.length > 0) {
+        const { data: customersData } = await supabaseAdmin
+          .from("customers")
+          .select(
+            "customer_id, full_name, email, company_id, companies(company_id, company_name)"
+          )
+          .in("customer_id", customerIds)
+          .eq("user_id", userId);
+
+        for (const customer of customersData || []) {
+          const customerId = customer.customer_id;
+          if (!customerId) continue;
+
+          const companyData = customer.companies;
+          let companyName = "Unknown Company";
+          if (Array.isArray(companyData) && companyData.length > 0) {
+            companyName = companyData[0].company_name || "Unknown Company";
+          } else if (
+            companyData &&
+            typeof companyData === "object" &&
+            "company_name" in companyData
+          ) {
+            companyName =
+              (companyData as { company_name: string }).company_name ||
+              "Unknown Company";
+          }
+
+          const customerName =
+            customer.full_name || customer.email?.split("@")[0] || "Unknown";
+
+          participantsMap[customerId] = {
+            customer_name: customerName,
+            company_name: companyName,
+          };
+        }
+      }
+
+      // Construct transcript from messages
+      const transcriptLines: string[] = [];
+      for (const msg of messagesToAnalyze) {
+        const bodyText = msg.body_text || msg.body_html;
+        if (!bodyText) continue;
+
+        const customerId = msg.customer_id;
+        const participantInfo = customerId ? participantsMap[customerId] : null;
+        const customerName = participantInfo?.customer_name || "Unknown";
+        const companyName =
+          participantInfo?.company_name || "Unknown Company";
+
+        // Format: "CustomerName (CompanyName): message_text"
+        transcriptLines.push(`${customerName} (${companyName}): ${bodyText}`);
+      }
+
+      const transcript = transcriptLines.join("\n\n");
+
+      // Validate that transcript has content
+      if (!transcript || transcript.trim().length === 0) {
         throw new Error(
-          `Analyzer: Thread ${threadId} has no body content available for analysis`
+          `Analyzer: Thread ${threadId} has no content available for analysis`
         );
       }
 
-      type AnalysisScenario = "fresh" | "update";
+      // Step 4: Define comprehensive system prompts (matching Python)
+      const fullSystemPrompt = `You are a world-class Customer Success Manager (CSM) analyst. Analyze email threads and extract structured summaries.
 
-      const isFresh =
-        !existingSummary ||
-        (typeof existingSummary === "object" &&
-          "error" in existingSummary &&
-          !!existingSummary.error);
+Return a JSON object with the following structure:
+{
+  "problem_statement": "A clear statement of the problem or topic discussed",
+  "key_participants": ["array", "of", "participant", "names"],
+  "timeline_summary": "A summary of the timeline of events in the thread",
+  "resolution_status": "Status of resolution (e.g., 'Resolved', 'In Progress', 'Pending', 'Unresolved')",
+  "customer_sentiment": "Customer sentiment (e.g., 'Very Positive', 'Positive', 'Neutral', 'Negative', 'Very Negative')",
+  "sentiment_score": The numeric score that corresponds to the chosen sentiment (-2 for very negative, -1 for negative, 0 for neutral, 1 for positive, 2 for very positive),
+  "next_steps": [
+    {
+      "text": "Action item description",
+      "owner": "Name or email of person responsible (or null if not mentioned)",
+      "due_date": "YYYY-MM-DD or null if not mentioned",
+      "priority": "The urgency level ('high', 'medium', 'low')"
+    }
+  ],
+  "feature_requests": [
+    {
+      "title": "A brief name that represents the feature conceptually (e.g., 'Bulk User Editing', 'API Export for Reports')",
+      "customer_description": "A 1–2 sentence summary of what the customer is asking for, in your own words. Keep it specific enough to understand the context, but generic enough to compare across customers.",
+      "use_case": "Why the customer wants it; what problem they are trying to solve",
+      "urgency": "A string chosen from the Urgency levels ('Low', 'Medium', 'High')",
+      "urgency_signals": "Quote or paraphrase the phrasing that indicates priority (e.g. 'we need this before Q1 launch,' 'this is causing delays,' 'not urgent but useful')",
+      "customer_impact": "Who is affected and how (1 sentence)"
+    }
+  ]
+}
 
-      const scenario: AnalysisScenario = isFresh ? "fresh" : "update";
+Feature Request Detection & Extraction:
 
-      let userPrompt: string;
-      if (scenario === "fresh") {
-        userPrompt = `
-${participantContext}
+1. Detect Feature Requests
 
-Analyze this full thread history. Provide a comprehensive summary and identify all open next steps.
+Identify any sentence or paragraph where the customer is:
+• Requesting a new feature
+• Suggesting an improvement
+• Reporting a limitation that implies a feature is missing
+• Asking for a capability that doesn't exist yet
 
-Full Thread Transcript:
-${body}
-        `.trim();
-      } else {
-        userPrompt = `
-${participantContext}
+If no feature requests exist, return an empty array [].
 
-You are updating an existing analysis.
+2. Extract & Summarize Each Feature Request
 
-Context: Previous Summary (JSON):
-${JSON.stringify(existingSummary)}
+For every feature request found:
+• Title (generic, short): A brief name that represents the feature conceptually (e.g., "Bulk User Editing", "API Export for Reports").
+• Customer Description (raw meaning): A 1–2 sentence summary of what the customer is asking for, in your own words. Keep it specific enough to understand the context, but generic enough to compare across customers.
+• Use Case / Problem: Why the customer wants it; what problem they are trying to solve.
+• Urgency Level: Categorize as:
+  * High – Blocking workflows, time-sensitive, critical pain.
+  * Medium – Important but not blocking.
+  * Low – Nice-to-have or long-term improvement.
+• Signals that justify the urgency rating: Quote or paraphrase the phrasing that indicates priority (e.g. "we need this before Q1 launch," "this is causing delays," "not urgent but useful").
+• Customer Impact: Who is affected and how (1 sentence).
 
-Input: Full Thread Body:
-${body}
+3. Additional Rules
+• Make all titles and descriptions general enough that similar requests across customers can be grouped later.
+• Be consistent in naming patterns so clustering will work well.
 
-Task:
-1. Update the summary to incorporate the new information.
-2. Generate Next Steps ONLY based on the new developments in the latest messages. Ignore older steps if they are now resolved.
-3. Return a single JSON object matching the existing summary schema, including a 'next_steps' array if there are any new next steps.
-        `.trim();
-      }
+CRITICAL INSTRUCTIONS FOR NEXT STEPS:
+• Only extract next steps that are EXPLICITLY mentioned in the conversation.
+• Do NOT create or infer next steps if they are not clearly stated.
+• If no next steps are mentioned, return an empty array [].
+• For owner: Extract the name or email of the person responsible. If not mentioned, use null.
+• For due_date: Extract the date in YYYY-MM-DD format if mentioned. If not mentioned, use null.
+• For priority: Analyze the urgency context. 
+  - Set to 'high' if words like 'ASAP', 'urgent', 'immediately', 'critical', 'blocker' are used, or if there is a tight deadline.
+  - Set to 'low' if described as 'when you have time', 'no rush', or 'nice to have'.
+  - Set to 'medium' for standard business tasks.
+• Do not hallucinate or make up next steps.
 
-      // Step 2: Call OpenAI in JSON mode
+Sentiment Categories & Scores:
+• "Very Positive" (Score: 2): Enthusiastic, explicit praise, clear plans for expansion
+• "Positive" (Score: 1): Satisfied, complimentary, minor issues resolved, optimistic
+• "Neutral" (Score: 0): No strong feelings, factual, informational, no complaints but no praise
+• "Negative" (Score: -1): Frustrated, confused, mentioned blockers, unhappy with a feature or price
+• "Very Negative" (Score: -2): Explicitly angry, threatening to churn, multiple major issues
+
+The "customer" is any participant who is NOT the "CSM".`;
+
+      const incrementalSystemPrompt = `You are a CSM Analyst updating an existing thread.
+
+Context: Here is the summary of the conversation so far: '${oldSummary || "No previous summary"}'.
+
+New Data: Here are the new messages: '${transcript}'.
+
+Goal 1: Return a rewritten summary that merges the old context with the new updates. The summary should be comprehensive and reflect the entire conversation history.
+
+Goal 2: Extract ONLY NEW next steps or feature requests found in the New Data. Do not restate items from the past. If an item was already mentioned in previous messages, do not include it.
+
+Return a JSON object with the following structure:
+{
+  "problem_statement": "A clear statement of the problem or topic discussed (updated with new context)",
+  "key_participants": ["array", "of", "participant", "names"],
+  "timeline_summary": "A summary of the timeline of events in the thread (merged old + new)",
+  "resolution_status": "Status of resolution (e.g., 'Resolved', 'In Progress', 'Pending', 'Unresolved')",
+  "customer_sentiment": "Customer sentiment (e.g., 'Very Positive', 'Positive', 'Neutral', 'Negative', 'Very Negative')",
+  "sentiment_score": The numeric score that corresponds to the chosen sentiment (-2 for very negative, -1 for negative, 0 for neutral, 1 for positive, 2 for very positive),
+  "next_steps": [
+    {
+      "text": "Action item description (ONLY if it's NEW, not mentioned before)",
+      "owner": "Name or email of person responsible (or null if not mentioned)",
+      "due_date": "YYYY-MM-DD or null if not mentioned",
+      "priority": "The urgency level ('high', 'medium', 'low')"
+    }
+  ],
+  "feature_requests": [
+    {
+      "title": "A brief name that represents the feature conceptually (ONLY if it's NEW)",
+      "customer_description": "A 1–2 sentence summary of what the customer is asking for",
+      "use_case": "Why the customer wants it; what problem they are trying to solve",
+      "urgency": "A string chosen from the Urgency levels ('Low', 'Medium', 'High')",
+      "urgency_signals": "Quote or paraphrase the phrasing that indicates priority",
+      "customer_impact": "Who is affected and how (1 sentence)"
+    }
+  ]
+}
+
+CRITICAL INSTRUCTIONS FOR NEXT STEPS:
+• Only extract next steps that are EXPLICITLY mentioned in the NEW messages
+• Do NOT create or infer next steps if they are not clearly stated
+• If no NEW next steps are mentioned, return an empty array []
+• Do not restate next steps that were already in the previous summary
+• For priority: Analyze the urgency context. 
+  - Set to 'high' if words like 'ASAP', 'urgent', 'immediately', 'critical', 'blocker' are used, or if there is a tight deadline.
+  - Set to 'low' if described as 'when you have time', 'no rush', or 'nice to have'.
+  - Set to 'medium' for standard business tasks.
+
+CRITICAL INSTRUCTIONS FOR FEATURE REQUESTS:
+• Only extract feature requests that are NEW in the new messages
+• Do not restate feature requests that were already mentioned before
+• If no NEW feature requests exist, return an empty array []
+
+Sentiment Categories & Scores:
+• "Very Positive" (Score: 2): Enthusiastic, explicit praise, clear plans for expansion
+• "Positive" (Score: 1): Satisfied, complimentary, minor issues resolved, optimistic
+• "Neutral" (Score: 0): No strong feelings, factual, informational, no complaints but no praise
+• "Negative" (Score: -1): Frustrated, confused, mentioned blockers, unhappy with a feature or price
+• "Very Negative" (Score: -2): Explicitly angry, threatening to churn, multiple major issues
+
+The "customer" is any participant who is NOT the "CSM".`;
+
+      // Select the appropriate system prompt
+      const systemPrompt =
+        analysisMode === "full" ? fullSystemPrompt : incrementalSystemPrompt;
+
+      // User prompt is simple - just the transcript (matching Python)
+      const userPrompt = `Email Thread:\n\n${transcript}\n\n`;
+
+      // Step 5: Call OpenAI in JSON mode
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1",
-        temperature: 0.2,
+        temperature: 0.3, // Match Python's temperature
         response_format: { type: "json_object" },
         messages: [
           {
             role: "system",
-            content:
-              "You are a B2B customer success assistant. You summarize email threads and extract structured next steps for CSMs. Always respond with valid JSON only.",
+            content: systemPrompt,
           },
           { role: "user", content: userPrompt },
         ],
@@ -1461,12 +1753,25 @@ Task:
               : null;
           const dueDate = parseDueDate(step?.due_date);
 
+          // Extract priority, defaulting to null if not provided
+          const priority =
+            typeof step?.priority === "string" && step.priority.trim()
+              ? step.priority.trim().toLowerCase()
+              : null;
+
+          // Validate priority value
+          const validPriority =
+            priority === "high" || priority === "medium" || priority === "low"
+              ? priority
+              : null;
+
           nextStepsToInsert.push({
             thread_id: threadId,
             user_id: userId,
             description,
             owner,
             due_date: dueDate,
+            priority: validPriority,
             status: "pending",
           });
         }
@@ -1564,7 +1869,7 @@ Task:
 
       return {
         success: true,
-        scenario,
+        scenario: analysisMode === "full" ? "fresh" : "update",
         threadId,
         userId,
       };
