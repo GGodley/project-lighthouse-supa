@@ -1,6 +1,36 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
+// Type for company data from Supabase join
+type CompanyData = {
+  company_id: string;
+  company_name: string | null;
+};
+
+// Type for raw task data from Supabase query
+type TaskWithCompany = {
+  id: string;
+  description: string;
+  owner: string | null;
+  due_date: string | null;
+  priority: 'high' | 'medium' | 'low';
+  company_id: string;
+  created_at: string;
+  companies: CompanyData | CompanyData[] | null;
+};
+
+// Type for transformed task data
+type TaskResponse = {
+  id: string;
+  description: string;
+  owner: string | null;
+  due_date: string | null;
+  priority: 'high' | 'medium' | 'low';
+  company_id: string;
+  company_name: string | null;
+  created_at: string;
+};
+
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
@@ -69,9 +99,9 @@ export async function GET(request: Request) {
     }
 
     // Transform the data to flatten company information and apply proper priority sorting
-    const tasksWithCompanies = (tasks || []).map((task: any) => {
+    const tasksWithCompanies: TaskResponse[] = (tasks || []).map((task: TaskWithCompany) => {
       // Handle companies as array (Supabase join) or single object
-      const company = Array.isArray(task.companies) 
+      const company: CompanyData | null = Array.isArray(task.companies) 
         ? task.companies[0] || null
         : task.companies;
       
