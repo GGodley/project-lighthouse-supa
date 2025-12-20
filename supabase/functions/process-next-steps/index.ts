@@ -6,6 +6,49 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 
+// Helper function to validate and normalize priority
+function validatePriority(priority: any): 'high' | 'medium' | 'low' {
+  if (priority === 'high' || priority === 'low' || priority === 'medium') {
+    return priority;
+  }
+  return 'medium'; // fallback
+}
+
+// Helper function to resolve requestor from participants
+function resolveRequestorFromParticipants(participants: Array<{ customer_id: string | null }>): string | null {
+  const customerParticipants = participants.filter(p => p.customer_id !== null);
+  if (customerParticipants.length > 0) {
+    return customerParticipants[0].customer_id!;
+  }
+  return null;
+}
+
+// Helper function to resolve owner from participants
+function resolveOwnerFromParticipants(
+  ownerString: string | null,
+  internalParticipants: Array<{ user_id: string; name: string | null; email: string | null }>,
+  fallbackUserId: string
+): string {
+  if (!ownerString) {
+    return fallbackUserId;
+  }
+
+  const ownerLower = ownerString.toLowerCase().trim();
+  
+  for (const participant of internalParticipants) {
+    const name = participant.name?.toLowerCase() || '';
+    const email = participant.email?.toLowerCase() || '';
+    
+    // Check if owner string matches name or email (case-insensitive, partial match)
+    if (name.includes(ownerLower) || ownerLower.includes(name) || 
+        email.includes(ownerLower) || ownerLower.includes(email)) {
+      return participant.user_id;
+    }
+  }
+  
+  return fallbackUserId;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -42,9 +85,11 @@ serve(async (req) => {
 
     console.log(`Processing next steps for ${source_type}: ${source_id}`);
 
-    let nextSteps: Array<{ text: string; owner: string | null; due_date: string | null }> = [];
+    let nextSteps: Array<{ text: string; owner: string | null; due_date: string | null; priority: 'high' | 'medium' | 'low' }> = [];
     let companyIds: string[] = [];
     let userId: string | null = null;
+    let requestedByContactId: string | null = null;
+    let participants: Array<{ customer_id: string | null; user_id: string | null; customer_name: string | null; profile_name: string | null; profile_email: string | null }> = [];
 
     if (source_type === 'thread') {
       // Fetch thread and extract next steps
@@ -60,6 +105,75 @@ serve(async (req) => {
 
       userId = thread.user_id;
 
+      // Step 2a: Fetch Participants with Names
+      const { data: threadParticipants, error: participantsError } = await supabase
+        .from('thread_participants')
+        .select('customer_id, user_id')
+        .eq('thread_id', source_id);
+
+      if (participantsError) {
+        console.error('Error fetching thread participants:', participantsError);
+      } else if (threadParticipants && threadParticipants.length > 0) {
+        // Get unique customer IDs and user IDs
+        const customerIds = [...new Set(threadParticipants.map(tp => tp.customer_id).filter((id): id is string => Boolean(id)))];
+        const userIds = [...new Set(threadParticipants.map(tp => tp.user_id).filter((id): id is string => Boolean(id)))];
+
+        // Fetch customer names
+        const customerMap = new Map<string, { name: string | null }>();
+        if (customerIds.length > 0) {
+          const { data: customers, error: customersError } = await supabase
+            .from('customers')
+            .select('customer_id, name, full_name')
+            .in('customer_id', customerIds);
+
+          if (customersError) {
+            console.error('Error fetching customers:', customersError);
+          } else if (customers) {
+            for (const customer of customers) {
+              customerMap.set(customer.customer_id, {
+                name: customer.name || customer.full_name || null
+              });
+            }
+          }
+        }
+
+        // Fetch profile names
+        const profileMap = new Map<string, { full_name: string | null; email: string | null }>();
+        if (userIds.length > 0) {
+          const { data: profiles, error: profilesError } = await supabase
+            .from('profiles')
+            .select('id, full_name, email')
+            .in('id', userIds);
+
+          if (profilesError) {
+            console.error('Error fetching profiles:', profilesError);
+          } else if (profiles) {
+            for (const profile of profiles) {
+              profileMap.set(profile.id, {
+                full_name: profile.full_name,
+                email: profile.email
+              });
+            }
+          }
+        }
+
+        // Transform participants data
+        participants = threadParticipants.map((tp) => {
+          const customer = tp.customer_id ? customerMap.get(tp.customer_id) : null;
+          const profile = tp.user_id ? profileMap.get(tp.user_id) : null;
+          return {
+            customer_id: tp.customer_id,
+            user_id: tp.user_id,
+            customer_name: customer?.name || null,
+            profile_name: profile?.full_name || null,
+            profile_email: profile?.email || null
+          };
+        });
+      }
+
+      // Step 2b: Determine Requestor
+      requestedByContactId = resolveRequestorFromParticipants(participants);
+
       // Extract next steps from llm_summary
       if (thread.llm_summary && typeof thread.llm_summary === 'object') {
         const summary = thread.llm_summary as any;
@@ -69,14 +183,15 @@ serve(async (req) => {
           nextSteps = summary.next_steps.map((step: any) => ({
             text: step.text || '',
             owner: step.owner || null,
-            due_date: step.due_date || null
+            due_date: step.due_date || null,
+            priority: validatePriority(step.priority)
           })).filter((step: any) => step.text !== '');
         } 
         // Legacy format: single csm_next_step string
         else if (summary.csm_next_step && typeof summary.csm_next_step === 'string') {
           const text = summary.csm_next_step.trim();
           if (text) {
-            nextSteps = [{ text, owner: null, due_date: null }];
+            nextSteps = [{ text, owner: null, due_date: null, priority: 'medium' as const }];
           }
         }
       }
@@ -96,7 +211,7 @@ serve(async (req) => {
       // Fetch meeting and extract next steps
       const { data: meeting, error: meetingError } = await supabase
         .from('meetings')
-        .select('google_event_id, user_id, customer_id, next_steps')
+        .select('google_event_id, user_id, customer_id, next_steps, attendees')
         .eq('google_event_id', source_id)
         .single();
 
@@ -106,19 +221,88 @@ serve(async (req) => {
 
       userId = meeting.user_id;
 
+      // Step 3: Fetch participants from meeting attendees
+      const attendeeEmails: string[] = [];
+      if (meeting.attendees) {
+        if (Array.isArray(meeting.attendees)) {
+          for (const attendee of meeting.attendees) {
+            if (typeof attendee === 'string') {
+              attendeeEmails.push(attendee);
+            } else if (attendee && typeof attendee === 'object') {
+              const email = (attendee as any).email;
+              if (typeof email === 'string') {
+                attendeeEmails.push(email);
+              }
+            }
+          }
+        }
+      }
+
+      // Match emails to customers and profiles
+      if (attendeeEmails.length > 0) {
+        // Get customers
+        const { data: customers, error: customersError } = await supabase
+          .from('customers')
+          .select('customer_id, name, full_name, email')
+          .in('email', attendeeEmails)
+          .eq('user_id', userId);
+
+        if (customersError) {
+          console.error('Error fetching customers for meeting attendees:', customersError);
+        } else if (customers) {
+          for (const customer of customers) {
+            participants.push({
+              customer_id: customer.customer_id,
+              user_id: null,
+              customer_name: customer.name || customer.full_name || null,
+              profile_name: null,
+              profile_email: null
+            });
+          }
+        }
+
+        // Get internal users from profiles
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('email', attendeeEmails);
+
+        if (profilesError) {
+          console.error('Error fetching profiles for meeting attendees:', profilesError);
+        } else if (profiles) {
+          for (const profile of profiles) {
+            participants.push({
+              customer_id: null,
+              user_id: profile.id,
+              customer_name: null,
+              profile_name: profile.full_name,
+              profile_email: profile.email
+            });
+          }
+        }
+      }
+
+      // Determine requestor: first customer from attendees
+      requestedByContactId = resolveRequestorFromParticipants(participants);
+      // If no customer found but meeting has customer_id, use that
+      if (!requestedByContactId && meeting.customer_id) {
+        requestedByContactId = meeting.customer_id;
+      }
+
       // Extract next steps from next_steps JSONB column
       if (meeting.next_steps) {
         if (Array.isArray(meeting.next_steps)) {
           nextSteps = meeting.next_steps.map((step: any) => ({
             text: step.text || '',
             owner: step.owner || null,
-            due_date: step.due_date || null
+            due_date: step.due_date || null,
+            priority: validatePriority(step.priority)
           })).filter((step: any) => step.text !== '');
         } else if (typeof meeting.next_steps === 'string') {
           // Legacy string format
           const text = meeting.next_steps.trim();
           if (text) {
-            nextSteps = [{ text, owner: null, due_date: null }];
+            nextSteps = [{ text, owner: null, due_date: null, priority: 'medium' as const }];
           }
         }
       }
@@ -151,10 +335,26 @@ serve(async (req) => {
       );
     }
 
+    // Step 2c & 2d: Determine owner and prepare inserts
+    const internalParticipants = participants
+      .filter(p => p.user_id !== null)
+      .map(p => ({
+        user_id: p.user_id!,
+        name: p.profile_name,
+        email: p.profile_email
+      }));
+
     // Insert next steps for each company
     const inserts = [];
     for (const companyId of companyIds) {
       for (const step of nextSteps) {
+        // Step 2c: Determine Owner (per next step)
+        const assignedToUserId = resolveOwnerFromParticipants(
+          step.owner,
+          internalParticipants,
+          userId!
+        );
+
         // Check for duplicates (same text and company, not completed)
         const { data: existing } = await supabase
           .from('next_steps')
@@ -163,7 +363,7 @@ serve(async (req) => {
           .eq('text', step.text)
           .eq('source_type', source_type)
           .eq('source_id', source_id)
-          .eq('completed', false)
+          .eq('status', 'todo')
           .limit(1);
 
         if (!existing || existing.length === 0) {
@@ -175,7 +375,10 @@ serve(async (req) => {
             source_type: source_type,
             source_id: source_id,
             user_id: userId,
-            completed: false
+            requested_by_contact_id: requestedByContactId,
+            assigned_to_user_id: assignedToUserId,
+            priority: step.priority,
+            status: 'todo'
           });
         }
       }
@@ -205,68 +408,11 @@ serve(async (req) => {
             continue;
           }
 
-          let customerIds: string[] = [];
-
-          if (step.source_type === 'thread') {
-            // Get all customers from thread_participants
-            const { data: participants, error: participantsError } = await supabase
-              .from('thread_participants')
-              .select('customer_id')
-              .eq('thread_id', step.source_id)
-              .eq('user_id', userId);
-
-            if (participantsError) {
-              console.error('Error fetching thread participants:', participantsError);
-            } else if (participants) {
-              // Get distinct customer_ids
-              customerIds = [...new Set(participants.map(p => p.customer_id).filter((id): id is string => Boolean(id)))];
-            }
-          } else if (step.source_type === 'meeting') {
-            // Get meeting attendees and match to customers
-            const { data: meeting, error: meetingError } = await supabase
-              .from('meetings')
-              .select('attendees, user_id')
-              .eq('google_event_id', step.source_id)
-              .eq('user_id', userId)
-              .single();
-
-            if (meetingError || !meeting) {
-              console.error('Error fetching meeting for assignments:', meetingError);
-            } else if (meeting.attendees) {
-              // Extract email addresses from attendees
-              const attendeeEmails: string[] = [];
-              
-              if (Array.isArray(meeting.attendees)) {
-                for (const attendee of meeting.attendees) {
-                  if (typeof attendee === 'string') {
-                    attendeeEmails.push(attendee);
-                  } else if (attendee && typeof attendee === 'object') {
-                    // Handle object format: { email: "...", name: "..." }
-                    const email = (attendee as any).email;
-                    if (typeof email === 'string') {
-                      attendeeEmails.push(email);
-                    }
-                  }
-                }
-              }
-
-              // Match emails to customers and get distinct customer_ids
-              if (attendeeEmails.length > 0) {
-                const { data: customers, error: customersError } = await supabase
-                  .from('customers')
-                  .select('customer_id')
-                  .in('email', attendeeEmails)
-                  .eq('user_id', userId);
-
-                if (customersError) {
-                  console.error('Error fetching customers for meeting attendees:', customersError);
-                } else if (customers) {
-                  // Get distinct customer_ids to avoid unique constraint violations
-                  customerIds = [...new Set(customers.map(c => c.customer_id).filter((id): id is string => Boolean(id)))];
-                }
-              }
-            }
-          }
+          // Use the participants we already fetched
+          const customerIds = participants
+            .filter(p => p.customer_id !== null)
+            .map(p => p.customer_id!)
+            .filter((id, index, self) => self.indexOf(id) === index); // distinct
 
           // Create assignments for each customer
           for (const customerId of customerIds) {
