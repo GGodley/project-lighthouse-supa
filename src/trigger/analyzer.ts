@@ -72,8 +72,12 @@ type NextStepInsert = {
   description: string;
   owner: string | null;
   due_date: string | null;
-  priority: string | null; // 'high', 'medium', 'low' or null
-  status: "pending";
+  priority: "high" | "medium" | "low";
+  status: "todo" | "in_progress" | "done";
+  requested_by_contact_id: string | null;
+  assigned_to_user_id: string | null;
+  customer_id: string | null;
+  meeting_id: string | null;
 };
 
 const getOpenAIClient = () => {
@@ -1727,16 +1731,52 @@ The "customer" is any participant who is NOT the "CSM".`;
 
         const existingSet = new Set<string>();
         for (const row of existingSteps ?? []) {
-          const desc = (row as { description: string | null }).description;
-          if (!desc) continue;
-          const normalized = desc.trim().toLowerCase();
+          const description = (row as { description: string | null }).description;
+          if (!description) continue;
+          const normalized = description.trim().toLowerCase();
           if (normalized) existingSet.add(normalized);
+        }
+
+        // Fetch participants to determine requestor and owner
+        const { data: threadParticipants, error: participantsError } = await supabaseAdmin
+          .from("thread_participants")
+          .select("customer_id, user_id")
+          .eq("thread_id", threadId);
+
+        let requestedByContactId: string | null = null;
+        if (threadParticipants && threadParticipants.length > 0) {
+          const customerParticipants = threadParticipants.filter((p) => p.customer_id !== null);
+          if (customerParticipants.length > 0) {
+            requestedByContactId = customerParticipants[0].customer_id!;
+          }
+        }
+
+        // Get internal participants for owner matching
+        const internalParticipants = threadParticipants
+          ?.filter((p) => p.user_id !== null)
+          .map((p) => p.user_id!) || [];
+
+        // Fetch profile names for owner matching
+        const profileMap = new Map<string, { full_name: string | null; email: string | null }>();
+        if (internalParticipants.length > 0) {
+          const { data: profiles } = await supabaseAdmin
+            .from("profiles")
+            .select("id, full_name, email")
+            .in("id", internalParticipants);
+
+          if (profiles) {
+            for (const profile of profiles) {
+              profileMap.set(profile.id, {
+                full_name: profile.full_name,
+                email: profile.email,
+              });
+            }
+          }
         }
 
         const nextStepsToInsert: NextStepInsert[] = [];
         for (const step of nextStepsRaw) {
-          const description =
-            typeof step?.text === "string" ? step.text.trim() : "";
+          const description = typeof step?.text === "string" ? step.text.trim() : "";
           if (!description) continue;
 
           const normalized = description.toLowerCase();
@@ -1751,19 +1791,39 @@ The "customer" is any participant who is NOT the "CSM".`;
             typeof step?.owner === "string" && step.owner.trim()
               ? step.owner.trim()
               : null;
+
+          // Determine assigned_to_user_id by matching owner string
+          let assignedToUserId: string | null = null;
+          if (owner) {
+            const ownerLower = owner.toLowerCase().trim();
+            for (const [userId, profile] of profileMap.entries()) {
+              const name = profile.full_name?.toLowerCase() || "";
+              const email = profile.email?.toLowerCase() || "";
+              if (
+                name.includes(ownerLower) ||
+                ownerLower.includes(name) ||
+                email.includes(ownerLower) ||
+                ownerLower.includes(email)
+              ) {
+                assignedToUserId = userId;
+                break;
+              }
+            }
+          }
+          // Fallback to thread owner if no match found
+          if (!assignedToUserId) {
+            assignedToUserId = userId;
+          }
+
           const dueDate = parseDueDate(step?.due_date);
 
-          // Extract priority, defaulting to null if not provided
-          const priority =
-            typeof step?.priority === "string" && step.priority.trim()
-              ? step.priority.trim().toLowerCase()
-              : null;
-
-          // Validate priority value
-          const validPriority =
-            priority === "high" || priority === "medium" || priority === "low"
-              ? priority
-              : null;
+          // Extract and validate priority
+          const priorityRaw =
+            typeof step?.priority === "string" ? step.priority.trim().toLowerCase() : null;
+          const validPriority: "high" | "medium" | "low" =
+            priorityRaw === "high" || priorityRaw === "medium" || priorityRaw === "low"
+              ? priorityRaw
+              : "medium";
 
           nextStepsToInsert.push({
             thread_id: threadId,
@@ -1772,7 +1832,11 @@ The "customer" is any participant who is NOT the "CSM".`;
             owner,
             due_date: dueDate,
             priority: validPriority,
-            status: "pending",
+            status: "todo",
+            requested_by_contact_id: requestedByContactId,
+            assigned_to_user_id: assignedToUserId,
+            customer_id: null,
+            meeting_id: null,
           });
         }
 
@@ -1780,7 +1844,7 @@ The "customer" is any participant who is NOT the "CSM".`;
           const { data: insertedSteps, error: nextStepsInsertError } = await supabaseAdmin
             .from("next_steps")
             .insert(nextStepsToInsert)
-            .select("step_id, id, thread_id");
+            .select("step_id, thread_id");
 
           if (nextStepsInsertError) {
             throw new Error(
@@ -1823,10 +1887,7 @@ The "customer" is any participant who is NOT the "CSM".`;
               }> = [];
 
               for (const step of insertedSteps) {
-                // Handle both possible column names from Supabase insert response
-                type StepWithId = { step_id?: string; id?: string };
-                const stepWithId = step as StepWithId;
-                const stepId = stepWithId.step_id || stepWithId.id;
+                const stepId = (step as { step_id: string }).step_id;
                 if (stepId) {
                   for (const customerId of customerIds) {
                     assignments.push({
