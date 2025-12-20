@@ -113,7 +113,7 @@ const CustomerThreadsPage: React.FC = () => {
   }, [supabase, router])
 
   // Thread sync hook (used for status display and manual sync button)
-  const { syncStatus, syncDetails, progressPercentage, startSync } = useThreadSync(providerToken, userEmail)
+  const { syncStatus, syncDetails, progressPercentage, startSync } = useThreadSync(providerToken)
 
   // Helper functions
   const statusPillStyles: { [key: string]: string } = {

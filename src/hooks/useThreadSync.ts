@@ -12,7 +12,7 @@ interface UseThreadSyncReturn {
   startSync: () => Promise<void>;
 }
 
-export function useThreadSync(provider_token: string | null | undefined, _user_email: string | null | undefined): UseThreadSyncReturn {
+export function useThreadSync(provider_token: string | null | undefined): UseThreadSyncReturn {
   const [jobId, setJobId] = useState<number | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [syncDetails, setSyncDetails] = useState<string>('');

@@ -1312,8 +1312,6 @@ export const analyzeThreadTask = task({
 
       const lastAnalyzedAt: string | null = threadRow.last_analyzed_at;
       const oldSummary = threadRow.summary || null;
-      const existingSummary =
-        threadRow.llm_summary as LLMSummary | { error: string } | null;
 
       // Step 1.5: Determine analysis mode (matching Python logic)
       const analysisMode: "full" | "incremental" =
@@ -1387,9 +1385,11 @@ export const analyzeThreadTask = task({
             } else {
               console.log(`Analyzer: Updated processing stage to completed`);
             }
-          } catch (err: any) {
+          } catch (err: unknown) {
+            const errorMessage =
+              err instanceof Error ? err.message : String(err);
             console.warn(
-              `Analyzer: Could not update processing stage: ${err?.message || String(err)}`
+              `Analyzer: Could not update processing stage: ${errorMessage}`
             );
           }
 
