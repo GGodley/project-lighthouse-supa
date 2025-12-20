@@ -345,7 +345,7 @@ serve(async (req) => {
       }));
 
     // Get meeting id if source is a meeting (for meeting_id foreign key)
-    let meetingIdForInsert: string | null = null;
+    let meetingIdForInsert: number | null = null;
     if (source_type === 'meeting') {
       const { data: meetingData, error: meetingIdError } = await supabase
         .from('meetings')
@@ -358,8 +358,8 @@ serve(async (req) => {
         console.error('Error fetching meeting id:', meetingIdError);
         // Continue without meeting_id - it's nullable
       } else {
-        // Convert BIGINT id to string for UUID field (if meeting_id is UUID, this might need adjustment)
-        meetingIdForInsert = meetingData.id?.toString() || null;
+        // meeting_id is BIGINT, so use the number directly
+        meetingIdForInsert = meetingData.id || null;
       }
     }
 
@@ -390,7 +390,20 @@ serve(async (req) => {
       const { data: existing } = await existingQuery;
 
       if (!existing || existing.length === 0) {
-        const insertData: any = {
+        type NextStepInsert = {
+          thread_id: string | null;
+          user_id: string;
+          description: string;
+          owner: string | null;
+          due_date: string | null;
+          requested_by_contact_id: string | null;
+          assigned_to_user_id: string | null;
+          priority: 'high' | 'medium' | 'low';
+          status: 'todo';
+          meeting_id?: number | null;
+        };
+
+        const insertData: NextStepInsert = {
           thread_id: source_type === 'thread' ? source_id : null,
           user_id: userId!,
           description: step.text,
