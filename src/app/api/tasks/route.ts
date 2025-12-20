@@ -9,7 +9,7 @@ type CompanyData = {
 
 // Type for raw task data from Supabase query
 type TaskWithCompany = {
-  id: string;
+  step_id: string;
   description: string;
   owner: string | null;
   due_date: string | null;
@@ -21,7 +21,7 @@ type TaskWithCompany = {
 
 // Type for transformed task data
 type TaskResponse = {
-  id: string;
+  step_id: string;
   description: string;
   owner: string | null;
   due_date: string | null;
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
     let query = supabase
       .from('next_steps')
       .select(`
-        id,
+        step_id,
         description,
         owner,
         due_date,
@@ -106,7 +106,7 @@ export async function GET(request: Request) {
         : task.companies;
       
       return {
-        id: task.id,
+        step_id: task.step_id,
         description: task.description,
         owner: task.owner,
         due_date: task.due_date,

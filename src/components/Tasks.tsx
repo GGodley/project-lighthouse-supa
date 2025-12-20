@@ -6,7 +6,7 @@ import { Loader2, XCircle, CheckSquare2 } from 'lucide-react'
 
 // Task type matching the API response
 type Task = {
-  id: string
+  step_id: string
   description: string
   owner: string | null
   due_date: string | null
@@ -154,7 +154,7 @@ const Tasks: React.FC = () => {
                 </tr>
               ) : (
                 displayedTasks.map((task, index) => (
-                  <tr key={task.id || index} className="glass-bar-row">
+                  <tr key={task.step_id || index} className="glass-bar-row">
                     <td className="px-6 py-5">
                       <Link 
                         href={`/dashboard/customer-threads/${task.company_id}`} 
