@@ -41,8 +41,8 @@ export function useThreadSync(provider_token: string | null | undefined): UseThr
       setSyncStatus('creating_job');
       setSyncDetails('Creating sync job...');
 
-      // Use the new sync-emails API route
-      const response = await fetch('/api/sync-emails', {
+      // Use the new sync-threads API route (triggers ingest-threads Trigger.dev job)
+      const response = await fetch('/api/sync-threads', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

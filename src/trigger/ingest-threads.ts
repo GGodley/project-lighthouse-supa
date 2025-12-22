@@ -1,5 +1,6 @@
-import { task, events } from "@trigger.dev/sdk/v3";
+import { task } from "@trigger.dev/sdk/v3";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { analyzeThreadTask } from "./analyzer";
 
 /**
  * Ingest Threads Job - Orchestrator for Gmail Thread Synchronization
@@ -148,11 +149,11 @@ export const ingestThreadsTask = task({
             `🚀 Dispatching ${threadIds.length} analysis jobs in parallel`
           );
 
-          // Trigger all analysis jobs in parallel using events.trigger
+          // Trigger all analysis jobs in parallel using Promise.all
           // This dispatches all jobs efficiently without awaiting individual results
           await Promise.all(
             threadIds.map((threadId: string) =>
-              events.trigger("analyze-thread", {
+              analyzeThreadTask.trigger({
                 userId,
                 threadId,
               })
