@@ -1,6 +1,5 @@
-import { task } from "@trigger.dev/sdk/v3";
-import { createClient as createSupabaseClient, SupabaseClient } from "@supabase/supabase-js";
-import { analyzeThreadTask } from "./analyzer";
+import { task, events } from "@trigger.dev/sdk/v3";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Ingest Threads Job - Orchestrator for Gmail Thread Synchronization
@@ -145,19 +144,22 @@ export const ingestThreadsTask = task({
 
         // Fan-Out: Batch trigger analyze-thread jobs
         if (threadIds.length > 0) {
-          const payloads = threadIds.map((threadId: string) => ({
-            userId,
-            threadId,
-          }));
-
           console.log(
-            `🚀 Dispatching ${payloads.length} analysis jobs via batch.trigger`
+            `🚀 Dispatching ${threadIds.length} analysis jobs in parallel`
           );
 
-          // Use batch.trigger for performance - dispatches all jobs in parallel
-          await analyzeThreadTask.batch.trigger(payloads);
+          // Trigger all analysis jobs in parallel using events.trigger
+          // This dispatches all jobs efficiently without awaiting individual results
+          await Promise.all(
+            threadIds.map((threadId: string) =>
+              events.trigger("analyze-thread", {
+                userId,
+                threadId,
+              })
+            )
+          );
 
-          console.log(`✅ Dispatched ${payloads.length} analysis jobs`);
+          console.log(`✅ Dispatched ${threadIds.length} analysis jobs`);
         }
 
         // Checkpoint: Update state with next page token
