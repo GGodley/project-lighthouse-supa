@@ -52,6 +52,26 @@ export async function GET(request: NextRequest) {
     }
   );
 
+  // Check if user is already authenticated before attempting exchange
+  const { data: { user: existingUser } } = await supabase.auth.getUser();
+  
+  if (existingUser) {
+    // User is already authenticated, skip code exchange and redirect
+    console.log('User already authenticated, skipping code exchange');
+    const returnUrl = requestUrl.searchParams.get('returnUrl');
+    let redirectPath = '/dashboard';
+    
+    if (returnUrl) {
+      const decodedUrl = decodeURIComponent(returnUrl);
+      if (decodedUrl.startsWith('/') && !decodedUrl.startsWith('//') && !decodedUrl.startsWith('/auth')) {
+        redirectPath = decodedUrl;
+      }
+    }
+    
+    return NextResponse.redirect(`${requestUrl.origin}${redirectPath}`);
+  }
+
+  // User is not authenticated, proceed with code exchange
   const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
   if (exchangeError) {
@@ -65,8 +85,26 @@ export async function GET(request: NextRequest) {
       message: exchangeError.message,
       receivedCookies: allCookies,
       verifierCandidates: verifierCookies,
-      envUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ? 'Defined' : 'MISSING', // Check if Env Var exists
+      envUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ? 'Defined' : 'MISSING',
+      code: code ? 'present' : 'missing',
     });
+    
+    // Check if user became authenticated despite the error (race condition)
+    const { data: { user: userAfterError } } = await supabase.auth.getUser();
+    if (userAfterError) {
+      console.log('User authenticated after exchange error, redirecting to dashboard');
+      const returnUrl = requestUrl.searchParams.get('returnUrl');
+      let redirectPath = '/dashboard';
+      
+      if (returnUrl) {
+        const decodedUrl = decodeURIComponent(returnUrl);
+        if (decodedUrl.startsWith('/') && !decodedUrl.startsWith('//') && !decodedUrl.startsWith('/auth')) {
+          redirectPath = decodedUrl;
+        }
+      }
+      
+      return NextResponse.redirect(`${requestUrl.origin}${redirectPath}`);
+    }
     
     return NextResponse.redirect(
       `${requestUrl.origin}/auth/auth-code-error?error=${encodeURIComponent(exchangeError.message)}`
