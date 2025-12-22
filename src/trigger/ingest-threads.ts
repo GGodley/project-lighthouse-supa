@@ -84,23 +84,36 @@ export const ingestThreadsTask = task({
       while (true) {
         console.log(`🔄 Fetching batch (pageToken: ${pageToken || "initial"})`);
 
-        // Secure Fetch: Delegate to Supabase Edge Function
-        const { data: fetchData, error: fetchError } = await supabaseAdmin.functions.invoke(
-          "fetch-gmail-batch",
-          {
-            body: {
-              userId,
-              pageToken,
-              lastSyncedAt,
-            },
-          }
-        );
+        // Secure Fetch: Delegate to Supabase Edge Function via direct HTTP call
+        // Using direct fetch to avoid client-side auth headers that cause 400 errors
+        const functionUrl = `${supabaseUrl}/functions/v1/fetch-gmail-batch`;
+        const fetchResponse = await fetch(functionUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${supabaseServiceKey}`,
+            "apikey": supabaseServiceKey,
+          },
+          body: JSON.stringify({
+            userId,
+            pageToken,
+            lastSyncedAt,
+          }),
+        });
 
         // Error Handling: If fetch fails (e.g., token expired), mark as failed and exit
-        if (fetchError) {
-          console.error(
-            `❌ Failed to fetch Gmail batch: ${fetchError.message}`
-          );
+        if (!fetchResponse.ok) {
+          const errorText = await fetchResponse.text();
+          let errorMessage = `HTTP ${fetchResponse.status}: ${errorText}`;
+          
+          try {
+            const errorJson = JSON.parse(errorText);
+            errorMessage = errorJson.error || errorMessage;
+          } catch {
+            // If parsing fails, use the text as-is
+          }
+
+          console.error(`❌ Failed to fetch Gmail batch: ${errorMessage}`);
           
           // Release lock with failed status
           await supabaseAdmin.rpc("release_sync_lock", {
@@ -111,9 +124,11 @@ export const ingestThreadsTask = task({
           });
 
           throw new Error(
-            `Gmail fetch failed: ${fetchError.message}. Sync marked as failed.`
+            `Gmail fetch failed: ${errorMessage}. Sync marked as failed.`
           );
         }
+
+        const fetchData = await fetchResponse.json();
 
         if (!fetchData) {
           throw new Error("fetch-gmail-batch returned no data");
