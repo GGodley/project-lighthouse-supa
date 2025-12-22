@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
-import { createServerClient } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
@@ -13,14 +14,14 @@ export async function GET(request: NextRequest) {
   // Handle OAuth errors
   if (error) {
     return NextResponse.redirect(
-      `${requestUrl.origin}/login?error=${encodeURIComponent(error_description || error)}`
+      `${requestUrl.origin}/auth/auth-code-error?error=${encodeURIComponent(error_description || error)}`
     );
   }
 
   // Handle missing code
   if (!code) {
     return NextResponse.redirect(
-      `${requestUrl.origin}/login?error=No authorization code provided`
+      `${requestUrl.origin}/auth/auth-code-error?error=${encodeURIComponent('No authorization code provided')}`
     );
   }
 
@@ -47,34 +48,42 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Create redirect response - standard Supabase SSR pattern for route handlers
-  const redirectUrl = `${requestUrl.origin}${redirectPath}`;
-  const response = NextResponse.redirect(redirectUrl);
+  // Get the cookie store from Next.js
+  const cookieStore = await cookies();
 
-  // Create Supabase client with request/response cookie handlers - CORRECT for route handlers
+  // Create Supabase client with proper cookie handling
+  // CRUCIAL: The get method must return cookieStore.get(name)?.value
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return request.cookies.getAll();
+        get(name: string) {
+          return cookieStore.get(name)?.value;
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
-          });
+        set(name: string, value: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name, value, ...options });
+          } catch (error) {
+            // The `set` method was called from a Route Handler.
+            // This can be ignored if you have middleware refreshing
+            // user sessions, or you can handle the error appropriately.
+            console.error('Error setting cookie:', error);
+          }
+        },
+        remove(name: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name, value: '', ...options });
+          } catch (error) {
+            console.error('Error removing cookie:', error);
+          }
         },
       },
     }
   );
 
   // Exchange code for session
-  // Note: Supabase SSR should automatically handle PKCE code verifier from cookies
-  // If the code verifier is missing, it might be because:
-  // 1. The OAuth flow was initiated on a different domain/subdomain
-  // 2. Cookies were cleared between OAuth initiation and callback
-  // 3. There's a cookie domain/path mismatch
+  // This will automatically use the code verifier from cookies
   const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
   
   // Log the error for debugging if exchange fails
@@ -84,28 +93,19 @@ export async function GET(request: NextRequest) {
       status: exchangeError.status,
       code: code ? 'present' : 'missing',
       // Check if code verifier cookie exists
-      hasCodeVerifierCookie: request.cookies.getAll().some(c => 
-        c.name.includes('code-verifier') || c.name.includes('pkce')
-      )
+      codeVerifierCookie: cookieStore.get('sb-code-verifier')?.value ? 'present' : 'missing',
+      allCookies: cookieStore.getAll().map(c => c.name),
     });
-  }
-
-  if (exchangeError) {
-    // Check if user is already authenticated
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      return response;
-    }
     
     return NextResponse.redirect(
-      `${requestUrl.origin}/login?error=${encodeURIComponent(exchangeError.message)}`
+      `${requestUrl.origin}/auth/auth-code-error?error=${encodeURIComponent(exchangeError.message)}`
     );
   }
 
   // Verify session was created
   if (!data.session) {
     return NextResponse.redirect(
-      `${requestUrl.origin}/login?error=Session not created`
+      `${requestUrl.origin}/auth/auth-code-error?error=${encodeURIComponent('Session not created')}`
     );
   }
 
@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
     providerTokenLength: data.session.provider_token?.length || 0,
     accessTokenExists: !!data.session.access_token,
     refreshTokenExists: !!data.session.refresh_token
-  })
+  });
 
   // Create profile if it doesn't exist
   if (data.user) {
@@ -153,5 +153,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return response;
+  // Create redirect response
+  const redirectUrl = `${requestUrl.origin}${redirectPath}`;
+  return NextResponse.redirect(redirectUrl);
 }
