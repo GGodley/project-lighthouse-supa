@@ -14,10 +14,41 @@ const corsHeaders = {
 const MAX_THREADS_PER_RUN = 50;
 
 serve(async (req: Request) => {
+  // #region agent log
+  const logData = {method:req.method,url:req.url,headers:Object.fromEntries(req.headers.entries()),timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'};
+  try {
+    await fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ingest-threads/index.ts:16',message:'Edge function request received',data:logData})}).catch(()=>{});
+  } catch {}
+  // #endregion
+
   if (req.method === 'OPTIONS') {
+    // #region agent log
+    try {
+      await fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ingest-threads/index.ts:20',message:'Handling OPTIONS preflight',data:{corsHeaders},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    } catch {}
+    // #endregion
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // #region agent log
+  try {
+    await fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ingest-threads/index.ts:25',message:'Returning 410 Gone response',data:{status:410,hasCorsHeaders:true,corsHeaders},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  } catch {}
+  // #endregion
+
+  // ⚠️ DISABLED: This function has been disabled in favor of the new fetch-gmail-batch + Trigger.dev implementation
+  return new Response(
+    JSON.stringify({ 
+      error: "ingest-threads function is disabled. Please use the new fetch-gmail-batch function with Trigger.dev ingest-threads task instead." 
+    }),
+    {
+      status: 410, // 410 Gone - indicates the resource is no longer available
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    }
+  );
+
+  // Original implementation below (disabled):
+  /*
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   
@@ -672,5 +703,6 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
+  */
 });
 
