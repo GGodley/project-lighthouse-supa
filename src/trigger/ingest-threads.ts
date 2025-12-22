@@ -34,7 +34,14 @@ export const ingestThreadsTask = task({
 
     const supabaseAdmin = createSupabaseClient(
       supabaseUrl,
-      supabaseServiceKey
+      supabaseServiceKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+          detectSessionInUrl: false
+        }
+      }
     );
 
     try {
