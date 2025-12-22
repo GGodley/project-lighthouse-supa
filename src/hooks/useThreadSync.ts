@@ -38,40 +38,39 @@ export function useThreadSync(provider_token: string | null | undefined): UseThr
         throw new Error('No authenticated user found. Please log in.');
       }
 
-      // Get provider_token from session if available (optional - orchestrator will fetch from DB if missing)
-      const currentProviderToken = session?.provider_token || provider_token;
-      
       setSyncStatus('creating_job');
       setSyncDetails('Creating sync job...');
 
-      // Invoke sync-threads-orchestrator function (creates job and initial page queue)
-      // provider_token is optional - orchestrator will fetch from database profile if not provided
-      const { data: invokeData, error: invokeError } = await supabase.functions.invoke('sync-threads-orchestrator', {
-        body: { 
-          provider_token: currentProviderToken || undefined, // Pass undefined if not available, orchestrator will use DB fallback
-          userId: session.user.id
-        }
+      // Use the new sync-emails API route
+      const response = await fetch('/api/sync-emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
 
-      if (invokeError) {
-        throw new Error(`Failed to invoke orchestrator: ${invokeError.message}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `Failed to start sync: ${response.statusText}`);
       }
 
+      const data = await response.json();
+      
       // Extract jobId from response
-      const newJobId = invokeData?.jobId;
+      const newJobId = data?.jobId;
       if (!newJobId) {
-        throw new Error('Orchestrator did not return jobId');
-        }
+        throw new Error('API did not return jobId');
+      }
 
       setJobId(newJobId);
-        setSyncStatus('syncing');
-        setSyncDetails('Sync started successfully');
+      setSyncStatus('syncing');
+      setSyncDetails('Sync started successfully');
     } catch (error) {
       console.error('Error starting sync:', error);
       setSyncStatus('failed');
       setSyncDetails(error instanceof Error ? error.message : 'Failed to start sync');
     }
-  }, [provider_token, supabase]);
+  }, [supabase]);
 
   // Polling logic
   useEffect(() => {
