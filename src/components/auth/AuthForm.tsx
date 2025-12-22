@@ -71,7 +71,8 @@ export default function AuthForm() {
         redirectTo: callbackUrl,
         scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly',
         queryParams: {
-          access_type: 'offline'
+          access_type: 'offline', // Required for Refresh Token
+          prompt: 'consent',      // Required to force Google to issue the token again for existing users
         }
       };
 
