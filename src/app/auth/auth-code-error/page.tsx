@@ -2,9 +2,9 @@
 
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 
-export default function AuthCodeErrorPage() {
+function ErrorContent() {
   const searchParams = useSearchParams()
   const [error, setError] = useState<string | null>(null)
 
@@ -39,6 +39,27 @@ export default function AuthCodeErrorPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function AuthCodeErrorPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-white flex items-center justify-center px-6">
+        <div className="w-full max-w-md">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">Authentication Error</h1>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-red-800">
+                Loading error details...
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    }>
+      <ErrorContent />
+    </Suspense>
   )
 }
 
