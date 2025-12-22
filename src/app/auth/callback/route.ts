@@ -18,41 +18,14 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Handle missing code
   if (!code) {
     return NextResponse.redirect(
       `${requestUrl.origin}/auth/auth-code-error?error=${encodeURIComponent('No authorization code provided')}`
     );
   }
 
-  // Check for returnUrl in query params (preserved from login redirect)
-  const returnUrl = requestUrl.searchParams.get('returnUrl');
-  
-  // Validate returnUrl to prevent open redirects
-  let redirectPath = '/dashboard'; // Default destination
-  
-  if (returnUrl) {
-    try {
-      const decodedUrl = decodeURIComponent(returnUrl);
-      
-      // Validate it's a safe same-origin path
-      if (decodedUrl.startsWith('/') && !decodedUrl.startsWith('//')) {
-        // Ensure it's not an auth page (prevent loops)
-        if (!decodedUrl.startsWith('/login') && !decodedUrl.startsWith('/auth')) {
-          redirectPath = decodedUrl;
-        }
-      }
-    } catch (error) {
-      console.error('Invalid returnUrl:', error);
-      // Fall back to default dashboard
-    }
-  }
-
-  // Get the cookie store from Next.js
   const cookieStore = await cookies();
 
-  // Create Supabase client with proper cookie handling
-  // CRUCIAL: The get method must return cookieStore.get(name)?.value
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -65,9 +38,6 @@ export async function GET(request: NextRequest) {
           try {
             cookieStore.set({ name, value, ...options });
           } catch (error) {
-            // The `set` method was called from a Route Handler.
-            // This can be ignored if you have middleware refreshing
-            // user sessions, or you can handle the error appropriately.
             console.error('Error setting cookie:', error);
           }
         },
@@ -82,19 +52,20 @@ export async function GET(request: NextRequest) {
     }
   );
 
-  // Exchange code for session
-  // This will automatically use the code verifier from cookies
   const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-  
-  // Log the error for debugging if exchange fails
+
   if (exchangeError) {
-    console.error('Auth callback exchange error:', {
+    // 🔍 DEBUGGING: Print ALL cookies to see what the server actually received
+    const allCookies = cookieStore.getAll().map(c => c.name);
+    
+    // Check if we can find ANY verifier-like cookie
+    const verifierCookies = allCookies.filter(name => name.includes('verifier') || name.includes('auth-token'));
+
+    console.error('Auth Exchange Error Debug:', {
       message: exchangeError.message,
-      status: exchangeError.status,
-      code: code ? 'present' : 'missing',
-      // Check if code verifier cookie exists
-      codeVerifierCookie: cookieStore.get('sb-code-verifier')?.value ? 'present' : 'missing',
-      allCookies: cookieStore.getAll().map(c => c.name),
+      receivedCookies: allCookies,
+      verifierCandidates: verifierCookies,
+      envUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ? 'Defined' : 'MISSING', // Check if Env Var exists
     });
     
     return NextResponse.redirect(
@@ -102,58 +73,19 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Verify session was created
-  if (!data.session) {
-    return NextResponse.redirect(
-      `${requestUrl.origin}/auth/auth-code-error?error=${encodeURIComponent('Session not created')}`
-    );
-  }
-
-  // Log session details for debugging
-  console.log('Auth callback: Session created successfully', {
-    hasUser: !!data.user,
-    hasEmail: !!data.user?.email,
-    hasProviderToken: !!data.session.provider_token,
-    providerTokenLength: data.session.provider_token?.length || 0,
-    accessTokenExists: !!data.session.access_token,
-    refreshTokenExists: !!data.session.refresh_token
-  });
-
-  // Create profile if it doesn't exist
-  if (data.user) {
-    try {
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', data.user.id)
-        .maybeSingle();
-      
-      if (!existingProfile) {
-        const provider = data.user.app_metadata?.provider || 'google';
-        const providerId = data.user.app_metadata?.provider_id || 
-                          data.user.user_metadata?.provider_id || 
-                          data.user.email || '';
-        const fullName = data.user.user_metadata?.full_name || 
-                        data.user.user_metadata?.name || 
-                        null;
-        
-        await supabase
-          .from('profiles')
-          .insert({
-            id: data.user.id,
-            email: data.user.email || '',
-            full_name: fullName,
-            provider: provider,
-            provider_id: providerId,
-          });
-      }
-    } catch (profileError) {
-      console.error('Profile creation error:', profileError);
-      // Don't fail auth if profile creation fails
+  const returnUrl = requestUrl.searchParams.get('returnUrl');
+  let redirectPath = '/dashboard';
+  
+  if (returnUrl) {
+    const decodedUrl = decodeURIComponent(returnUrl);
+    if (decodedUrl.startsWith('/') && !decodedUrl.startsWith('//') && !decodedUrl.startsWith('/auth')) {
+      redirectPath = decodedUrl;
     }
   }
 
   // Create redirect response
   const redirectUrl = `${requestUrl.origin}${redirectPath}`;
+  
+  // ⚡ CRITICAL: Use the redirect method that preserves the cookies set by the client
   return NextResponse.redirect(redirectUrl);
 }
