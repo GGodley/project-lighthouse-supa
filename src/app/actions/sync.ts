@@ -1,6 +1,5 @@
 'use server';
 
-import { tasks } from '@trigger.dev/sdk/v3';
 import { createClient } from '@/utils/supabase/server';
 
 /**
@@ -12,7 +11,7 @@ import { createClient } from '@/utils/supabase/server';
  * Uses Supabase best practices - Server Action runs on server with user's session.
  * Trigger.dev handles queue management, so no database tracking needed.
  * 
- * @returns Object with success status and trigger handle
+ * @returns Object with success status
  * @throws Error("Unauthorized") if user not authenticated
  * @throws Error if trigger fails
  */
@@ -28,11 +27,39 @@ export async function startGmailSync() {
     throw new Error('Unauthorized');
   }
 
-  // Trigger Trigger.dev job
-  const handle = await tasks.trigger('ingest-threads', {
-    payload: { userId: user.id },
-  });
+  // Get Trigger.dev API key from environment
+  const triggerApiKey = process.env.TRIGGER_API_KEY;
+  if (!triggerApiKey) {
+    throw new Error('TRIGGER_API_KEY environment variable is not set');
+  }
 
-  return { success: true, handle };
+  // Trigger Trigger.dev job via HTTP API (works in Server Actions)
+  const triggerUrl = 'https://api.trigger.dev/api/v1/tasks/ingest-threads/trigger';
+  const triggerPayload = {
+    payload: { userId: user.id },
+    concurrencyKey: user.id,
+  };
+
+  try {
+    const response = await fetch(triggerUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${triggerApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(triggerPayload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to trigger job: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    return { success: true, handle: result };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    throw new Error(`Failed to start Gmail sync: ${errorMessage}`);
+  }
 }
 
