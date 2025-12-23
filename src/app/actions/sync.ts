@@ -111,11 +111,11 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
               accessToken = refreshedToken;
               
               // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:108',message:'Successfully refreshed access token from Google in server action',data:{hasAccessToken:!!accessToken,accessTokenLength:accessToken.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'C'})}).catch(()=>{});
+              fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:111',message:'Successfully refreshed access token from Google in server action',data:{hasAccessToken:!!refreshedToken,accessTokenLength:refreshedToken.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'C'})}).catch(()=>{});
               // #endregion
               
               // Set the cookie for future requests
-              cookieStore.set('google_access_token', accessToken, {
+              cookieStore.set('google_access_token', refreshedToken, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
                 sameSite: 'lax',
