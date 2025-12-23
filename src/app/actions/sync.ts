@@ -3,7 +3,6 @@
 import { createClient } from '@/utils/supabase/server';
 import { encryptToken } from '@/utils/crypto';
 import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
 
 /**
  * Trigger.dev API response handle type
@@ -26,7 +25,7 @@ interface TriggerDevHandle {
  * @throws Error("Unauthorized") if user not authenticated
  * @throws Error if trigger fails
  */
-export async function startGmailSync(): Promise<{ success: boolean; handle?: TriggerDevHandle; error?: string }> {
+export async function startGmailSync(): Promise<{ success: boolean; handle?: TriggerDevHandle; error?: string; redirectToLogin?: boolean }> {
   // Initialize Supabase client using modern SSR pattern
   const supabase = await createClient();
 
@@ -64,8 +63,8 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
       console.log('🍪 Set Google access token cookie from session (fallback)');
     } else {
       console.error('❌ No access token found in cookie or session');
-      // Redirect to login page when session is expired
-      redirect('/login?error=Session expired. Please log in again.');
+      // Return error that indicates redirect is needed
+      return { success: false, error: 'Session expired. Please log in again.', redirectToLogin: true };
     }
   }
 

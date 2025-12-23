@@ -45,20 +45,32 @@ export function useGmailSync(): UseGmailSyncReturn {
         setError(null);
       } else {
         // Handle session expired or other errors
-        if (result.error === 'Session expired') {
-          setError('Session expired. Please log in again.');
+        if (result.error === 'Session expired. Please log in again.' || result.redirectToLogin) {
+          setError('Session expired. Redirecting to login...');
+          // Redirect to login page
+          window.location.href = '/login?error=Session expired. Please log in again.';
+          return;
         } else {
           setError(result.error || 'Gmail sync job failed to start');
         }
         setJobId(null);
       }
     } catch (err) {
+      console.error('❌ Error triggering Gmail sync:', err);
+      
+      // Handle NEXT_REDIRECT error (shouldn't happen now, but just in case)
+      if (err && typeof err === 'object' && 'digest' in err && String(err.digest).includes('NEXT_REDIRECT')) {
+        // Next.js redirect was called - let it handle the redirect
+        return;
+      }
+      
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred during sync';
-      console.error('❌ Error triggering Gmail sync:', errorMessage, err);
       
       // Show error toast for unauthorized errors
       if (errorMessage.includes('Unauthorized')) {
         setError('Please log in to sync your Gmail.');
+        window.location.href = '/login?error=Please log in to sync your Gmail.';
+        return;
       } else {
         setError(errorMessage);
       }

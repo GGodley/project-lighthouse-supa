@@ -46,8 +46,11 @@ export function useThreadSync(): UseThreadSyncReturn {
         setProgressPercentage(null); // Trigger.dev manages progress
       } else {
         // Handle session expired or other errors
-        if (result.error === 'Session expired') {
-          setSyncDetails('Session expired. Please log in again.');
+        if (result.error === 'Session expired. Please log in again.' || result.redirectToLogin) {
+          setSyncDetails('Session expired. Redirecting to login...');
+          // Redirect to login page
+          window.location.href = '/login?error=Session expired. Please log in again.';
+          return;
         } else {
           setSyncDetails(result.error || 'Gmail sync job failed to start');
         }
@@ -57,11 +60,20 @@ export function useThreadSync(): UseThreadSyncReturn {
       }
     } catch (error) {
       console.error('Error starting sync:', error);
+      
+      // Handle NEXT_REDIRECT error (shouldn't happen now, but just in case)
+      if (error && typeof error === 'object' && 'digest' in error && String(error.digest).includes('NEXT_REDIRECT')) {
+        // Next.js redirect was called - let it handle the redirect
+        return;
+      }
+      
       const errorMessage = error instanceof Error ? error.message : 'Failed to start sync';
       
       // Show appropriate error message
       if (errorMessage.includes('Unauthorized')) {
         setSyncDetails('Please log in to sync your Gmail.');
+        window.location.href = '/login?error=Please log in to sync your Gmail.';
+        return;
       } else {
         setSyncDetails(errorMessage);
       }
