@@ -3,16 +3,17 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { analyzeThreadTask } from "./analyzer";
 
 /**
- * Ingest Threads Job - Orchestrator for Gmail Thread Synchronization
+ * Ingest Threads Job - Orchestrates Gmail sync with pagination
  * 
- * Role: The Orchestrator. Manages the sync loop but delegates fetching to Supabase Edge Function.
- * Uses Secure Relay pattern - no Google auth handling in this job.
+ * Role: Fetches Gmail threads from Supabase Edge Function in a pagination loop,
+ * saves them to the database, and triggers analysis for each batch.
  * 
  * Flow:
- * 1. Claim atomic lock (exit if already syncing)
- * 2. Initialize state from database
- * 3. Loop: Fetch via Edge Function -> Upsert -> Fan-out analysis -> Checkpoint
- * 4. Release lock on completion or error
+ * 1. Claim atomic lock (exit if already processing)
+ * 2. Fetch threads from Edge Function in pagination loop
+ * 3. For each batch: Upsert threads -> Trigger analysis immediately
+ * 4. Continue until no more pages
+ * 5. Release lock on completion or error
  */
 export const ingestThreadsTask = task({
   id: "ingest-threads",
@@ -57,162 +58,115 @@ export const ingestThreadsTask = task({
 
       if (!lockAcquired) {
         console.log(
-          `⏸️  Sync already in progress for user ${userId}. Exiting.`
+          `⏸️  Processing already in progress for user ${userId}. Exiting.`
         );
         return;
       }
 
       console.log(`✅ Lock acquired for user ${userId}`);
 
-      // Step 2: Initialize State
-      const { data: userState, error: stateError } = await supabaseAdmin
-        .from("user_sync_states")
-        .select("next_page_token, last_synced_at")
-        .eq("user_id", userId)
-        .maybeSingle();
+      // Step 2: Fetch threads from Edge Function in pagination loop
+      let pageToken: string | null = null;
+      let totalThreadsFetched = 0;
+      const edgeFunctionUrl = `${supabaseUrl}/functions/v1/fetch-gmail-batch`;
 
-      if (stateError) {
-        throw new Error(`Failed to fetch user state: ${stateError.message}`);
-      }
-
-      let pageToken: string | null = userState?.next_page_token || null;
-      const lastSyncedAt: string | null = userState?.last_synced_at || null;
-
-      console.log(`📊 Initial state - pageToken: ${pageToken ? "exists" : "null"}, lastSyncedAt: ${lastSyncedAt || "null"}`);
-
-      // Step 3: The Fetch Loop
       while (true) {
-        console.log(`🔄 Fetching batch (pageToken: ${pageToken || "initial"})`);
+        console.log(
+          `🔄 Fetching Gmail threads batch (total fetched: ${totalThreadsFetched}, pageToken: ${pageToken || 'none'})`
+        );
 
-        // Secure Fetch: Delegate to Supabase Edge Function via direct HTTP call
-        // Using direct fetch to avoid client-side auth headers that cause 400 errors
-        const functionUrl = `${supabaseUrl}/functions/v1/fetch-gmail-batch`;
-        const fetchResponse = await fetch(functionUrl, {
-          method: "POST",
+        // Fetch batch from Edge Function
+        const fetchResponse = await fetch(edgeFunctionUrl, {
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${supabaseServiceKey}`,
-            "apikey": supabaseServiceKey,
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${supabaseServiceKey}`,
           },
-          body: JSON.stringify({
-            userId,
-            pageToken,
-            lastSyncedAt,
-          }),
+          body: JSON.stringify({ userId, pageToken }),
         });
 
-        // Error Handling: If fetch fails (e.g., token expired), mark as failed and exit
         if (!fetchResponse.ok) {
           const errorText = await fetchResponse.text();
-          let errorMessage = `HTTP ${fetchResponse.status}: ${errorText}`;
-          
-          try {
-            const errorJson = JSON.parse(errorText);
-            errorMessage = errorJson.error || errorMessage;
-          } catch {
-            // If parsing fails, use the text as-is
-          }
-
-          console.error(`❌ Failed to fetch Gmail batch: ${errorMessage}`);
-          
-          // Release lock with failed status
-          await supabaseAdmin.rpc("release_sync_lock", {
-            p_user_id: userId,
-            p_status: "failed",
-            p_next_page_token: null,
-            p_last_synced_at: null,
-          });
-
+          console.error(
+            `❌ Edge Function fetch failed: ${fetchResponse.status} - ${errorText}`
+          );
           throw new Error(
-            `Gmail fetch failed: ${errorMessage}. Sync marked as failed.`
+            `Failed to fetch Gmail threads: ${fetchResponse.status} - ${errorText}`
           );
         }
 
-        const fetchData = await fetchResponse.json();
+        const responseData: {
+          threads: Array<{ id: string; [key: string]: unknown }>;
+          nextPageToken: string | null;
+        } = await fetchResponse.json();
 
-        if (!fetchData) {
-          throw new Error("fetch-gmail-batch returned no data");
-        }
-
-        const threads = fetchData.threads || [];
-        const nextPageToken = fetchData.nextPageToken || null;
+        const threads = responseData.threads || [];
+        const nextPageToken = responseData.nextPageToken || null;
 
         console.log(
-          `📧 Fetched ${threads.length} threads (nextPageToken: ${nextPageToken ? "exists" : "null"})`
+          `📧 Fetched ${threads.length} threads from Gmail API (hasNextPage: ${!!nextPageToken})`
         );
 
-        // If no threads in this batch, break the loop
-        if (threads.length === 0) {
-          console.log("📭 No threads in batch, ending sync");
-          break;
-        }
+        // Handle fetched threads: Upsert and trigger analysis
+        if (threads.length > 0) {
+          // Prepare threads for upsert - store entire thread object in raw_thread_data
+          const threadsToUpsert = threads.map((thread) => ({
+            thread_id: thread.id,
+            user_id: userId,
+            raw_thread_data: thread, // Store entire thread object as JSONB
+          }));
 
-        // Smart Upsert: Call RPC to upsert threads
-        const { data: upsertedThreadIds, error: upsertError } =
-          await supabaseAdmin.rpc("upsert_threads_batch", {
-            p_user_id: userId,
-            p_threads: threads,
-          });
+          // Upsert threads into database
+          const { error: upsertError } = await supabaseAdmin
+            .from('threads')
+            .upsert(threadsToUpsert, {
+              onConflict: 'thread_id',
+              ignoreDuplicates: false,
+            });
 
-        if (upsertError) {
-          throw new Error(
-            `Failed to upsert threads: ${upsertError.message}`
-          );
-        }
-
-        const threadIds = upsertedThreadIds || [];
-        console.log(
-          `✅ Upserted ${threadIds.length} threads (${threads.length - threadIds.length} skipped)`
-        );
-
-        // Fan-Out: Batch trigger analyze-thread jobs
-        if (threadIds.length > 0) {
-          console.log(
-            `🚀 Dispatching ${threadIds.length} analysis jobs in parallel`
-          );
-
-          // Trigger all analysis jobs in parallel using Promise.all
-          // This dispatches all jobs efficiently without awaiting individual results
-          await Promise.all(
-            threadIds.map((threadId: string) =>
-              analyzeThreadTask.trigger({
-                userId,
-                threadId,
-              })
-            )
-          );
-
-          console.log(`✅ Dispatched ${threadIds.length} analysis jobs`);
-        }
-
-        // Checkpoint: Update state with next page token
-        const { error: checkpointError } = await supabaseAdmin.rpc(
-          "release_sync_lock",
-          {
-            p_user_id: userId,
-            p_status: "syncing",
-            p_next_page_token: nextPageToken,
-            p_last_synced_at: null, // Don't update last_synced_at yet
+          if (upsertError) {
+            throw new Error(
+              `Failed to upsert threads: ${upsertError.message}`
+            );
           }
-        );
 
-        if (checkpointError) {
-          throw new Error(
-            `Failed to checkpoint: ${checkpointError.message}`
-          );
+          console.log(`✅ Upserted ${threads.length} threads to database`);
+
+          // IMMEDIATELY trigger analyze-thread for this batch
+          const threadIds = threads.map((t) => t.id);
+          if (threadIds.length > 0) {
+            console.log(
+              `🚀 Dispatching ${threadIds.length} analysis jobs in parallel`
+            );
+
+            // Trigger all analysis jobs in parallel
+            await Promise.all(
+              threadIds.map((threadId: string) =>
+                analyzeThreadTask.trigger({
+                  userId,
+                  threadId,
+                })
+              )
+            );
+
+            console.log(`✅ Dispatched ${threadIds.length} analysis jobs`);
+          }
+
+          totalThreadsFetched += threads.length;
         }
 
-        // Update local pageToken for next iteration
-        pageToken = nextPageToken;
-
-        // Break if no next page token (we've reached the end)
-        if (!nextPageToken) {
-          console.log("🏁 Reached end of pagination, completing sync");
+        // Pagination: Check if there's a next page
+        if (nextPageToken) {
+          pageToken = nextPageToken;
+          // Continue loop to fetch next page
+        } else {
+          // No more pages, break the loop
+          console.log('📭 No more pages to fetch');
           break;
         }
       }
 
-      // Step 4: Cleanup - Release lock with idle status
+      // Step 3: Cleanup - Release lock with idle status
       const { error: cleanupError } = await supabaseAdmin.rpc(
         "release_sync_lock",
         {
@@ -227,7 +181,9 @@ export const ingestThreadsTask = task({
         throw new Error(`Failed to release lock: ${cleanupError.message}`);
       }
 
-      console.log(`✅ Ingest-threads job completed successfully for user ${userId}`);
+      console.log(
+        `✅ Ingest-threads job completed successfully for user ${userId} (fetched: ${totalThreadsFetched} threads)`
+      );
     } catch (error) {
       console.error(
         `❌ Error in ingest-threads job for user ${userId}:`,
