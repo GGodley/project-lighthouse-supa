@@ -67,28 +67,19 @@ export default function AuthForm() {
       const returnUrl = searchParams.get('returnUrl');
       const callbackUrl = getAuthCallbackURL(returnUrl || undefined);
 
-      const options = {
-        redirectTo: callbackUrl,
-        scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly',
-        queryParams: {
-          access_type: 'offline', // Required for Refresh Token
-          prompt: 'consent',      // Required to force Google to issue the token again for existing users
-        }
-      };
-
-      // --- DIAGNOSTIC LOG ---
-      // This will show us the exact blueprint being used for Google OAuth
-      console.log("🔍 GOOGLE OAUTH DIAGNOSTIC - Complete Options Blueprint:");
-      console.log("Provider: google");
-      console.log("Options:", JSON.stringify(options, null, 2));
-      console.log("Full Redirect URL:", options.redirectTo);
-      console.log("Requested Scopes:", options.scopes);
-      console.log("Query Parameters:", options.queryParams);
-      console.log("--- END DIAGNOSTIC ---");
-
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options
+        options: {
+          redirectTo: callbackUrl,
+          // 1. You MUST ask for the Gmail scope
+          scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly',
+          queryParams: {
+            // 2. You MUST ask for offline access
+            access_type: 'offline',
+            // 3. You MUST force the consent screen
+            prompt: 'consent',
+          },
+        },
       })
       
       if (error) {

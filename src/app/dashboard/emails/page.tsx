@@ -83,12 +83,15 @@ export default function EmailsPage() {
           provider: 'google',
           options: {
             redirectTo: getAuthCallbackURL(),
-            scopes: 'https://www.googleapis.com/auth/gmail.readonly',
+            // 1. You MUST ask for the Gmail scope
+            scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly',
             queryParams: {
-              access_type: 'offline', // Required for Refresh Token
-              prompt: 'consent',      // Required to force Google to issue the token again for existing users
-            }
-          }
+              // 2. You MUST ask for offline access
+              access_type: 'offline',
+              // 3. You MUST force the consent screen
+              prompt: 'consent',
+            },
+          },
         })
         return
       }

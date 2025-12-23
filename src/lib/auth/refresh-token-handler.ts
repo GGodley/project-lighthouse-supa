@@ -36,12 +36,15 @@ export async function triggerReAuthWithConsent(
     provider: 'google',
     options: {
       redirectTo: callbackUrl,
-      scopes: scopes,
+      // 1. You MUST ask for the Gmail scope
+      scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly',
       queryParams: {
+        // 2. You MUST ask for offline access
         access_type: 'offline',
-        prompt: 'consent' // Force consent to get refresh token
-      }
-    }
+        // 3. You MUST force the consent screen
+        prompt: 'consent',
+      },
+    },
   })
 
   if (error) {

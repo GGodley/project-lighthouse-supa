@@ -52,14 +52,14 @@ signInBtn.addEventListener('click', async () => {
     await supabaseClient.auth.signInWithOAuth({
         provider: 'google',
         options: {
-            // Force first-party redirect to avoid popup blockers
-            preferRedirect: true,
             redirectTo: getAuthCallbackUrl(),
-            scopes: 'https://www.googleapis.com/auth/gmail.readonly',
-            // Ask Google to show consent and grant offline access
+            // 1. You MUST ask for the Gmail scope
+            scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly',
             queryParams: {
+                // 2. You MUST ask for offline access
+                access_type: 'offline',
+                // 3. You MUST force the consent screen
                 prompt: 'consent',
-                access_type: 'offline'
             },
         },
     });
@@ -149,10 +149,13 @@ syncEmailsBtn.addEventListener('click', async () => {
             provider: 'google',
             options: {
                 redirectTo: getAuthCallbackUrl(),
-                scopes: 'https://www.googleapis.com/auth/gmail.readonly',
+                // 1. You MUST ask for the Gmail scope
+                scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly',
                 queryParams: {
-                    access_type: 'offline', // Required for Refresh Token
-                    prompt: 'consent',      // Required to force Google to issue the token again for existing users
+                    // 2. You MUST ask for offline access
+                    access_type: 'offline',
+                    // 3. You MUST force the consent screen
+                    prompt: 'consent',
                 },
             },
         });
