@@ -31,7 +31,6 @@ const CustomerThreadsPage: React.FC = () => {
   const [archivedCompanies, setArchivedCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [providerToken, setProviderToken] = useState<string | null>(null)
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([])
   const [selectedArchivedCompanies, setSelectedArchivedCompanies] = useState<string[]>([])
   const [isMainTableCollapsed, setIsMainTableCollapsed] = useState(false)
@@ -70,11 +69,8 @@ const CustomerThreadsPage: React.FC = () => {
         return
       }
       
-      // Optionally set provider_token and email if available, but don't block access if missing
+      // Session is valid, continue
       if (mounted) {
-        if (session.provider_token) {
-          setProviderToken(session.provider_token)
-        }
         setIsRedirecting(false)
       }
     }
@@ -92,10 +88,7 @@ const CustomerThreadsPage: React.FC = () => {
         return
       }
       
-      // For valid sessions, optionally update provider_token if available
-      if (session.provider_token) {
-        setProviderToken(session.provider_token)
-      }
+      // Session is valid, continue
       setIsRedirecting(false)
     })
 
@@ -106,7 +99,8 @@ const CustomerThreadsPage: React.FC = () => {
   }, [supabase, router])
 
   // Thread sync hook (used for status display and manual sync button)
-  const { syncStatus, syncDetails, progressPercentage, startSync } = useThreadSync(providerToken)
+  // Reads access token from secure HTTP-only cookie (Cookie Backpack pattern)
+  const { syncStatus, syncDetails, progressPercentage, startSync } = useThreadSync()
 
   // Helper functions
   const statusPillStyles: { [key: string]: string } = {
