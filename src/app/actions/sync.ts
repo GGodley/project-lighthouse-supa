@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/utils/supabase/server';
+import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js';
 import { encryptToken } from '@/utils/crypto';
 import { cookies } from 'next/headers';
 
@@ -47,12 +48,12 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
     userId: user.id,
   });
 
-  // Fallback: If cookie is missing but session has provider_token, use it and set cookie
+  // Fallback: If cookie is missing, try to get token from session or refresh from Google
   if (!accessToken) {
     const { data: { session } } = await supabase.auth.getSession();
     
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:52',message:'Cookie missing - checking session structure',data:{hasSession:!!session,sessionKeys:session?Object.keys(session):[],hasProviderToken:!!session?.provider_token,hasAccessToken:!!session?.access_token,hasRefreshToken:!!session?.refresh_token,userId:user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:52',message:'Cookie missing - checking session structure',data:{hasSession:!!session,sessionKeys:session?Object.keys(session):[],hasProviderToken:!!session?.provider_token,hasAccessToken:!!session?.access_token,hasRefreshToken:!!session?.refresh_token,userId:user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'D'})}).catch(()=>{});
     // #endregion
     
     console.log('🔍 Cookie missing, checking session for provider_token:', {
@@ -67,7 +68,7 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
       accessToken = session.provider_token;
       
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:66',message:'Found provider_token in session - setting cookie',data:{providerTokenLength:accessToken.length,providerTokenPrefix:accessToken.substring(0,10)},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:66',message:'Found provider_token in session - setting cookie',data:{providerTokenLength:accessToken.length,providerTokenPrefix:accessToken.substring(0,10)},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       
       // Set the cookie for future requests
@@ -140,9 +141,94 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
       }
     }
     
+    // If still no access token, try to get refresh token from auth.identities using service role
+    if (!accessToken) {
+      console.log('🔄 No token in session, attempting to get refresh token from auth.identities...');
+      
+      try {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        
+        if (supabaseUrl && supabaseServiceKey) {
+          const supabaseAdmin = createSupabaseAdminClient(
+            supabaseUrl,
+            supabaseServiceKey,
+            { auth: { autoRefreshToken: false, persistSession: false } }
+          );
+          
+          // Get user's identities to find Google refresh token
+          const { data: { user: adminUser }, error: adminError } = await supabaseAdmin.auth.admin.getUserById(user.id);
+          
+          if (!adminError && adminUser) {
+            // Find Google identity
+            const googleIdentity = adminUser.identities?.find(
+              (identity: { provider: string }) => identity.provider === 'google'
+            );
+            
+            if (googleIdentity?.identity_data?.provider_refresh_token) {
+              const refreshToken = googleIdentity.identity_data.provider_refresh_token as string;
+              
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:140',message:'Found refresh token in auth.identities, refreshing from Google',data:{hasRefreshToken:!!refreshToken,refreshTokenLength:refreshToken.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
+              // #endregion
+              
+              // Refresh access token from Google
+              const googleClientId = process.env.GOOGLE_CLIENT_ID;
+              const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+              
+              if (googleClientId && googleClientSecret) {
+                const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                  body: new URLSearchParams({
+                    client_id: googleClientId,
+                    client_secret: googleClientSecret,
+                    refresh_token: refreshToken,
+                    grant_type: 'refresh_token',
+                  }),
+                });
+                
+                if (tokenResponse.ok) {
+                  const tokenData = await tokenResponse.json();
+                  const refreshedToken = tokenData.access_token;
+                  
+                  if (refreshedToken) {
+                    accessToken = refreshedToken;
+                    
+                    // #region agent log
+                    fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:170',message:'Successfully refreshed access token from auth.identities',data:{hasAccessToken:!!refreshedToken,accessTokenLength:refreshedToken.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
+                    // #endregion
+                    
+                    // Set the cookie for future requests
+                    cookieStore.set('google_access_token', refreshedToken, {
+                      httpOnly: true,
+                      secure: process.env.NODE_ENV === 'production',
+                      sameSite: 'lax',
+                      maxAge: 3600, // 1 hour
+                      path: '/',
+                    });
+                    console.log('🍪 Set Google access token cookie from auth.identities refresh');
+                  }
+                } else {
+                  const errorText = await tokenResponse.text();
+                  console.error('❌ Failed to refresh token from auth.identities:', errorText);
+                }
+              }
+            } else {
+              console.warn('⚠️ No Google refresh token found in auth.identities');
+            }
+          } else {
+            console.error('❌ Failed to get user from admin API:', adminError);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error getting refresh token from auth.identities:', error);
+      }
+    }
+    
     if (!accessToken) {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:125',message:'No access token found after all attempts',data:{allCookies:cookieStore.getAll().map(c=>c.name),sessionExists:!!session,sessionUser:session?.user?.id,hasProviderToken:!!session?.provider_token,hasProviderRefreshToken:!!session?.provider_refresh_token},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:195',message:'No access token found after all attempts',data:{allCookies:cookieStore.getAll().map(c=>c.name),sessionExists:!!session,sessionUser:session?.user?.id,hasProviderToken:!!session?.provider_token,hasProviderRefreshToken:!!session?.provider_refresh_token},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       
       console.error('❌ No access token found in cookie or session', {
