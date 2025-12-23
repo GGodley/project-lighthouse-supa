@@ -269,7 +269,7 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
                 provider: id.provider,
                 id: id.id,
               })) || [],
-              allIdentityKeys: adminUser.identities?.map((id: any) => Object.keys(id)) || [],
+              allIdentityKeys: adminUser.identities?.map((id: { provider: string; id: string; [key: string]: unknown }) => Object.keys(id)) || [],
             });
             
             // Find Google identity
