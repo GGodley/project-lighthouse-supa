@@ -75,6 +75,10 @@ export const ingestThreadsTask = task({
           `🔄 Fetching Gmail threads batch (total fetched: ${totalThreadsFetched}, pageToken: ${pageToken || 'none'})`
         );
 
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ingest-threads.ts:79',message:'About to call fetch-gmail-batch edge function',data:{userId,pageToken,edgeFunctionUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+
         // Fetch batch from Edge Function
         const fetchResponse = await fetch(edgeFunctionUrl, {
           method: 'POST',
@@ -85,11 +89,20 @@ export const ingestThreadsTask = task({
           body: JSON.stringify({ userId, pageToken }),
         });
 
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ingest-threads.ts:94',message:'Edge function response received',data:{status:fetchResponse.status,ok:fetchResponse.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+
         if (!fetchResponse.ok) {
           const errorText = await fetchResponse.text();
           console.error(
             `❌ Edge Function fetch failed: ${fetchResponse.status} - ${errorText}`
           );
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ingest-threads.ts:102',message:'Edge function error details',data:{status:fetchResponse.status,errorText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+          
           throw new Error(
             `Failed to fetch Gmail threads: ${fetchResponse.status} - ${errorText}`
           );
