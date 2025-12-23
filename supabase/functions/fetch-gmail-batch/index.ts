@@ -180,90 +180,31 @@ serve(async (req: Request) => {
     }
 
     // #region agent log
-    await fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'fetch-gmail-batch/index.ts:163',message:'No gmail_access_token in profiles, falling back to refresh token method',data:{hasProfile:!!profileData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    await fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'fetch-gmail-batch/index.ts:163',message:'No gmail_access_token in profiles, checking for gmail_refresh_token',data:{hasProfile:!!profileData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion
 
-    // Fallback: Get Refresh Token using Admin API (old method)
-    const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
-
-    if (userError || !userData?.user) {
-      return new Response(
-        JSON.stringify({ error: `User not found: ${userError?.message || 'Unknown error'}` }),
-        {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
-    }
-
-    // Find Google identity
-    const googleIdentity = userData.user.identities?.find(
-      (identity) => identity.provider === 'google'
-    );
-
-    if (!googleIdentity) {
-      return new Response(
-        JSON.stringify({ error: "Google identity not found for user" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
-    }
-
-    // Debug: Log identity data structure to understand what's available
-    console.log("Google identity data keys:", Object.keys(googleIdentity.identity_data || {}));
-    console.log("User app_metadata keys:", Object.keys(userData.user.app_metadata || {}));
-    console.log("User user_metadata keys:", Object.keys(userData.user.user_metadata || {}));
-
-    // Try multiple locations for refresh token
-    let refreshToken: string | undefined = undefined;
-    
-    // Location 1: identity_data.provider_refresh_token (standard location)
-    refreshToken = googleIdentity.identity_data?.provider_refresh_token as string | undefined;
-    
-    // Location 2: Check if it's stored directly in identity_data as "refresh_token"
-    if (!refreshToken) {
-      refreshToken = googleIdentity.identity_data?.refresh_token as string | undefined;
-    }
-    
-    // Location 3: Check user app_metadata
-    if (!refreshToken && userData.user.app_metadata) {
-      refreshToken = userData.user.app_metadata.provider_refresh_token as string | undefined;
-      if (!refreshToken) {
-        refreshToken = userData.user.app_metadata.google_refresh_token as string | undefined;
-      }
-    }
-    
-    // Location 4: Check user user_metadata
-    if (!refreshToken && userData.user.user_metadata) {
-      refreshToken = userData.user.user_metadata.provider_refresh_token as string | undefined;
-      if (!refreshToken) {
-        refreshToken = userData.user.user_metadata.google_refresh_token as string | undefined;
-      }
-    }
+    // Fallback: Check for gmail_refresh_token in profiles table and refresh access token
+    const { data: refreshProfileData, error: refreshProfileError } = await supabaseAdmin
+      .from('profiles')
+      .select('gmail_refresh_token')
+      .eq('id', userId)
+      .maybeSingle();
 
     // #region agent log
-    await fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'fetch-gmail-batch/index.ts:241',message:'Refresh token check result',data:{hasRefreshToken:!!refreshToken,hasIdentity:!!googleIdentity,identityDataKeys:Object.keys(googleIdentity.identity_data || {}),hasAppMetadata:!!userData.user.app_metadata,appMetadataKeys:Object.keys(userData.user.app_metadata || {})},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    await fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'fetch-gmail-batch/index.ts:172',message:'Refresh token check result',data:{hasRefreshToken:!!refreshProfileData?.gmail_refresh_token,hasProfile:!!refreshProfileData,refreshProfileError:refreshProfileError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion
 
-    if (!refreshToken) {
-      // Provide detailed error with available data structure info
+    if (!refreshProfileData?.gmail_refresh_token) {
+      // No access token and no refresh token in profiles - user needs to re-authenticate
       const errorDetails = {
-        error: "Google Refresh Token not found",
-        message: "User needs to sign in with access_type=offline and prompt=consent to obtain a refresh token.",
-        debug: {
-          hasIdentity: !!googleIdentity,
-          identityDataKeys: Object.keys(googleIdentity.identity_data || {}),
-          hasAppMetadata: !!userData.user.app_metadata,
-          appMetadataKeys: Object.keys(userData.user.app_metadata || {}),
-        }
+        error: "Google tokens not found in profiles",
+        message: "User needs to re-authenticate with Google. No gmail_access_token or gmail_refresh_token found in profiles table.",
       };
       
-      console.error("Refresh token not found:", JSON.stringify(errorDetails, null, 2));
+      console.error("Tokens not found in profiles:", errorDetails);
       
       // #region agent log
-      await fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'fetch-gmail-batch/index.ts:256',message:'Returning refresh token error',data:{errorDetails},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      await fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'fetch-gmail-batch/index.ts:183',message:'Returning token not found error',data:{errorDetails},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       
       return new Response(
@@ -275,7 +216,13 @@ serve(async (req: Request) => {
       );
     }
 
+    const refreshToken = refreshProfileData.gmail_refresh_token;
+
     // Step 2: Exchange Refresh Token for Access Token
+    // #region agent log
+    await fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'fetch-gmail-batch/index.ts:203',message:'Refreshing access token using gmail_refresh_token from profiles',data:{hasRefreshToken:!!refreshToken},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: {
@@ -292,6 +239,11 @@ serve(async (req: Request) => {
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
       console.error("Token refresh failed:", errorText);
+      
+      // #region agent log
+      await fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'fetch-gmail-batch/index.ts:220',message:'Token refresh failed',data:{status:tokenResponse.status,errorText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       return new Response(
         JSON.stringify({ error: "Failed to refresh access token" }),
         {
@@ -313,6 +265,16 @@ serve(async (req: Request) => {
         }
       );
     }
+
+    // Update profiles table with the new access token
+    // #region agent log
+    await fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'fetch-gmail-batch/index.ts:240',message:'Updating profiles table with new access token',data:{hasAccessToken:!!accessToken},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
+    await supabaseAdmin
+      .from('profiles')
+      .update({ gmail_access_token: accessToken })
+      .eq('id', userId);
 
     // Step 3: Fetch Gmail Threads
     let gmailUrl = "https://gmail.googleapis.com/gmail/v1/users/me/threads?maxResults=50";
