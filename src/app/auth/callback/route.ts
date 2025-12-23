@@ -199,13 +199,19 @@ export async function GET(request: NextRequest) {
             
             if (tokenResponse.ok) {
               const tokenData = await tokenResponse.json();
-              providerToken = tokenData.access_token;
+              const refreshedToken = tokenData.access_token;
               
-              // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:188',message:'Successfully refreshed access token from Google',data:{hasAccessToken:!!providerToken,accessTokenLength:providerToken?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'C'})}).catch(()=>{});
-              // #endregion
-              
-              console.log('✅ Refreshed access token from Google');
+              if (refreshedToken) {
+                providerToken = refreshedToken;
+                
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:204',message:'Successfully refreshed access token from Google',data:{hasAccessToken:!!refreshedToken,accessTokenLength:refreshedToken.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'C'})}).catch(()=>{});
+                // #endregion
+                
+                console.log('✅ Refreshed access token from Google');
+              } else {
+                console.error('❌ Token refresh response missing access_token');
+              }
             } else {
               const errorText = await tokenResponse.text();
               console.error('❌ Failed to refresh token:', errorText);

@@ -105,21 +105,27 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
           
           if (tokenResponse.ok) {
             const tokenData = await tokenResponse.json();
-            accessToken = tokenData.access_token;
+            const refreshedToken = tokenData.access_token;
             
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:102',message:'Successfully refreshed access token from Google in server action',data:{hasAccessToken:!!accessToken,accessTokenLength:accessToken?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'C'})}).catch(()=>{});
-            // #endregion
-            
-            // Set the cookie for future requests
-            cookieStore.set('google_access_token', accessToken, {
-              httpOnly: true,
-              secure: process.env.NODE_ENV === 'production',
-              sameSite: 'lax',
-              maxAge: 3600, // 1 hour
-              path: '/',
-            });
-            console.log('🍪 Set Google access token cookie from refreshed token');
+            if (refreshedToken) {
+              accessToken = refreshedToken;
+              
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:108',message:'Successfully refreshed access token from Google in server action',data:{hasAccessToken:!!accessToken,accessTokenLength:accessToken.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'C'})}).catch(()=>{});
+              // #endregion
+              
+              // Set the cookie for future requests
+              cookieStore.set('google_access_token', accessToken, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                maxAge: 3600, // 1 hour
+                path: '/',
+              });
+              console.log('🍪 Set Google access token cookie from refreshed token');
+            } else {
+              console.error('❌ Token refresh response missing access_token');
+            }
           } else {
             const errorText = await tokenResponse.text();
             console.error('❌ Failed to refresh token:', errorText);
