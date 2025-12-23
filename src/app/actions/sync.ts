@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server';
 import { encryptToken } from '@/utils/crypto';
+import { cookies } from 'next/headers';
 
 /**
  * Server Action to start Gmail sync via Trigger.dev
@@ -9,15 +10,14 @@ import { encryptToken } from '@/utils/crypto';
  * This action triggers the 'ingest-threads' Trigger.dev job which orchestrates
  * fetching Gmail threads from the Supabase Edge Function with pagination.
  * 
- * Uses Supabase best practices - Server Action runs on server with user's session.
+ * Uses Cookie Backpack pattern - reads access token from secure HTTP-only cookie.
  * Trigger.dev handles queue management, so no database tracking needed.
  * 
- * @param accessToken - The Gmail access token to encrypt and pass to the job
- * @returns Object with success status
+ * @returns Object with success status and optional error message
  * @throws Error("Unauthorized") if user not authenticated
  * @throws Error if trigger fails
  */
-export async function startGmailSync(accessToken: string) {
+export async function startGmailSync(): Promise<{ success: boolean; handle?: any; error?: string }> {
   // Initialize Supabase client using modern SSR pattern
   const supabase = await createClient();
 
@@ -27,6 +27,14 @@ export async function startGmailSync(accessToken: string) {
   // Check authentication
   if (error || !user) {
     throw new Error('Unauthorized');
+  }
+
+  // Retrieve access token from secure cookie (Cookie Backpack pattern)
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get('google_access_token')?.value;
+
+  if (!accessToken) {
+    return { success: false, error: 'Session expired' };
   }
 
   // Encrypt the access token

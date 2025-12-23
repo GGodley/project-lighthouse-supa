@@ -123,6 +123,19 @@ export async function GET(request: NextRequest) {
     console.log('✅ OAuth exchange successful for user:', userId);
     console.log('📝 Note: Refresh token is stored securely in auth.identities by Supabase');
     console.log('🔒 Edge functions will read tokens from auth.identities (not public.profiles)');
+
+    // Save provider_token to secure HTTP-only cookie (Cookie Backpack pattern)
+    const providerToken = data.session.provider_token;
+    if (providerToken) {
+      cookieStore.set('google_access_token', providerToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 3600, // 1 hour
+        path: '/',
+      });
+      console.log('🍪 Saved Google access token to secure cookie');
+    }
   }
 
   const returnUrl = requestUrl.searchParams.get('returnUrl');

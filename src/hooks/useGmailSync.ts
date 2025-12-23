@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from 'react';
 import { startGmailSync } from '@/app/actions/sync';
-import { createClient } from '@/utils/supabase/client';
 
 interface UseGmailSyncReturn {
   triggerSync: () => Promise<void>;
@@ -34,17 +33,8 @@ export function useGmailSync(): UseGmailSyncReturn {
     try {
       console.log('🔄 Triggering Gmail sync via Server Action...');
 
-      // Get the current session and extract the access token
-      const supabase = createClient();
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.provider_token;
-
-      if (!token) {
-        throw new Error('No access token found. Please log in again.');
-      }
-
-      // Trigger Gmail sync via Server Action with the access token
-      const result = await startGmailSync(token);
+      // Trigger Gmail sync via Server Action (reads token from secure cookie)
+      const result = await startGmailSync();
 
       if (result.success) {
         console.log('✅ Gmail sync job triggered successfully', {
@@ -54,7 +44,13 @@ export function useGmailSync(): UseGmailSyncReturn {
         setJobId(result.handle?.id || null);
         setError(null);
       } else {
-        throw new Error('Gmail sync job failed to start');
+        // Handle session expired or other errors
+        if (result.error === 'Session expired') {
+          setError('Session expired. Please log in again.');
+        } else {
+          setError(result.error || 'Gmail sync job failed to start');
+        }
+        setJobId(null);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred during sync';
