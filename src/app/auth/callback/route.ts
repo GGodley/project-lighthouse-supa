@@ -56,8 +56,27 @@ export async function GET(request: NextRequest) {
   const { data: { user: existingUser } } = await supabase.auth.getUser();
   
   if (existingUser) {
-    // User is already authenticated, skip code exchange and redirect
+    // User is already authenticated, skip code exchange but still update tokens if available
     console.log('User already authenticated, skipping code exchange');
+    
+    // Try to get session and update tokens if available
+    const { data: { session: existingSession } } = await supabase.auth.getSession();
+    if (existingSession?.provider_refresh_token || existingSession?.provider_token) {
+      try {
+        await supabase
+          .from('profiles')
+          .update({
+            gmail_refresh_token: existingSession.provider_refresh_token || null,
+            gmail_access_token: existingSession.provider_token || null,
+          })
+          .eq('id', existingUser.id);
+        console.log('✅ Updated tokens for existing user:', existingUser.id);
+      } catch (error) {
+        console.error('Failed to update tokens for existing user:', error);
+        // Don't fail auth flow
+      }
+    }
+    
     const returnUrl = requestUrl.searchParams.get('returnUrl');
     let redirectPath = '/dashboard';
     
@@ -93,6 +112,24 @@ export async function GET(request: NextRequest) {
     const { data: { user: userAfterError } } = await supabase.auth.getUser();
     if (userAfterError) {
       console.log('User authenticated after exchange error, redirecting to dashboard');
+      
+      // Try to update tokens even after error
+      const { data: { session: errorSession } } = await supabase.auth.getSession();
+      if (errorSession?.provider_refresh_token || errorSession?.provider_token) {
+        try {
+          await supabase
+            .from('profiles')
+            .update({
+              gmail_refresh_token: errorSession.provider_refresh_token || null,
+              gmail_access_token: errorSession.provider_token || null,
+            })
+            .eq('id', userAfterError.id);
+          console.log('✅ Updated tokens after error recovery:', userAfterError.id);
+        } catch (error) {
+          console.error('Failed to update tokens after error:', error);
+        }
+      }
+      
       const returnUrl = requestUrl.searchParams.get('returnUrl');
       let redirectPath = '/dashboard';
       
@@ -109,6 +146,46 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(
       `${requestUrl.origin}/auth/auth-code-error?error=${encodeURIComponent(exchangeError.message)}`
     );
+  }
+
+  // ✅ Successfully exchanged code for session - now store refresh token
+  if (data?.session) {
+    const refreshToken = data.session.provider_refresh_token;
+    const accessToken = data.session.provider_token;
+    const userId = data.session.user.id;
+
+    // Store tokens in profiles table if available
+    if (refreshToken || accessToken) {
+      try {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({
+            gmail_refresh_token: refreshToken || null,
+            gmail_access_token: accessToken || null,
+          })
+          .eq('id', userId);
+
+        if (updateError) {
+          console.error('Failed to store refresh token in profiles:', updateError);
+          // Don't fail auth flow - tokens might be stored in Supabase's identity data
+        } else {
+          console.log('✅ Successfully stored tokens for user:', userId, {
+            hasRefreshToken: !!refreshToken,
+            hasAccessToken: !!accessToken,
+          });
+        }
+      } catch (error) {
+        console.error('Error storing tokens in profiles:', error);
+        // Don't fail auth flow - graceful degradation
+      }
+    } else {
+      console.warn('⚠️ No refresh token or access token in session after OAuth exchange');
+      console.warn('Session data:', {
+        hasProviderToken: !!data.session.provider_token,
+        hasProviderRefreshToken: !!data.session.provider_refresh_token,
+        provider: data.session.user.app_metadata?.provider,
+      });
+    }
   }
 
   const returnUrl = requestUrl.searchParams.get('returnUrl');
