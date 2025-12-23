@@ -37,7 +37,7 @@ export async function triggerReAuthWithConsent(
     options: {
       redirectTo: callbackUrl,
       // 1. You MUST ask for the Gmail scope
-      scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly',
+      scopes: scopes,
       queryParams: {
         // 2. You MUST ask for offline access
         access_type: 'offline',

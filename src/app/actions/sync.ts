@@ -5,6 +5,14 @@ import { encryptToken } from '@/utils/crypto';
 import { cookies } from 'next/headers';
 
 /**
+ * Trigger.dev API response handle type
+ */
+interface TriggerDevHandle {
+  id?: string | number;
+  [key: string]: unknown;
+}
+
+/**
  * Server Action to start Gmail sync via Trigger.dev
  * 
  * This action triggers the 'ingest-threads' Trigger.dev job which orchestrates
@@ -17,7 +25,7 @@ import { cookies } from 'next/headers';
  * @throws Error("Unauthorized") if user not authenticated
  * @throws Error if trigger fails
  */
-export async function startGmailSync(): Promise<{ success: boolean; handle?: any; error?: string }> {
+export async function startGmailSync(): Promise<{ success: boolean; handle?: TriggerDevHandle; error?: string }> {
   // Initialize Supabase client using modern SSR pattern
   const supabase = await createClient();
 
