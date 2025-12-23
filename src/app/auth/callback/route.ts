@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -150,9 +151,53 @@ export async function GET(request: NextRequest) {
 
   // ✅ Successfully exchanged code for session - now store refresh token
   if (data?.session) {
-    const refreshToken = data.session.provider_refresh_token;
-    const accessToken = data.session.provider_token;
     const userId = data.session.user.id;
+    let refreshToken = data.session.provider_refresh_token;
+    let accessToken = data.session.provider_token;
+
+    // If refresh token not in session, try to get it from user's identity data using Admin API
+    if (!refreshToken) {
+      try {
+        const supabaseAdmin = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          {
+            auth: {
+              autoRefreshToken: false,
+              persistSession: false,
+            },
+          }
+        );
+
+        const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
+        
+        if (!userError && userData?.user) {
+          // Find Google identity
+          const googleIdentity = userData.user.identities?.find(
+            (identity) => identity.provider === 'google'
+          );
+          
+          // Get refresh token from identity_data
+          const identityRefreshToken = googleIdentity?.identity_data?.provider_refresh_token as string | undefined;
+          
+          if (identityRefreshToken) {
+            refreshToken = identityRefreshToken;
+            console.log('✅ Found refresh token in user identity data');
+          }
+          
+          // Also try to get access token if not in session
+          if (!accessToken) {
+            const identityAccessToken = googleIdentity?.identity_data?.provider_token as string | undefined;
+            if (identityAccessToken) {
+              accessToken = identityAccessToken;
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user identity data:', error);
+        // Continue with what we have from session
+      }
+    }
 
     // Store tokens in profiles table if available
     if (refreshToken || accessToken) {
@@ -172,6 +217,7 @@ export async function GET(request: NextRequest) {
           console.log('✅ Successfully stored tokens for user:', userId, {
             hasRefreshToken: !!refreshToken,
             hasAccessToken: !!accessToken,
+            source: refreshToken ? (data.session.provider_refresh_token ? 'session' : 'identity_data') : 'none',
           });
         }
       } catch (error) {
@@ -179,11 +225,12 @@ export async function GET(request: NextRequest) {
         // Don't fail auth flow - graceful degradation
       }
     } else {
-      console.warn('⚠️ No refresh token or access token in session after OAuth exchange');
+      console.warn('⚠️ No refresh token or access token found after OAuth exchange');
       console.warn('Session data:', {
         hasProviderToken: !!data.session.provider_token,
         hasProviderRefreshToken: !!data.session.provider_refresh_token,
         provider: data.session.user.app_metadata?.provider,
+        userId: userId,
       });
     }
   }
