@@ -265,11 +265,11 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
           
           if (!adminError && adminUser) {
             console.log('🔍 [STAGE 5] User Identities:', {
-              identities: adminUser.identities?.map((id: { provider: string; id: string }) => ({
+              identities: adminUser.identities?.map((id) => ({
                 provider: id.provider,
                 id: id.id,
               })) || [],
-              allIdentityKeys: adminUser.identities?.map((id: { provider: string; id: string; [key: string]: unknown }) => Object.keys(id)) || [],
+              allIdentityKeys: adminUser.identities?.map((id) => Object.keys(id as Record<string, unknown>)) || [],
             });
             
             // Find Google identity
