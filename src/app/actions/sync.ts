@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server';
 import { encryptToken } from '@/utils/crypto';
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 /**
  * Trigger.dev API response handle type
@@ -39,10 +40,33 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
 
   // Retrieve access token from secure cookie (Cookie Backpack pattern)
   const cookieStore = await cookies();
-  const accessToken = cookieStore.get('google_access_token')?.value;
+  let accessToken = cookieStore.get('google_access_token')?.value;
 
+  // Fallback: If cookie is missing but session has provider_token, use it and set cookie
   if (!accessToken) {
-    return { success: false, error: 'Session expired' };
+    const { data: { session } } = await supabase.auth.getSession();
+    console.log('🔍 Cookie missing, checking session for provider_token:', {
+      hasSession: !!session,
+      hasProviderToken: !!session?.provider_token,
+      userId: user.id,
+    });
+    
+    if (session?.provider_token) {
+      accessToken = session.provider_token;
+      // Set the cookie for future requests
+      cookieStore.set('google_access_token', accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 3600, // 1 hour
+        path: '/',
+      });
+      console.log('🍪 Set Google access token cookie from session (fallback)');
+    } else {
+      console.error('❌ No access token found in cookie or session');
+      // Redirect to login page when session is expired
+      redirect('/login?error=Session expired. Please log in again.');
+    }
   }
 
   // Encrypt the access token

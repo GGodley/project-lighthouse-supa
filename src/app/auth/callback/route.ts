@@ -54,11 +54,23 @@ export async function GET(request: NextRequest) {
 
   // Check if user is already authenticated before attempting exchange
   const { data: { user: existingUser } } = await supabase.auth.getUser();
+  const { data: { session: existingSession } } = await supabase.auth.getSession();
   
   if (existingUser) {
     // User is already authenticated, skip code exchange
     console.log('User already authenticated, skipping code exchange');
-    // Note: Tokens are stored securely in auth.identities by Supabase, not in profiles
+    
+    // Still set the cookie if provider_token is available in the session
+    if (existingSession?.provider_token) {
+      cookieStore.set('google_access_token', existingSession.provider_token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 3600, // 1 hour
+        path: '/',
+      });
+      console.log('🍪 Saved Google access token to secure cookie (existing session)');
+    }
     
     const returnUrl = requestUrl.searchParams.get('returnUrl');
     let redirectPath = '/dashboard';
