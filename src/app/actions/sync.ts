@@ -50,6 +50,11 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
   // Fallback: If cookie is missing but session has provider_token, use it and set cookie
   if (!accessToken) {
     const { data: { session } } = await supabase.auth.getSession();
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:52',message:'Cookie missing - checking session structure',data:{hasSession:!!session,sessionKeys:session?Object.keys(session):[],hasProviderToken:!!session?.provider_token,hasAccessToken:!!session?.access_token,hasRefreshToken:!!session?.refresh_token,userId:user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    
     console.log('🔍 Cookie missing, checking session for provider_token:', {
       hasSession: !!session,
       hasProviderToken: !!session?.provider_token,
@@ -60,6 +65,11 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
     
     if (session?.provider_token) {
       accessToken = session.provider_token;
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:66',message:'Found provider_token in session - setting cookie',data:{providerTokenLength:accessToken.length,providerTokenPrefix:accessToken.substring(0,10)},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       // Set the cookie for future requests
       cookieStore.set('google_access_token', accessToken, {
         httpOnly: true,
@@ -69,7 +79,66 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
         path: '/',
       });
       console.log('🍪 Set Google access token cookie from session (fallback)');
-    } else {
+    } else if (session?.provider_refresh_token) {
+      // Try to refresh the access token using the refresh token
+      console.log('🔄 Have refresh token but no access token, fetching from Google...');
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:82',message:'Attempting to refresh access token from Google in server action',data:{hasRefreshToken:!!session.provider_refresh_token,refreshTokenLength:session.provider_refresh_token.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      
+      try {
+        const googleClientId = process.env.GOOGLE_CLIENT_ID;
+        const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+        
+        if (googleClientId && googleClientSecret) {
+          const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              client_id: googleClientId,
+              client_secret: googleClientSecret,
+              refresh_token: session.provider_refresh_token,
+              grant_type: 'refresh_token',
+            }),
+          });
+          
+          if (tokenResponse.ok) {
+            const tokenData = await tokenResponse.json();
+            accessToken = tokenData.access_token;
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:102',message:'Successfully refreshed access token from Google in server action',data:{hasAccessToken:!!accessToken,accessTokenLength:accessToken?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
+            
+            // Set the cookie for future requests
+            cookieStore.set('google_access_token', accessToken, {
+              httpOnly: true,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+              maxAge: 3600, // 1 hour
+              path: '/',
+            });
+            console.log('🍪 Set Google access token cookie from refreshed token');
+          } else {
+            const errorText = await tokenResponse.text();
+            console.error('❌ Failed to refresh token:', errorText);
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:117',message:'Failed to refresh token from Google',data:{status:tokenResponse.status,errorText:errorText.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error refreshing token:', error);
+      }
+    }
+    
+    if (!accessToken) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:125',message:'No access token found after all attempts',data:{allCookies:cookieStore.getAll().map(c=>c.name),sessionExists:!!session,sessionUser:session?.user?.id,hasProviderToken:!!session?.provider_token,hasProviderRefreshToken:!!session?.provider_refresh_token},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       console.error('❌ No access token found in cookie or session', {
         allCookies: cookieStore.getAll().map(c => c.name),
         sessionExists: !!session,
