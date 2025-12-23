@@ -60,18 +60,6 @@ export async function GET(request: NextRequest) {
     // User is already authenticated, skip code exchange
     console.log('User already authenticated, skipping code exchange');
     
-    // Still set the cookie if provider_token is available in the session
-    if (existingSession?.provider_token) {
-      cookieStore.set('google_access_token', existingSession.provider_token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 3600, // 1 hour
-        path: '/',
-      });
-      console.log('🍪 Saved Google access token to secure cookie (existing session)');
-    }
-    
     const returnUrl = requestUrl.searchParams.get('returnUrl');
     let redirectPath = '/dashboard';
     
@@ -82,7 +70,22 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    return NextResponse.redirect(`${requestUrl.origin}${redirectPath}`);
+    // Create redirect response first
+    const response = NextResponse.redirect(`${requestUrl.origin}${redirectPath}`);
+    
+    // Attach cookie directly to the response if provider_token is available
+    if (existingSession?.provider_token) {
+      response.cookies.set('google_access_token', existingSession.provider_token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 3600, // 1 hour
+        path: '/',
+      });
+      console.log('🍪 Saved Google access token to secure cookie (existing session)');
+    }
+    
+    return response;
   }
 
   // User is not authenticated, proceed with code exchange
@@ -105,6 +108,8 @@ export async function GET(request: NextRequest) {
     
     // Check if user became authenticated despite the error (race condition)
     const { data: { user: userAfterError } } = await supabase.auth.getUser();
+    const { data: { session: sessionAfterError } } = await supabase.auth.getSession();
+    
     if (userAfterError) {
       console.log('User authenticated after exchange error, redirecting to dashboard');
       // Note: Tokens are stored securely in auth.identities by Supabase, not in profiles
@@ -119,7 +124,22 @@ export async function GET(request: NextRequest) {
         }
       }
       
-      return NextResponse.redirect(`${requestUrl.origin}${redirectPath}`);
+      // Create redirect response first
+      const response = NextResponse.redirect(`${requestUrl.origin}${redirectPath}`);
+      
+      // Attach cookie directly to response if available
+      if (sessionAfterError?.provider_token) {
+        response.cookies.set('google_access_token', sessionAfterError.provider_token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 3600,
+          path: '/',
+        });
+        console.log('🍪 Saved Google access token to secure cookie (error recovery path)');
+      }
+      
+      return response;
     }
     
     return NextResponse.redirect(
@@ -226,12 +246,29 @@ export async function GET(request: NextRequest) {
       }
     }
     
+    // Determine redirect path
+    const returnUrl = requestUrl.searchParams.get('returnUrl');
+    let redirectPath = '/dashboard';
+    
+    if (returnUrl) {
+      const decodedUrl = decodeURIComponent(returnUrl);
+      if (decodedUrl.startsWith('/') && !decodedUrl.startsWith('//') && !decodedUrl.startsWith('/auth')) {
+        redirectPath = decodedUrl;
+      }
+    }
+
+    // Create redirect response FIRST
+    const redirectUrl = `${requestUrl.origin}${redirectPath}`;
+    const response = NextResponse.redirect(redirectUrl);
+    
+    // Attach cookie DIRECTLY to the response object
+    // This guarantees the 'Set-Cookie' header is sent to the browser
     if (providerToken) {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:163',message:'About to set cookie with providerToken',data:{hasProviderToken:!!providerToken,providerTokenLength:providerToken.length,nodeEnv:process.env.NODE_ENV},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:229',message:'Attaching cookie directly to redirect response',data:{hasProviderToken:!!providerToken,providerTokenLength:providerToken.length,nodeEnv:process.env.NODE_ENV},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'B'})}).catch(()=>{});
       // #endregion
       
-      cookieStore.set('google_access_token', providerToken, {
+      response.cookies.set('google_access_token', providerToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
@@ -239,20 +276,23 @@ export async function GET(request: NextRequest) {
         path: '/',
       });
       
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:171',message:'Cookie set called - verifying cookie exists',data:{cookieExists:!!cookieStore.get('google_access_token'),cookieValue:cookieStore.get('google_access_token')?.value?.substring(0,10)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
-      
-      console.log('🍪 Saved Google access token to secure cookie');
+      console.log('✅ Google Token attached to Redirect Response');
     } else {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:174',message:'Provider token not available - cannot set cookie',data:{sessionExists:!!data.session,sessionKeys:data.session?Object.keys(data.session):[]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:244',message:'Provider token not available - cannot set cookie',data:{sessionExists:!!data.session,sessionKeys:data.session?Object.keys(data.session):[]},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       
       console.error('❌ Could not set cookie: provider_token not available');
     }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:253',message:'Final redirect response - cookies in response',data:{responseCookieNames:Array.from(response.cookies.getAll().map(c=>c.name)),hasGoogleTokenCookie:response.cookies.has('google_access_token')},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+    
+    return response;
   }
 
+  // Fallback redirect if no session data
   const returnUrl = requestUrl.searchParams.get('returnUrl');
   let redirectPath = '/dashboard';
   
@@ -263,38 +303,5 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Create redirect response
-  const redirectUrl = `${requestUrl.origin}${redirectPath}`;
-  
-  // Create redirect response and ensure cookies are included
-  const response = NextResponse.redirect(redirectUrl);
-  
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:188',message:'Before redirect - checking cookies in cookieStore',data:{allCookieNames:cookieStore.getAll().map(c=>c.name),hasGoogleTokenCookie:!!cookieStore.get('google_access_token')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
-  
-  // Ensure any cookies we set are included in the response
-  // The cookieStore.set() calls above should have already set them, but we verify here
-  const allCookies = cookieStore.getAll();
-  allCookies.forEach(cookie => {
-    if (cookie.name === 'google_access_token') {
-      response.cookies.set(cookie.name, cookie.value, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 3600,
-        path: '/',
-      });
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:200',message:'Setting cookie in redirect response',data:{cookieName:cookie.name,cookieValueLength:cookie.value.length,nodeEnv:process.env.NODE_ENV},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
-    }
-  });
-  
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:207',message:'Final redirect response - cookies in response',data:{responseCookieNames:Array.from(response.cookies.getAll().map(c=>c.name))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
-  
-  return response;
+  return NextResponse.redirect(`${requestUrl.origin}${redirectPath}`);
 }
