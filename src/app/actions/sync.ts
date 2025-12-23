@@ -40,6 +40,12 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
   // Retrieve access token from secure cookie (Cookie Backpack pattern)
   const cookieStore = await cookies();
   let accessToken = cookieStore.get('google_access_token')?.value;
+  
+  console.log('🔍 Token check:', {
+    hasCookie: !!accessToken,
+    cookieLength: accessToken?.length,
+    userId: user.id,
+  });
 
   // Fallback: If cookie is missing but session has provider_token, use it and set cookie
   if (!accessToken) {
@@ -47,6 +53,8 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
     console.log('🔍 Cookie missing, checking session for provider_token:', {
       hasSession: !!session,
       hasProviderToken: !!session?.provider_token,
+      providerTokenLength: session?.provider_token?.length,
+      sessionKeys: session ? Object.keys(session) : [],
       userId: user.id,
     });
     
@@ -62,7 +70,11 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
       });
       console.log('🍪 Set Google access token cookie from session (fallback)');
     } else {
-      console.error('❌ No access token found in cookie or session');
+      console.error('❌ No access token found in cookie or session', {
+        allCookies: cookieStore.getAll().map(c => c.name),
+        sessionExists: !!session,
+        sessionUser: session?.user?.id,
+      });
       // Return error that indicates redirect is needed
       return { success: false, error: 'Session expired. Please log in again.', redirectToLogin: true };
     }

@@ -137,7 +137,29 @@ export async function GET(request: NextRequest) {
     console.log('🔒 Edge functions will read tokens from auth.identities (not public.profiles)');
 
     // Save provider_token to secure HTTP-only cookie (Cookie Backpack pattern)
-    const providerToken = data.session.provider_token;
+    let providerToken = data.session.provider_token;
+    
+    // Debug logging
+    console.log('🔍 Session token check:', {
+      hasProviderToken: !!providerToken,
+      hasAccessToken: !!data.session.access_token,
+      sessionKeys: Object.keys(data.session),
+    });
+    
+    // If provider_token is not in session, try to get it from a fresh session check
+    if (!providerToken) {
+      console.log('⚠️ provider_token not in exchange session, checking fresh session...');
+      // Get a fresh session - sometimes provider_token appears after a moment
+      const { data: { session: freshSession } } = await supabase.auth.getSession();
+      if (freshSession?.provider_token) {
+        providerToken = freshSession.provider_token;
+        console.log('✅ Found provider_token in fresh session');
+      } else {
+        console.warn('⚠️ provider_token not found in session. This may indicate the token needs to be refreshed.');
+        console.warn('⚠️ The user may need to use the sync button which will trigger a token refresh.');
+      }
+    }
+    
     if (providerToken) {
       cookieStore.set('google_access_token', providerToken, {
         httpOnly: true,
@@ -147,6 +169,8 @@ export async function GET(request: NextRequest) {
         path: '/',
       });
       console.log('🍪 Saved Google access token to secure cookie');
+    } else {
+      console.error('❌ Could not set cookie: provider_token not available');
     }
   }
 
@@ -163,6 +187,23 @@ export async function GET(request: NextRequest) {
   // Create redirect response
   const redirectUrl = `${requestUrl.origin}${redirectPath}`;
   
-  // ⚡ CRITICAL: Use the redirect method that preserves the cookies set by the client
-  return NextResponse.redirect(redirectUrl);
+  // Create redirect response and ensure cookies are included
+  const response = NextResponse.redirect(redirectUrl);
+  
+  // Ensure any cookies we set are included in the response
+  // The cookieStore.set() calls above should have already set them, but we verify here
+  const allCookies = cookieStore.getAll();
+  allCookies.forEach(cookie => {
+    if (cookie.name === 'google_access_token') {
+      response.cookies.set(cookie.name, cookie.value, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 3600,
+        path: '/',
+      });
+    }
+  });
+  
+  return response;
 }
