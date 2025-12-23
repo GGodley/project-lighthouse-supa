@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { startGmailSync } from '@/app/actions/sync';
+import { createClient } from '@/utils/supabase/client';
 
 interface UseGmailSyncReturn {
   triggerSync: () => Promise<void>;
@@ -33,9 +34,17 @@ export function useGmailSync(): UseGmailSyncReturn {
     try {
       console.log('🔄 Triggering Gmail sync via Server Action...');
 
-      // Trigger Gmail sync via Server Action
-      // Server Action handles authentication internally using modern Supabase SSR pattern
-      const result = await startGmailSync();
+      // Get the current session and extract the access token
+      const supabase = createClient();
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.provider_token;
+
+      if (!token) {
+        throw new Error('No access token found. Please log in again.');
+      }
+
+      // Trigger Gmail sync via Server Action with the access token
+      const result = await startGmailSync(token);
 
       if (result.success) {
         console.log('✅ Gmail sync job triggered successfully', {

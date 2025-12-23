@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/utils/supabase/server';
+import { encryptToken } from '@/utils/crypto';
 
 /**
  * Server Action to start Gmail sync via Trigger.dev
@@ -11,11 +12,12 @@ import { createClient } from '@/utils/supabase/server';
  * Uses Supabase best practices - Server Action runs on server with user's session.
  * Trigger.dev handles queue management, so no database tracking needed.
  * 
+ * @param accessToken - The Gmail access token to encrypt and pass to the job
  * @returns Object with success status
  * @throws Error("Unauthorized") if user not authenticated
  * @throws Error if trigger fails
  */
-export async function startGmailSync() {
+export async function startGmailSync(accessToken: string) {
   // Initialize Supabase client using modern SSR pattern
   const supabase = await createClient();
 
@@ -27,6 +29,9 @@ export async function startGmailSync() {
     throw new Error('Unauthorized');
   }
 
+  // Encrypt the access token
+  const encryptedToken = await encryptToken(accessToken);
+
   // Get Trigger.dev API key from environment
   const triggerApiKey = process.env.TRIGGER_API_KEY;
   if (!triggerApiKey) {
@@ -36,7 +41,10 @@ export async function startGmailSync() {
   // Trigger Trigger.dev job via HTTP API (works in Server Actions)
   const triggerUrl = 'https://api.trigger.dev/api/v1/tasks/ingest-threads/trigger';
   const triggerPayload = {
-    payload: { userId: user.id },
+    payload: {
+      userId: user.id,
+      encryptedAccessToken: encryptedToken,
+    },
     concurrencyKey: user.id,
   };
 

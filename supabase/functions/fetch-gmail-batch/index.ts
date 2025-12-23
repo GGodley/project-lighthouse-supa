@@ -1,6 +1,5 @@
-// Secure proxy to fetch Gmail threads without exposing credentials
-// PRODUCTION-READY: Reads tokens from secure vault (auth.identities) via Admin API
-// Does NOT store tokens in public.profiles to avoid RLS security risks
+// Secure proxy to fetch Gmail threads using encrypted access tokens
+// Receives encrypted access tokens from Trigger.dev and decrypts them for Gmail API calls
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -11,15 +10,96 @@ const corsHeaders = {
 };
 
 interface RequestBody {
-  userId?: string; // Required when using service role key (Trigger.dev), optional when using user session token (SSR)
+  userId: string;
+  encryptedAccessToken: string;
   pageToken?: string;
   lastSyncedAt?: string;
 }
 
-interface GoogleTokenResponse {
-  access_token: string;
-  expires_in?: number;
-  token_type?: string;
+/**
+ * Derives a 32-byte encryption key from the SUPABASE_SERVICE_ROLE_KEY using SHA-256.
+ * This provides a deterministic, secure key for AES-GCM encryption/decryption.
+ */
+async function deriveKey(): Promise<CryptoKey> {
+  const secret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!secret) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is not set');
+  }
+
+  // Hash the secret with SHA-256 to get a 32-byte key
+  const encoder = new TextEncoder();
+  const secretBytes = encoder.encode(secret);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', secretBytes);
+
+  // Import the hashed key as a CryptoKey for AES-GCM
+  return crypto.subtle.importKey(
+    'raw',
+    hashBuffer,
+    { name: 'AES-GCM' },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+/**
+ * Converts a hex string to an ArrayBuffer.
+ */
+function hexToArrayBuffer(hex: string): ArrayBuffer {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes.buffer;
+}
+
+/**
+ * Decrypts a token that was encrypted using AES-GCM encryption.
+ * Matches the logic from src/utils/crypto.ts but uses Deno-compatible syntax.
+ * 
+ * @param text - The encrypted text in format "iv:encryptedText" (hex-encoded)
+ * @returns The decrypted string
+ * @throws Error if SUPABASE_SERVICE_ROLE_KEY is not set, input format is invalid, or decryption fails
+ */
+async function decryptToken(text: string): Promise<string> {
+  try {
+    // Parse the input to extract IV and encrypted data
+    const parts = text.split(':');
+    if (parts.length !== 2) {
+      throw new Error('Invalid encrypted format: expected "iv:encryptedText"');
+    }
+    
+    const [ivHex, encryptedHex] = parts;
+    
+    // Convert hex strings back to ArrayBuffers
+    const iv = hexToArrayBuffer(ivHex);
+    const encrypted = hexToArrayBuffer(encryptedHex);
+    
+    // Validate IV length (should be 12 bytes = 24 hex characters)
+    if (iv.byteLength !== 12) {
+      throw new Error('Invalid IV length: expected 12 bytes');
+    }
+    
+    const key = await deriveKey();
+    
+    // Decrypt the data
+    const decrypted = await crypto.subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: new Uint8Array(iv),
+      },
+      key,
+      encrypted
+    );
+    
+    // Convert decrypted data back to string
+    const decoder = new TextDecoder();
+    return decoder.decode(decrypted);
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`Decryption failed: ${error.message}`);
+    }
+    throw new Error('Decryption failed: Unknown error');
+  }
 }
 
 interface GmailThreadsResponse {
@@ -37,11 +117,8 @@ serve(async (req: Request) => {
     // Validate environment variables
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    const googleClientId = Deno.env.get("GOOGLE_CLIENT_ID");
-    const googleClientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
 
-    if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
+    if (!supabaseUrl || !supabaseServiceKey) {
       return new Response(
         JSON.stringify({ error: "Missing Supabase environment variables" }),
         {
@@ -51,27 +128,7 @@ serve(async (req: Request) => {
       );
     }
 
-    if (!googleClientId || !googleClientSecret) {
-      return new Response(
-        JSON.stringify({ error: "Missing Google OAuth environment variables" }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
-    }
-
-    // Initialize Supabase clients
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
-    });
-    
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
-    });
-
-    // 1. Get the User ID from the Authorization Header (SSR Pattern)
-    // Support both: user session token (SSR) or service role key + userId in body (Trigger.dev)
+    // Validate Authorization header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(
@@ -84,34 +141,7 @@ serve(async (req: Request) => {
     }
 
     const token = authHeader.replace('Bearer ', '');
-    let userId: string;
-    let pageToken: string | undefined;
-    let lastSyncedAt: string | undefined;
-
-    // Parse request body first (can only be read once)
-    const body = await req.json();
-    pageToken = body.pageToken;
-    lastSyncedAt = body.lastSyncedAt;
-
-    // Try to get user from session token (SSR pattern)
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-
-    if (user && !userError) {
-      // User session token provided - use SSR pattern
-      userId = user.id;
-    } else if (token === supabaseServiceKey) {
-      // Service role key provided - get userId from body (for Trigger.dev)
-      if (!body.userId) {
-        return new Response(
-          JSON.stringify({ error: "Missing userId in request body when using service role key" }),
-          {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" }
-          }
-        );
-      }
-      userId = body.userId;
-    } else {
+    if (token !== supabaseServiceKey) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         {
@@ -121,29 +151,13 @@ serve(async (req: Request) => {
       );
     }
 
-    // 2. SECURELY fetch the token from the system table (auth.identities)
-    // Note: We use the 'supabaseAdmin' client (service_role) for this,
-    // because normal users cannot read the auth.identities table.
-    const { data: userData, error: identityError } = await supabaseAdmin.auth.admin.getUserById(userId);
-    
-    if (identityError || !userData?.user) {
-      return new Response(
-        JSON.stringify({ error: "User not found" }),
-        {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
-    }
+    // Parse request body
+    const body: RequestBody = await req.json();
+    const { userId, encryptedAccessToken, pageToken, lastSyncedAt } = body;
 
-    // Find Google identity
-    const googleIdentity = userData.user.identities?.find(
-      (identity) => identity.provider === 'google'
-    );
-
-    if (!googleIdentity) {
+    if (!userId || !encryptedAccessToken) {
       return new Response(
-        JSON.stringify({ error: "Google identity not found. Please connect your Google account." }),
+        JSON.stringify({ error: "Missing userId or encryptedAccessToken in request body" }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -151,54 +165,16 @@ serve(async (req: Request) => {
       );
     }
 
-    // Get refresh token from identity_data (secure vault)
-    const refreshToken = googleIdentity.identity_data?.provider_refresh_token as string | undefined;
-
-    if (!refreshToken) {
+    // Decrypt the access token
+    let accessToken: string;
+    try {
+      accessToken = await decryptToken(encryptedAccessToken);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return new Response(
-        JSON.stringify({ error: "Google Refresh Token not found. Please reconnect Gmail." }),
+        JSON.stringify({ error: `Failed to decrypt access token: ${errorMessage}` }),
         {
           status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
-    }
-
-    // 3. Use the refreshToken to get a fresh access token from Google
-    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        client_id: googleClientId,
-        client_secret: googleClientSecret,
-        refresh_token: refreshToken,
-        grant_type: "refresh_token",
-      }),
-    });
-
-    if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      console.error("Token refresh failed:", errorText);
-      
-      return new Response(
-        JSON.stringify({ error: "Failed to refresh access token. Please reconnect Gmail." }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
-    }
-
-    const tokenData: GoogleTokenResponse = await tokenResponse.json();
-    const accessToken = tokenData.access_token;
-
-    if (!accessToken) {
-      return new Response(
-        JSON.stringify({ error: "No access token in refresh response" }),
-        {
-          status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         }
       );

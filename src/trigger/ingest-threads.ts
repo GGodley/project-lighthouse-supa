@@ -17,8 +17,8 @@ import { analyzeThreadTask } from "./analyzer";
  */
 export const ingestThreadsTask = task({
   id: "ingest-threads",
-  run: async (payload: { userId: string }) => {
-    const { userId } = payload;
+  run: async (payload: { userId: string; encryptedAccessToken: string }) => {
+    const { userId, encryptedAccessToken } = payload;
 
     console.log(`🔄 Starting ingest-threads job for user: ${userId}`);
 
@@ -86,7 +86,7 @@ export const ingestThreadsTask = task({
             'Content-Type': 'application/json',
             Authorization: `Bearer ${supabaseServiceKey}`,
           },
-          body: JSON.stringify({ userId, pageToken }),
+          body: JSON.stringify({ userId, encryptedAccessToken, pageToken }),
         });
 
         // #region agent log
