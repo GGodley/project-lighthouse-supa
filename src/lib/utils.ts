@@ -36,10 +36,16 @@ export const getURL = () => {
 
 /**
  * Gets the OAuth callback URL
+ * In production, always uses NEXT_PUBLIC_SITE_URL to ensure OAuth redirects to production domain
  * Ensures proper path construction without double slashes
  */
 export const getAuthCallbackURL = (returnUrl?: string): string => {
-  const baseUrl = getURL()
+  // In production, always use the canonical production URL to avoid preview deployment issues
+  // This ensures OAuth always redirects back to production, not preview deployments
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL 
+    ? process.env.NEXT_PUBLIC_SITE_URL.replace(/\/+$/, '') // Remove trailing slashes
+    : getURL(); // Fallback to getURL() for local development
+  
   const callbackPath = '/auth/callback'
   
   if (returnUrl) {

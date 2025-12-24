@@ -30,7 +30,9 @@ export async function triggerReAuthWithConsent(
   returnUrl?: string,
   scopes: string = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly'
 ): Promise<void> {
-  const callbackUrl = getAuthCallbackURL(returnUrl)
+  let callbackUrl = getAuthCallbackURL(returnUrl);
+  // Always include reconnect flag for re-auth
+  callbackUrl += (callbackUrl.includes('?') ? '&' : '?') + 'reconnect=google';
 
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
@@ -39,8 +41,8 @@ export async function triggerReAuthWithConsent(
       // 1. You MUST ask for the Gmail scope
       scopes: scopes,
       queryParams: {
-        // 2. You MUST ask for offline access
-        access_type: 'offline',
+        // Changed from 'offline' (not using refresh tokens)
+        access_type: 'online',
         // 3. You MUST force the consent screen
         prompt: 'consent',
       },

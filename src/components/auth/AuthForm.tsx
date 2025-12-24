@@ -65,7 +65,13 @@ export default function AuthForm() {
     try {
       // Preserve returnUrl through OAuth flow
       const returnUrl = searchParams.get('returnUrl');
-      const callbackUrl = getAuthCallbackURL(returnUrl || undefined);
+      const reconnect = searchParams.get('reconnect') === 'google';
+      
+      // Build callback URL with reconnect flag if present
+      let callbackUrl = getAuthCallbackURL(returnUrl || undefined);
+      if (reconnect) {
+        callbackUrl += (callbackUrl.includes('?') ? '&' : '?') + 'reconnect=google';
+      }
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -74,8 +80,8 @@ export default function AuthForm() {
           // 1. You MUST ask for the Gmail scope
           scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly',
           queryParams: {
-            // 2. You MUST ask for offline access
-            access_type: 'offline',
+            // Changed from 'offline' (not using refresh tokens)
+            access_type: 'online',
             // 3. You MUST force the consent screen
             prompt: 'consent',
           },
