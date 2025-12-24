@@ -98,9 +98,9 @@ export const ingestThreadsTask = task({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${supabaseAnonKey}`,
             'apikey': supabaseAnonKey,
-            'X-Broker-Secret': brokerSecret,
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+            'x-broker-secret': brokerSecret,
           },
           body: JSON.stringify({ userId, pageToken }),
         });
