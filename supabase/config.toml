@@ -434,3 +434,13 @@ entrypoint = "./functions/confirm-cleanup/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/update-company-sentiment/index.ts"
+
+[functions.fetch-gmail-thread]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/fetch-gmail-thread/index.ts"
+
+[functions.fetch-gmail-batch]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/fetch-gmail-batch/index.ts"
