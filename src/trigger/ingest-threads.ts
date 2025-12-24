@@ -87,6 +87,10 @@ export const ingestThreadsTask = task({
           throw new Error('BROKER_SHARED_SECRET environment variable is not set');
         }
 
+        if (!supabaseAnonKey) {
+          throw new Error('SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable is not set');
+        }
+
         // Log broker secret being sent (safe - only first 6 chars)
         console.log("[BROKER] sending X-Broker-Secret header:", `${brokerSecret.slice(0, 6)}...`);
 
@@ -94,7 +98,8 @@ export const ingestThreadsTask = task({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'apikey': supabaseAnonKey || '',
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+            'apikey': supabaseAnonKey,
             'X-Broker-Secret': brokerSecret,
           },
           body: JSON.stringify({ userId, pageToken }),
