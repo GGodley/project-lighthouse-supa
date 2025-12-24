@@ -1,7 +1,7 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { SyncStatus, validateStatusTransition } from '@/lib/types/sync';
+import { SyncStatus } from '@/lib/types/sync';
 
 /**
  * API route to trigger Gmail sync

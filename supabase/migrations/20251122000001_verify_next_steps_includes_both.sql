@@ -21,7 +21,7 @@ BEGIN
       SELECT COALESCE(
         json_agg(
           json_build_object(
-            'id', fr.id,
+            'id', fr.feature_id,
             'title', f.title,
             'description', fr.request_details,
             'urgency', fr.urgency,
@@ -59,18 +59,26 @@ BEGIN
       ), '[]'::json)
       FROM (
         -- Thread-based email interactions (new system)
+        -- FIXED: Safe JSON parsing for llm_summary (TEXT column with potentially invalid JSON)
         SELECT 
           'email'::text as interaction_type,
           t.last_message_date as interaction_date,
           t.thread_id as id,
           COALESCE(t.subject, 'No Subject') as title,
-          COALESCE(
-            t.llm_summary->>'problem_statement',
-            t.llm_summary->>'timeline_summary',
-            t.snippet,
-            'No summary available.'
-          ) as summary,
-          COALESCE(t.llm_summary->>'customer_sentiment', 'Neutral') as sentiment
+          -- Safe extraction for Summary
+          CASE 
+            WHEN t.llm_summary IS NOT NULL AND t.llm_summary ~ '^\s*\{.*\}\s*$' THEN 
+              COALESCE((t.llm_summary::jsonb)->>'problem_statement', (t.llm_summary::jsonb)->>'timeline_summary', t.snippet, 'No summary available.')
+            ELSE 
+              -- If it's not JSON, return the raw text (if meaningful) or a fallback
+              COALESCE(t.snippet, 'No summary available.')
+          END as summary,
+          -- Safe extraction for Sentiment
+          CASE 
+            WHEN t.llm_summary IS NOT NULL AND t.llm_summary ~ '^\s*\{.*\}\s*$' THEN 
+              COALESCE((t.llm_summary::jsonb)->>'customer_sentiment', 'Neutral')
+            ELSE 'Neutral'
+          END as sentiment
         FROM threads t
         JOIN thread_company_link tcl ON t.thread_id = tcl.thread_id
         WHERE tcl.company_id = company_id_param

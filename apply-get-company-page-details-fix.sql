@@ -2,6 +2,8 @@
 -- This migration updates the function to:
 -- - Return 'status' field with enum values ('todo', 'in_progress', 'done') instead of 'completed' boolean
 -- - Fix the status comparison to use 'done' instead of 'completed'
+-- - Use correct column names: step_id, description, thread_id, meeting_id
+-- - Handle both thread-linked and meeting-linked next steps
 
 DROP FUNCTION IF EXISTS get_company_page_details(uuid);
 

@@ -82,3 +82,5 @@ COMMENT ON POLICY "Users can delete their own meetings" ON public.meetings IS
 COMMENT ON POLICY "Service role can manage all meetings" ON public.meetings IS 
   'Allows service role (edge functions) to manage all meetings for system operations';
 
+
+

@@ -324,6 +324,19 @@ export const hydrateThreadTask = task({
         throw new Error("SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable is not set");
       }
 
+      // Debug logging before edge function call
+      console.log(`[DEBUG] About to call edge function:`, {
+        edgeFunctionUrl,
+        threadId,
+        userId,
+        threadIdType: typeof threadId,
+        threadIdValue: threadId,
+        threadIdLength: threadId?.length,
+      });
+
+      const requestBody = { userId, threadId, format: "full" };
+      console.log(`[DEBUG] Request body:`, JSON.stringify(requestBody));
+
       const fetchResponse = await fetch(edgeFunctionUrl, {
         method: "POST",
         headers: {
@@ -332,7 +345,14 @@ export const hydrateThreadTask = task({
           Authorization: `Bearer ${supabaseAnonKey}`,
           "x-broker-secret": brokerSecret,
         },
-        body: JSON.stringify({ userId, threadId, format: "full" }),
+        body: JSON.stringify(requestBody),
+      });
+
+      // Debug logging after edge function call
+      console.log(`[DEBUG] Edge function response:`, {
+        status: fetchResponse.status,
+        statusText: fetchResponse.statusText,
+        ok: fetchResponse.ok,
       });
 
       if (!fetchResponse.ok) {

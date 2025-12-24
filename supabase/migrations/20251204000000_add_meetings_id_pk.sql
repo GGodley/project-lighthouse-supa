@@ -28,3 +28,5 @@ WHERE google_event_id IS NOT NULL;
 --   (e.g. transcription_jobs.meeting_id -> meetings.google_event_id) remain unchanged.
 
 
+
+

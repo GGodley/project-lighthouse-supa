@@ -152,3 +152,5 @@ The resolver includes comprehensive error handling:
 - Domain matching links customers to companies automatically
 - The unique constraint on `(thread_id, customer_id)` prevents duplicate participants
 
+
+

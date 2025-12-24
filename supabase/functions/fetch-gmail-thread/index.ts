@@ -141,8 +141,22 @@ serve(async (req: Request) => {
 
     const accessToken = tokenData.access_token;
 
+    // URL encode threadId to handle any special characters
+    const encodedThreadId = encodeURIComponent(threadId);
+    
     // Fetch Gmail Thread with full format
-    const gmailUrl = `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=${format}`;
+    const gmailUrl = `https://gmail.googleapis.com/gmail/v1/users/me/threads/${encodedThreadId}?format=${format}`;
+
+    // Debug logging
+    console.log(`[DEBUG] Fetching Gmail thread:`, {
+      userId,
+      threadId,
+      encodedThreadId,
+      threadIdType: typeof threadId,
+      threadIdLength: threadId?.length,
+      format,
+      url: gmailUrl,
+    });
 
     const gmailResponse = await fetch(gmailUrl, {
       headers: {
@@ -152,7 +166,14 @@ serve(async (req: Request) => {
 
     if (!gmailResponse.ok) {
       const errorText = await gmailResponse.text();
-      console.error("Gmail API error: [REDACTED]");
+      console.error("Gmail API error:", {
+        status: gmailResponse.status,
+        statusText: gmailResponse.statusText,
+        threadId,
+        userId,
+        errorPreview: errorText.substring(0, 500),
+        url: gmailUrl,
+      });
       
       if (gmailResponse.status === 401) {
         const res = new Response(

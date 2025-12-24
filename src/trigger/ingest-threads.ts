@@ -253,6 +253,16 @@ export const ingestThreadsTask = task({
             await Promise.all(
               threads.map((thread: { id: string; historyId?: string; history_id?: string }) => {
                 const incomingHistoryId = thread.historyId ?? thread.history_id ?? "";
+                
+                // Debug logging
+                console.log(`[DEBUG] Triggering hydration for thread:`, {
+                  threadId: thread.id,
+                  threadIdType: typeof thread.id,
+                  threadIdLength: thread.id?.length,
+                  incomingHistoryId,
+                  rawThread: JSON.stringify(thread).substring(0, 200),
+                });
+                
                 return hydrateThreadTask.trigger({
                   userId,
                   threadId: thread.id,

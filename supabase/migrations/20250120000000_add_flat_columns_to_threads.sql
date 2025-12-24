@@ -124,3 +124,5 @@ COMMENT ON COLUMN public.threads.resolution_status IS 'Status of resolution (e.g
 COMMENT ON COLUMN public.threads.problem_statement IS 'Clear statement of the problem or topic discussed';
 COMMENT ON COLUMN public.threads.timeline_summary IS 'Summary of the timeline of events in the thread';
 
+
+
