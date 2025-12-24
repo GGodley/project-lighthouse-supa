@@ -117,15 +117,16 @@ serve(async (req: Request) => {
     }
 
     // Optional expiry check (if expires_at is set and expired, return error early)
+    // Use 401 with gmail_unauthorized to match Gmail API 401 response and keep same codepath
     if (tokenData.expires_at) {
       const expiresAt = new Date(tokenData.expires_at);
       if (expiresAt < new Date()) {
         const res = new Response(
           JSON.stringify({ 
-            error: "token_expired",
-            message: "Google access token has expired. Please reconnect your Google account."
+            error: "gmail_unauthorized",
+            message: "Google token expired. Please reconnect your Google account."
           }),
-          { status: 412, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Fetch-Gmail-Batch-Version": "BROKER_AUTH_V3" } }
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Fetch-Gmail-Batch-Version": "BROKER_AUTH_V3" } }
         );
         return res;
       }
