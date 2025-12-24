@@ -1230,82 +1230,121 @@ export const analyzeThreadTask = task({
     const openai = getOpenAIClient();
 
     try {
-      // Step 0: ETL from raw_thread_data into threads + thread_messages
-      await runThreadEtl(supabaseAdmin, userId, threadId);
+      // Step 0: Check if thread is ignored
+      const { data: threadCheck, error: threadCheckError } = await supabaseAdmin
+        .from("threads")
+        .select("is_ignored")
+        .eq("thread_id", threadId)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (threadCheckError) {
+        throw new Error(
+          `Analyzer: Failed to check thread ${threadId}: ${threadCheckError.message}`
+        );
+      }
+
+      if (threadCheck?.is_ignored) {
+        console.log(`⏭️  Thread ${threadId} is ignored, skipping analysis`);
+        return {
+          success: true,
+          scenario: "skipped",
+          threadId,
+          userId,
+          reason: "thread_ignored",
+        };
+      }
 
       // Step 0.5: Get thread participants and upsert companies/customers
-      // Fetch raw_thread_data to extract messages for participant resolution
-      const { data: threadRowForParticipants, error: participantsFetchError } =
-        await supabaseAdmin
-          .from("threads")
-          .select("raw_thread_data")
-          .eq("thread_id", threadId)
-          .eq("user_id", userId)
-          .maybeSingle();
+      // Read from thread_messages instead of raw_thread_data
+      const { data: threadMessages, error: messagesError } = await supabaseAdmin
+        .from("thread_messages")
+        .select("from_address, to_addresses, cc_addresses")
+        .eq("thread_id", threadId)
+        .eq("user_id", userId)
+        .order("sent_date", { ascending: true });
+
+      if (messagesError) {
+        throw new Error(
+          `Analyzer: Failed to fetch thread_messages for ${threadId}: ${messagesError.message}`
+        );
+      }
+
+      // Convert thread_messages to GmailMessage format for participant resolution
+      const messagesForParticipants: GmailMessage[] = (threadMessages || []).map((msg) => {
+        const headers: GmailHeader[] = [];
+        if (msg.from_address) {
+          headers.push({ name: "From", value: msg.from_address });
+        }
+        if (msg.to_addresses && Array.isArray(msg.to_addresses)) {
+          headers.push({ name: "To", value: msg.to_addresses.join(", ") });
+        }
+        if (msg.cc_addresses && Array.isArray(msg.cc_addresses)) {
+          headers.push({ name: "Cc", value: msg.cc_addresses.join(", ") });
+        }
+        return {
+          id: "", // Not needed for participant resolution
+          threadId,
+          payload: { headers },
+        };
+      });
 
       let participantContext = "Participants: None";
-      if (!participantsFetchError && threadRowForParticipants?.raw_thread_data) {
-        const rawThreadData = threadRowForParticipants.raw_thread_data;
-        const messages: GmailMessage[] = Array.isArray(rawThreadData.messages)
-          ? rawThreadData.messages
-          : [];
+      if (messagesForParticipants.length > 0) {
+        try {
+          const participantsResult = await getThreadParticipants(
+            supabaseAdmin,
+            userId,
+            threadId,
+            messagesForParticipants
+          );
+          participantContext = participantsResult.contextString;
+          console.log(
+            `Analyzer: Participant resolution complete. Context: ${participantContext}`
+          );
 
-        if (messages.length > 0) {
-          try {
-            const participantsResult = await getThreadParticipants(
-              supabaseAdmin,
-              userId,
-              threadId,
-              messages
-            );
-            participantContext = participantsResult.contextString;
-            console.log(
-              `Analyzer: Participant resolution complete. Context: ${participantContext}`
-            );
+          // Step 0.6: Propagate interaction time to linked companies and customers
+          // Fetch last_message_date from the thread
+          const { data: threadWithDate } = await supabaseAdmin
+            .from("threads")
+            .select("last_message_date")
+            .eq("thread_id", threadId)
+            .eq("user_id", userId)
+            .maybeSingle();
 
-            // Step 0.6: Propagate interaction time to linked companies and customers
-            // Fetch last_message_date from the thread (already set by runThreadEtl)
-            const { data: threadWithDate } = await supabaseAdmin
-              .from("threads")
-              .select("last_message_date")
-              .eq("thread_id", threadId)
-              .eq("user_id", userId)
-              .maybeSingle();
-
-            if (threadWithDate?.last_message_date) {
-              try {
-                await propagateInteractionTime(
-                  supabaseAdmin,
-                  threadWithDate.last_message_date,
-                  participantsResult.companyIds,
-                  participantsResult.customerIds
-                );
-              } catch (interactionTimeError) {
-                console.error(
-                  `Analyzer: Error propagating interaction time:`,
-                  interactionTimeError
-                );
-                // Don't fail the entire analysis if interaction time propagation fails
-              }
-            } else {
-              console.log(
-                `Analyzer: No last_message_date found for thread ${threadId}, skipping interaction time propagation`
+          if (threadWithDate?.last_message_date) {
+            try {
+              await propagateInteractionTime(
+                supabaseAdmin,
+                threadWithDate.last_message_date,
+                participantsResult.companyIds,
+                participantsResult.customerIds
               );
+            } catch (interactionTimeError) {
+              console.error(
+                `Analyzer: Error propagating interaction time:`,
+                interactionTimeError
+              );
+              // Don't fail the entire analysis if interaction time propagation fails
             }
-          } catch (participantError) {
-            console.error(
-              `Analyzer: Error in participant resolution:`,
-              participantError
+          } else {
+            console.log(
+              `Analyzer: No last_message_date found for thread ${threadId}, skipping interaction time propagation`
             );
-            // Don't fail the entire analysis if participant resolution fails
           }
+        } catch (participantError) {
+          console.error(
+            `Analyzer: Error in participant resolution:`,
+            participantError
+          );
+          // Don't fail the entire analysis if participant resolution fails
         }
       }
 
-      // Step 1: Fetch normalized thread with body, existing summary, and last_analyzed_at
+      // Step 1: Fetch thread with existing summary and last_analyzed_at
       const { data: threadRow, error: threadError } = await supabaseAdmin
         .from("threads")
-        .select("thread_id, user_id, body, llm_summary, last_analyzed_at, summary")
+        .select("thread_id, user_id, llm_summary, last_analyzed_at, summary")
         .eq("thread_id", threadId)
         .eq("user_id", userId)
         .maybeSingle();
@@ -1436,7 +1475,17 @@ export const analyzeThreadTask = task({
           );
         }
 
-        messagesToAnalyze = allMessages || [];
+        if (!allMessages || allMessages.length === 0) {
+          console.warn(`Analyzer: No messages found in thread_messages for ${threadId}`);
+          // Return gracefully instead of throwing
+          return {
+            success: false,
+            thread_id: threadId,
+            error: "no_messages_found",
+          };
+        }
+
+        messagesToAnalyze = allMessages;
       }
 
       // Step 3: Construct transcript from messages (matching Python's construct_transcript)
@@ -1496,7 +1545,19 @@ export const analyzeThreadTask = task({
       // Construct transcript from messages
       const transcriptLines: string[] = [];
       for (const msg of messagesToAnalyze) {
-        const bodyText = msg.body_text || msg.body_html;
+        // Prefer body_text, fallback to cleaned body_html
+        let bodyText = msg.body_text;
+        if (!bodyText && msg.body_html) {
+          try {
+            bodyText = htmlToText(msg.body_html, {
+              wordwrap: 120,
+            });
+          } catch (e) {
+            console.warn("Failed to convert HTML to text for transcript", e);
+            bodyText = msg.body_html; // Fallback to HTML if conversion fails
+          }
+        }
+        
         if (!bodyText) continue;
 
         const customerId = msg.customer_id;
@@ -1513,9 +1574,13 @@ export const analyzeThreadTask = task({
 
       // Validate that transcript has content
       if (!transcript || transcript.trim().length === 0) {
-        throw new Error(
-          `Analyzer: Thread ${threadId} has no content available for analysis`
-        );
+        console.warn(`Analyzer: Thread ${threadId} has no content available for analysis`);
+        // Return gracefully instead of throwing
+        return {
+          success: false,
+          thread_id: threadId,
+          error: "no_content",
+        };
       }
 
       // Step 4: Define comprehensive system prompts (matching Python)

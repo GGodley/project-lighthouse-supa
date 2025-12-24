@@ -1,6 +1,6 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { analyzeThreadTask } from "./analyzer";
+import { hydrateThreadTask } from "./hydrate-thread";
 
 /**
  * Ingest Threads Job - Orchestrates Gmail sync with pagination
@@ -240,24 +240,29 @@ export const ingestThreadsTask = task({
 
           console.log(`✅ Upserted ${threads.length} threads to database`);
 
-          // IMMEDIATELY trigger analyze-thread for this batch
-          const threadIds = threads.map((t) => t.id);
-          if (threadIds.length > 0) {
+          // IMMEDIATELY trigger hydrate-thread for this batch
+          // Determine if this is initial sync (no pageToken means we're starting from the beginning)
+          const isInitialSync = !pageToken;
+          
+          if (threads.length > 0) {
             console.log(
-              `🚀 Dispatching ${threadIds.length} analysis jobs in parallel`
+              `🚀 Dispatching ${threads.length} hydration jobs in parallel`
             );
 
-            // Trigger all analysis jobs in parallel
+            // Trigger all hydration jobs in parallel
             await Promise.all(
-              threadIds.map((threadId: string) =>
-                analyzeThreadTask.trigger({
+              threads.map((thread: { id: string; historyId?: string; history_id?: string }) => {
+                const incomingHistoryId = thread.historyId ?? thread.history_id ?? "";
+                return hydrateThreadTask.trigger({
                   userId,
-                  threadId,
-                })
-              )
+                  threadId: thread.id,
+                  incomingHistoryId,
+                  reason: isInitialSync ? "initial_sync" : "incremental_sync",
+                });
+              })
             );
 
-            console.log(`✅ Dispatched ${threadIds.length} analysis jobs`);
+            console.log(`✅ Dispatched ${threads.length} hydration jobs`);
           }
 
           totalThreadsFetched += threads.length;
