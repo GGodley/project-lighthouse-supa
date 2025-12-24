@@ -265,7 +265,10 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
                 provider: id.provider,
                 id: id.id,
               })) || [],
-              allIdentityKeys: adminUser.identities?.map((id) => Object.keys(id as Record<string, unknown>)) || [],
+              allIdentityKeys: adminUser.identities?.map((id) => {
+                const idObj = id as unknown;
+                return Object.keys(idObj as Record<string, unknown>);
+              }) || [],
             });
             
             // Find Google identity
@@ -496,7 +499,6 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
     url: triggerUrl,
     userId: user.id,
     payloadKeys: Object.keys(triggerPayload),
-    encryptedTokenLength: encryptedToken.length,
   });
 
   try {
