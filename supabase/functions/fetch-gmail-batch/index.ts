@@ -6,7 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-broker-secret'
+  'Access-Control-Allow-Headers': 'x-client-info, apikey, content-type, x-broker-secret'
 };
 
 interface RequestBody {
@@ -33,7 +33,6 @@ serve(async (req: Request) => {
     
     console.log("[BROKER] header debug", {
       hasBrokerSecret: !!brokerSecretHeader,
-      brokerSecretPrefix: brokerSecretHeader.slice(0, 8),
       hasApikey: !!apikey,
       apikeyPrefix: apikey.slice(0, 8),
     });
