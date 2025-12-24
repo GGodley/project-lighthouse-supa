@@ -253,10 +253,6 @@ const cleanHtml = (html: string, maxSize: number = 200 * 1024): string => {
 
 export const hydrateThreadTask = task({
   id: "hydrate-thread",
-  concurrency: {
-    key: (payload) => `${payload.userId}:hydrate`,
-    limit: 10,
-  },
   run: async (payload: HydrateThreadInput): Promise<HydrateThreadResult> => {
     const { userId, threadId, incomingHistoryId, reason } = payload;
 
