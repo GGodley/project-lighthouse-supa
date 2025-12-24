@@ -35,7 +35,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       try {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('*')
+          .select('id, email, full_name, avatar_url, provider, provider_id, created_at, updated_at')
           .eq('id', authUser.id)
           .maybeSingle()
         

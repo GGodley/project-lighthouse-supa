@@ -281,6 +281,37 @@ const CustomerThreadsPage: React.FC = () => {
     }
 
     if (syncStatus === SyncStatus.FAILED) {
+      // Check for specific error types
+      if (syncDetails?.includes('TOKEN_SCOPE_MISSING')) {
+        return (
+          <div className="flex items-center space-x-2 text-sm text-orange-600">
+            <XCircle className="h-4 w-4" />
+            <span>Gmail permissions missing. Please grant required scopes.</span>
+            <button
+              onClick={() => window.location.href = '/login?grant_permissions=google'}
+              className="ml-2 px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
+            >
+              Grant Permissions
+            </button>
+          </div>
+        )
+      }
+      
+      if (syncDetails?.includes('TOKEN_EXPIRED_RECONNECT')) {
+        return (
+          <div className="flex items-center space-x-2 text-sm text-orange-600">
+            <XCircle className="h-4 w-4" />
+            <span>Google connection expired. Please reconnect.</span>
+            <button
+              onClick={() => window.location.href = '/login?reconnect=google'}
+              className="ml-2 px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
+            >
+              Reconnect
+            </button>
+          </div>
+        )
+      }
+      
       return (
         <div className="flex items-center space-x-2 text-sm text-gray-700">
           <XCircle className="h-4 w-4 text-red-600" />

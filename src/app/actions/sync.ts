@@ -2,7 +2,6 @@
 
 import { createClient } from '@/utils/supabase/server';
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js';
-import { encryptToken } from '@/utils/crypto';
 import { cookies } from 'next/headers';
 
 /**
@@ -43,11 +42,10 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
   const allCookies = cookieStore.getAll();
   let accessToken = cookieStore.get('google_access_token')?.value;
   
-  console.log('🔍 [STAGE 1] Initial Cookie Check:', {
-    hasGoogleTokenCookie: !!accessToken,
-    cookieLength: accessToken?.length,
-    cookiePrefix: accessToken ? `${accessToken.substring(0, 10)}...` : 'N/A',
-    userId: user.id,
+    console.log('🔍 [STAGE 1] Initial Cookie Check:', {
+      hasGoogleTokenCookie: !!accessToken,
+      cookieLength: accessToken?.length,
+      userId: user.id,
     allCookieNames: allCookies.map(c => c.name),
     totalCookies: allCookies.length,
     nodeEnv: process.env.NODE_ENV,
@@ -67,7 +65,6 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
       sessionError: sessionError?.message || null,
       hasProviderToken: !!session?.provider_token,
       providerTokenLength: session?.provider_token?.length || 0,
-      providerTokenPrefix: session?.provider_token ? `${session.provider_token.substring(0, 10)}...` : 'N/A',
       hasProviderRefreshToken: !!session?.provider_refresh_token,
       providerRefreshTokenLength: session?.provider_refresh_token?.length || 0,
       hasAccessToken: !!session?.access_token,
@@ -81,7 +78,7 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
       accessToken = session.provider_token;
       
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:75',message:'Found provider_token in session - setting cookie',data:{providerTokenLength:accessToken.length,providerTokenPrefix:accessToken.substring(0,10)},timestamp:Date.now(),sessionId:'debug-session',runId:'run4',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/actions/sync.ts:75',message:'Found provider_token in session - setting cookie',data:{providerTokenLength:accessToken.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run4',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       
       try {
@@ -116,7 +113,6 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
       console.log('🔍 [STAGE 4] Refresh Token Details:', {
         hasRefreshToken: !!session.provider_refresh_token,
         refreshTokenLength: session.provider_refresh_token.length,
-        refreshTokenPrefix: `${session.provider_refresh_token.substring(0, 10)}...`,
       });
       
       // #region agent log
@@ -296,7 +292,6 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
               console.log('✅ [STAGE 5] Found refresh token in auth.identities:', {
                 hasRefreshToken: !!refreshToken,
                 refreshTokenLength: refreshToken.length,
-                refreshTokenPrefix: `${refreshToken.substring(0, 10)}...`,
               });
               
               // #region agent log
@@ -423,27 +418,55 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
     }
   }
 
-  console.log('✅ [STAGE 6] Access token obtained, proceeding to encryption:', {
+  console.log('✅ [STAGE 6] Access token obtained, proceeding to token storage:', {
     hasAccessToken: !!accessToken,
     accessTokenLength: accessToken.length,
-    accessTokenPrefix: `${accessToken.substring(0, 10)}...`,
   });
 
-  // Encrypt the access token
-  let encryptedToken: string;
+  // Store the access token in google_tokens table using service role client
+  // CRITICAL: Use service role client to bypass RLS (user session client will be blocked)
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.error('❌ [STAGE 6] Missing Supabase configuration for token storage');
+    throw new Error('Missing Supabase configuration for token storage');
+  }
+  
+  const supabaseAdmin = createSupabaseAdminClient(
+    supabaseUrl,
+    supabaseServiceKey,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+  
   try {
-    console.log('🔐 [STAGE 6] Encrypting access token...');
-    encryptedToken = await encryptToken(accessToken);
-    console.log('✅ [STAGE 6] Token encrypted successfully:', {
-      encryptedTokenLength: encryptedToken.length,
-      encryptedTokenPrefix: `${encryptedToken.substring(0, 20)}...`,
+    console.log('💾 [STAGE 6] Storing access token in google_tokens table...');
+    const { error: tokenError } = await supabaseAdmin
+      .from('google_tokens')
+      .upsert({ 
+        user_id: user.id,
+        access_token: accessToken,
+        expires_at: null, // Don't guess expiry - treat as valid until Gmail rejects
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'user_id'
+      });
+    
+    if (tokenError) {
+      console.error('❌ [STAGE 6] Failed to store token:', {
+        error: tokenError.message,
+        code: tokenError.code,
+      });
+      throw new Error(`Failed to store access token: ${tokenError.message}`);
+    }
+    
+    console.log('✅ [STAGE 6] Token stored successfully in google_tokens table');
+  } catch (storeError) {
+    console.error('❌ [STAGE 6] Failed to store token:', {
+      error: storeError instanceof Error ? storeError.message : String(storeError),
+      stack: storeError instanceof Error ? storeError.stack : undefined,
     });
-  } catch (encryptError) {
-    console.error('❌ [STAGE 6] Failed to encrypt token:', {
-      error: encryptError instanceof Error ? encryptError.message : String(encryptError),
-      stack: encryptError instanceof Error ? encryptError.stack : undefined,
-    });
-    throw new Error(`Failed to encrypt access token: ${encryptError instanceof Error ? encryptError.message : String(encryptError)}`);
+    throw new Error(`Failed to store access token: ${storeError instanceof Error ? storeError.message : String(storeError)}`);
   }
 
   // Get Trigger.dev API key from environment
@@ -457,7 +480,6 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
   console.log('✅ [STAGE 7] Trigger.dev API key found:', {
     hasApiKey: !!triggerApiKey,
     apiKeyLength: triggerApiKey.length,
-    apiKeyPrefix: `${triggerApiKey.substring(0, 10)}...`,
   });
 
   // Trigger Trigger.dev job via HTTP API (works in Server Actions)
@@ -465,7 +487,7 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
   const triggerPayload = {
     payload: {
       userId: user.id,
-      encryptedAccessToken: encryptedToken,
+      // No longer passing encryptedAccessToken - token is now in google_tokens table
     },
     concurrencyKey: user.id,
   };

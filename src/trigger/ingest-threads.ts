@@ -17,8 +17,8 @@ import { analyzeThreadTask } from "./analyzer";
  */
 export const ingestThreadsTask = task({
   id: "ingest-threads",
-  run: async (payload: { userId: string; encryptedAccessToken: string }) => {
-    const { userId, encryptedAccessToken } = payload;
+  run: async (payload: { userId: string }) => {
+    const { userId } = payload;
 
     console.log(`🔄 Starting ingest-threads job for user: ${userId}`);
 
@@ -80,13 +80,18 @@ export const ingestThreadsTask = task({
         // #endregion
 
         // Fetch batch from Edge Function
+        const brokerSecret = process.env.BROKER_SHARED_SECRET;
+        if (!brokerSecret) {
+          throw new Error('BROKER_SHARED_SECRET environment variable is not set');
+        }
+
         const fetchResponse = await fetch(edgeFunctionUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${supabaseServiceKey}`,
+            Authorization: `Bearer ${brokerSecret}`,
           },
-          body: JSON.stringify({ userId, encryptedAccessToken, pageToken }),
+          body: JSON.stringify({ userId, pageToken }),
         });
 
         // #region agent log
@@ -95,17 +100,83 @@ export const ingestThreadsTask = task({
 
         if (!fetchResponse.ok) {
           const errorText = await fetchResponse.text();
+          let errorData;
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { error: 'unknown' };
+          }
+          
           console.error(
-            `❌ Edge Function fetch failed: ${fetchResponse.status} - ${errorText}`
+            `❌ Edge Function fetch failed: ${fetchResponse.status} - [REDACTED]`
           );
           
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ingest-threads.ts:102',message:'Edge function error details',data:{status:fetchResponse.status,errorText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-          // #endregion
+          // Handle 403 separately (scope/permission issue, not token expiry)
+          if (fetchResponse.status === 403 && errorData.error === 'gmail_forbidden') {
+            await supabaseAdmin
+              .from('sync_jobs')
+              .update({
+                status: 'failed',
+                details: 'TOKEN_SCOPE_MISSING: Gmail permissions are missing. Please grant required scopes.',
+                error: 'TOKEN_SCOPE_MISSING'
+              })
+              .eq('user_id', userId);
+            
+            await supabaseAdmin.rpc("release_sync_lock", {
+              p_user_id: userId,
+              p_status: "failed",
+              p_next_page_token: null,
+              p_last_synced_at: null,
+            });
+            
+            throw new Error('TOKEN_SCOPE_MISSING');
+          }
           
-          throw new Error(
-            `Failed to fetch Gmail threads: ${fetchResponse.status} - ${errorText}`
-          );
+          // Check for token expiry (401 = Gmail auth failed, 412 = missing/expired token)
+          if (fetchResponse.status === 401 && errorData.error === 'gmail_unauthorized') {
+            // Token expired or invalid
+            await supabaseAdmin
+              .from('sync_jobs')
+              .update({
+                status: 'failed',
+                details: 'TOKEN_EXPIRED_RECONNECT: Google token expired. Please reconnect your Google account.',
+                error: 'TOKEN_EXPIRED_RECONNECT'
+              })
+              .eq('user_id', userId);
+            
+            await supabaseAdmin.rpc("release_sync_lock", {
+              p_user_id: userId,
+              p_status: "failed",
+              p_next_page_token: null,
+              p_last_synced_at: null,
+            });
+            
+            throw new Error('TOKEN_EXPIRED_RECONNECT');
+          }
+          
+          if (fetchResponse.status === 412 && 
+              (errorData.error === 'missing_google_token' || errorData.error === 'token_expired')) {
+            // Token not found in DB or expired
+            await supabaseAdmin
+              .from('sync_jobs')
+              .update({
+                status: 'failed',
+                details: 'TOKEN_EXPIRED_RECONNECT: Google token not found or expired. Please reconnect your Google account.',
+                error: 'TOKEN_EXPIRED_RECONNECT'
+              })
+              .eq('user_id', userId);
+            
+            await supabaseAdmin.rpc("release_sync_lock", {
+              p_user_id: userId,
+              p_status: "failed",
+              p_next_page_token: null,
+              p_last_synced_at: null,
+            });
+            
+            throw new Error('TOKEN_EXPIRED_RECONNECT');
+          }
+          
+          throw new Error(`Failed to fetch Gmail threads: ${fetchResponse.status} - [REDACTED]`);
         }
 
         const responseData: {
@@ -120,7 +191,20 @@ export const ingestThreadsTask = task({
           `📧 Fetched ${threads.length} threads from Gmail API (hasNextPage: ${!!nextPageToken})`
         );
 
-        // Handle fetched threads: Upsert and trigger analysis
+        // CRITICAL: Write checkpoint (next_page_token) BEFORE upserting threads
+        // This ensures crash recovery works correctly
+        if (nextPageToken) {
+          // Update sync_jobs with next_page_token immediately
+          await supabaseAdmin
+            .from('sync_jobs')
+            .update({ 
+              next_page_token: nextPageToken,
+              updated_at: new Date().toISOString()
+            })
+            .eq('user_id', userId);
+        }
+
+        // NOW upsert threads (after checkpoint is saved)
         if (threads.length > 0) {
           // Prepare threads for upsert - store entire thread object in raw_thread_data
           const threadsToUpsert = threads.map((thread) => ({
