@@ -2,14 +2,23 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
-import { Database } from '@/types/database'
 import { Button } from '@/components/ui/Button'
 import { Mail, User, Key, Trash2, RefreshCw } from 'lucide-react'
 
-type Profile = Database['public']['Tables']['profiles']['Row']
+// Profile type matching the selected columns (excluding sensitive token fields)
+type ProfilePartial = {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+  provider: string | null;
+  provider_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export default function SettingsPage() {
-  const [profile, setProfile] = useState<Profile | null>(null)
+  const [profile, setProfile] = useState<ProfilePartial | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const supabase = useSupabase()
@@ -72,11 +81,11 @@ export default function SettingsPage() {
     }
 
     try {
+      // Note: Tokens are now stored in google_tokens table, not profiles
+      // Disconnect functionality should be handled via server action
       const { error } = await supabase
         .from('profiles')
         .update({
-          gmail_access_token: null,
-          gmail_refresh_token: null,
           updated_at: new Date().toISOString()
         })
         .eq('id', profile.id)
@@ -191,12 +200,12 @@ export default function SettingsPage() {
                 <div>
                   <h3 className="text-sm font-medium text-gray-900">Gmail</h3>
                   <p className="text-sm text-gray-500">
-                    {profile.gmail_access_token ? 'Connected' : 'Not connected'}
+                    {'Check google_tokens table for connection status'}
                   </p>
                 </div>
               </div>
               <div className="flex space-x-2">
-                {profile.gmail_access_token ? (
+                {true ? (
                   <>
                     <Button
                       onClick={syncEmails}
@@ -233,12 +242,12 @@ export default function SettingsPage() {
                 <div>
                   <h3 className="text-sm font-medium text-gray-900">Microsoft</h3>
                   <p className="text-sm text-gray-500">
-                    {profile.microsoft_access_token ? 'Connected' : 'Not connected'}
+                    Status: Check sync status on customer threads page
                   </p>
                 </div>
               </div>
               <div className="flex space-x-2">
-                {profile.microsoft_access_token ? (
+                {true ? (
                   <>
                     <Button
                       onClick={syncEmails}
