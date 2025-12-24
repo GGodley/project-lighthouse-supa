@@ -27,52 +27,67 @@ serve(async (req: Request) => {
   }
 
   try {
+    // Safe header debugging (only prefixes, never full secrets)
+    const auth = req.headers.get("authorization") || "";
+    const apikey = req.headers.get("apikey") || "";
+    
+    console.log("[BROKER] header debug", {
+      hasAuthorization: !!auth,
+      authPrefix: auth.slice(0, 12), // e.g. "Bearer abc..."
+      hasApikey: !!apikey,
+      apikeyPrefix: apikey.slice(0, 8),
+    });
+
     // Validate environment variables
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     if (!supabaseUrl || !supabaseServiceKey) {
-      return new Response(
+      const res = new Response(
         JSON.stringify({ error: "Missing Supabase environment variables" }),
         {
           status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
+          headers: { ...corsHeaders, "Content-Type": "application/json", "X-Fetch-Gmail-Batch-Version": "BROKER_AUTH_V3" }
         }
       );
+      return res;
     }
 
     // Validate Authorization header (BROKER_SHARED_SECRET)
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(
+      const res = new Response(
         JSON.stringify({ error: "Missing Authorization header" }),
         {
           status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
+          headers: { ...corsHeaders, "Content-Type": "application/json", "X-Fetch-Gmail-Batch-Version": "BROKER_AUTH_V3" }
         }
       );
+      return res;
     }
 
     const brokerSecret = Deno.env.get("BROKER_SHARED_SECRET");
     if (!brokerSecret) {
-      return new Response(
+      const res = new Response(
         JSON.stringify({ error: "BROKER_SHARED_SECRET not configured" }),
         {
           status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
+          headers: { ...corsHeaders, "Content-Type": "application/json", "X-Fetch-Gmail-Batch-Version": "BROKER_AUTH_V3" }
         }
       );
+      return res;
     }
 
     const token = authHeader.replace('Bearer ', '');
     if (token !== brokerSecret) {
-      return new Response(
+      const res = new Response(
         JSON.stringify({ error: "Unauthorized" }),
         {
           status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
+          headers: { ...corsHeaders, "Content-Type": "application/json", "X-Fetch-Gmail-Batch-Version": "BROKER_AUTH_V3" }
         }
       );
+      return res;
     }
 
     // Parse request body
@@ -190,23 +205,25 @@ serve(async (req: Request) => {
       nextPageToken: gmailData.nextPageToken || null,
     };
 
-    return new Response(
+    const res = new Response(
       JSON.stringify(response),
       {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Fetch-Gmail-Batch-Version": "BROKER_AUTH_V3" }
       }
     );
+    return res;
 
   } catch (error) {
     console.error("Unexpected error in fetch-gmail-batch:", error);
-    return new Response(
+    const res = new Response(
       JSON.stringify({ error: "Internal server error" }),
       {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Fetch-Gmail-Batch-Version": "BROKER_AUTH_V3" }
       }
     );
+    return res;
   }
 });
 

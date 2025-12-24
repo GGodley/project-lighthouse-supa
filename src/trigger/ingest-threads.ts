@@ -85,6 +85,9 @@ export const ingestThreadsTask = task({
           throw new Error('BROKER_SHARED_SECRET environment variable is not set');
         }
 
+        // Log auth header being sent (safe - only first 6 chars)
+        console.log("[BROKER] sending auth header:", `Bearer ${brokerSecret.slice(0, 6)}...`);
+
         const fetchResponse = await fetch(edgeFunctionUrl, {
           method: 'POST',
           headers: {
