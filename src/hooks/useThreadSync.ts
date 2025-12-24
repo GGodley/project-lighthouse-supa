@@ -5,7 +5,7 @@ import { SyncStatus, type SyncStatusValue } from '@/lib/types/sync';
 import { startGmailSync } from '@/app/actions/sync';
 
 interface UseThreadSyncReturn {
-  syncStatus: SyncStatus;
+  syncStatus: SyncStatusValue;
   syncDetails: string;
   jobId: number | null;
   progressPercentage: number | null; // 0-100 or null if not available

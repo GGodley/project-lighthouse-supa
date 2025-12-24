@@ -6,9 +6,18 @@ import { useRouter } from 'next/navigation'
 import Sidebar from './Sidebar'
 import DashboardSyncManager from '@/components/DashboardSyncManager'
 import { useGmailSync } from '@/hooks/useGmailSync'
-import { Database } from '@/types/database'
 
-type Profile = Database['public']['Tables']['profiles']['Row']
+// Profile type matching the selected columns (excluding sensitive token fields)
+type Profile = {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+  provider: string | null;
+  provider_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 interface DashboardLayoutProps {
   children: React.ReactNode
