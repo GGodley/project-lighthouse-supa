@@ -54,6 +54,15 @@ export async function GET(request: NextRequest) {
     url: request.url,
   });
 
+  // Safe environment variable presence check (booleans only, no values)
+  console.log("[ENV] presence", {
+    hasNextPublicUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+    hasNextPublicAnon: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    hasServiceRole: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    hasAltServiceRole: !!process.env.SUPABASE_SERVICE_ROLE,
+    vercelEnv: process.env.VERCEL_ENV,
+  });
+
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get('code');
   const error = requestUrl.searchParams.get('error');
