@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { SyncStatus } from '@/lib/types/threads';
+import { SyncStatus, type SyncStatusValue } from '@/lib/types/sync';
 import { startGmailSync } from '@/app/actions/sync';
 
 interface UseThreadSyncReturn {
@@ -25,13 +25,13 @@ interface UseThreadSyncReturn {
  */
 export function useThreadSync(): UseThreadSyncReturn {
   const [jobId, setJobId] = useState<number | null>(null);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
+  const [syncStatus, setSyncStatus] = useState<SyncStatusValue>(SyncStatus.IDLE);
   const [syncDetails, setSyncDetails] = useState<string>('');
   const [progressPercentage, setProgressPercentage] = useState<number | null>(null);
 
   const startSync = useCallback(async () => {
     try {
-      setSyncStatus('creating_job');
+      setSyncStatus(SyncStatus.CREATING_JOB);
       setSyncDetails('Creating sync job...');
 
       // Use Server Action to trigger Gmail sync (reads token from secure cookie)
@@ -41,7 +41,7 @@ export function useThreadSync(): UseThreadSyncReturn {
         // Trigger.dev manages the queue - use handle.id for reference
         const triggerHandleId = result.handle?.id;
         setJobId(triggerHandleId ? Number(triggerHandleId) : null);
-        setSyncStatus('syncing');
+        setSyncStatus(SyncStatus.SYNCING);
         setSyncDetails('Sync started successfully. Trigger.dev is processing in the background.');
         setProgressPercentage(null); // Trigger.dev manages progress
       } else {
@@ -54,7 +54,7 @@ export function useThreadSync(): UseThreadSyncReturn {
         } else {
           setSyncDetails(result.error || 'Gmail sync job failed to start');
         }
-        setSyncStatus('failed');
+        setSyncStatus(SyncStatus.FAILED);
         setJobId(null);
         setProgressPercentage(null);
       }
@@ -78,7 +78,7 @@ export function useThreadSync(): UseThreadSyncReturn {
         setSyncDetails(errorMessage);
       }
       
-      setSyncStatus('failed');
+      setSyncStatus(SyncStatus.FAILED);
       setJobId(null);
       setProgressPercentage(null);
     }

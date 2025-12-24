@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { Loader2, CheckCircle2, XCircle, RefreshCw, ArrowUp, ArrowDown, Search, Building2 } from 'lucide-react'
 import { useThreadSync } from '@/hooks/useThreadSync'
+import { SyncStatus } from '@/lib/types/sync'
 import HealthScoreBar from '@/components/ui/HealthScoreBar'
 import ProgressBar from '@/components/ui/ProgressBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
@@ -235,7 +236,7 @@ const CustomerThreadsPage: React.FC = () => {
       )
     }
     
-    if (syncStatus === 'idle') {
+    if (syncStatus === SyncStatus.IDLE) {
       return (
         <div className="flex items-center space-x-2 text-sm text-gray-600">
           <span>Ready to sync</span>
@@ -243,19 +244,19 @@ const CustomerThreadsPage: React.FC = () => {
       )
     }
 
-    if (syncStatus === 'creating_job' || syncStatus === 'syncing') {
+    if (syncStatus === SyncStatus.CREATING_JOB || syncStatus === SyncStatus.SYNCING) {
       return (
         <div className="space-y-2">
           <div className="flex items-center space-x-2 text-sm text-gray-700">
             <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
             <span>{syncDetails || 'Syncing threads...'}</span>
           </div>
-          {syncStatus === 'syncing' && (
+          {syncStatus === SyncStatus.SYNCING && (
             <div className="w-full max-w-md">
               <ProgressBar percentage={progressPercentage ?? 0} />
             </div>
           )}
-          {syncStatus === 'creating_job' && (
+          {syncStatus === SyncStatus.CREATING_JOB && (
             <div className="w-full max-w-md">
               <ProgressBar percentage={0} />
             </div>
@@ -264,7 +265,7 @@ const CustomerThreadsPage: React.FC = () => {
       )
     }
 
-    if (syncStatus === 'completed') {
+    if (syncStatus === SyncStatus.COMPLETED) {
       return (
         <div className="flex items-center space-x-2 text-sm text-gray-700">
           <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -279,7 +280,7 @@ const CustomerThreadsPage: React.FC = () => {
       )
     }
 
-    if (syncStatus === 'failed') {
+    if (syncStatus === SyncStatus.FAILED) {
       return (
         <div className="flex items-center space-x-2 text-sm text-gray-700">
           <XCircle className="h-4 w-4 text-red-600" />

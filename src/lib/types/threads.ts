@@ -50,18 +50,8 @@ export type ThreadMessage = {
   created_at: string; // ISO string
 };
 
-// Defines the states for the sync job
-export type SyncStatus = 'idle' | 'creating_job' | 'syncing' | 'completed' | 'failed' | 'pending';
-
-// Represents a row in the public.sync_jobs table
-export type SyncJob = {
-  id: number; // Job ID (BIGINT in DB)
-  status: SyncStatus;
-  details: string | null;
-  user_id: string;
-  created_at: string; // ISO string
-  updated_at: string; // ISO string
-};
+// Re-export SyncStatus and SyncJob from shared sync types
+export { SyncStatus, type SyncStatusValue, type SyncJob } from './sync';
 
 // --- NEW TYPE ---
 // Represents a row in the public.domain_blocklist table

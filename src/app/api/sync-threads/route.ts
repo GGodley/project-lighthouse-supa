@@ -1,10 +1,16 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { SyncStatus, validateStatusTransition } from '@/lib/types/sync';
 
 /**
- * API route to trigger the ingest-threads Trigger.dev job
- * This replaces the old sync-emails Edge Function approach
+ * API route to trigger Gmail sync
+ * 
+ * Architecture:
+ * 1. User triggers sync with their session (has provider_token)
+ * 2. Calls Edge Function to fetch Gmail batches and store raw data
+ * 3. Edge Function returns immediately (doesn't wait)
+ * 4. Trigger.dev processes stored data asynchronously (no auth needed)
  */
 export async function POST() {
   const cookieStore = cookies();
@@ -17,106 +23,130 @@ export async function POST() {
   }
 
   const userId = session.user.id;
+  const providerToken = session.provider_token;
+
   if (!userId) {
     return NextResponse.json({ error: 'User ID not found' }, { status: 400 });
   }
 
+  if (!providerToken) {
+    return NextResponse.json({ 
+      error: 'Missing Google access token',
+      message: 'Please re-authenticate with Google to grant access'
+    }, { status: 403 });
+  }
+
   try {
-    // 2. Get Trigger.dev API credentials
-    const triggerApiKey = process.env.TRIGGER_API_KEY;
-    const triggerProjectId = process.env.TRIGGER_PROJECT_ID;
-
-    if (!triggerApiKey) {
-      console.error('Missing TRIGGER_API_KEY environment variable');
-      return NextResponse.json(
-        { error: 'Server configuration error: TRIGGER_API_KEY not set' },
-        { status: 500 }
-      );
-    }
-
-    // 3. Create a sync_jobs entry for tracking (for backward compatibility with UI)
+    // 2. Create a sync_jobs entry for tracking
     const { data: job, error: jobError } = await supabase
       .from('sync_jobs')
       .insert({ 
         user_id: userId, 
-        status: 'pending',
-        details: 'Triggering ingest-threads job via Trigger.dev'
+        status: SyncStatus.RUNNING,
+        details: 'Fetching Gmail batches via Edge Function'
       })
       .select()
       .single();
     
     if (jobError) {
       console.error('Error creating sync_job:', jobError);
-      // Continue anyway - the Trigger.dev job will still run
+      // Continue anyway
     }
 
-    // 4. Trigger the ingest-threads Trigger.dev job
-    const triggerUrl = `https://api.trigger.dev/api/v1/tasks/ingest-threads/trigger`;
-    
-    const triggerPayload = {
-      payload: {
-        userId: userId,
-      },
-      concurrencyKey: userId, // Ensures only one job per user
-    };
+    // 3. Call Edge Function to fetch batches (uses provider_token from session)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!supabaseUrl) {
+      return NextResponse.json(
+        { error: 'Server configuration error: SUPABASE_URL not set' },
+        { status: 500 }
+      );
+    }
 
-    console.log(`Triggering ingest-threads task for user ${userId}`);
-
-    const triggerResponse = await fetch(triggerUrl, {
+    const functionUrl = `${supabaseUrl}/functions/v1/sync-gmail-batches`;
+    const edgeFunctionResponse = await fetch(functionUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${triggerApiKey}`,
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY!,
       },
-      body: JSON.stringify(triggerPayload),
+      body: JSON.stringify({
+        provider_token: providerToken,
+        userId: userId,
+        maxBatches: 10, // Fetch first 10 batches (500 threads)
+      }),
     });
 
-    if (!triggerResponse.ok) {
-      const errorText = await triggerResponse.text();
-      console.error(`Failed to trigger ingest-threads job: ${triggerResponse.status} - ${errorText}`);
+    if (!edgeFunctionResponse.ok) {
+      const errorText = await edgeFunctionResponse.text();
+      console.error(`Edge function error: ${edgeFunctionResponse.status} - ${errorText}`);
       
-      // Update job status to failed if we created one
+      // Update job status to failed
       if (job) {
         await supabase
           .from('sync_jobs')
           .update({ 
-            status: 'failed',
-            details: `Failed to trigger Trigger.dev job: ${errorText}`
+            status: SyncStatus.FAILED,
+            details: `Edge function error: ${errorText}`
           })
           .eq('id', job.id);
       }
 
       return NextResponse.json(
         { 
-          error: 'Failed to trigger sync job',
+          error: 'Failed to fetch Gmail batches',
           details: errorText 
         },
-        { status: triggerResponse.status }
+        { status: edgeFunctionResponse.status }
       );
     }
 
-    const triggerResult = await triggerResponse.json();
-    console.log('Successfully triggered ingest-threads job:', triggerResult);
+    const functionResult = await edgeFunctionResponse.json();
+    console.log('Edge function response:', functionResult);
 
-    // 5. Update job status to running if we created one
+    // 4. Trigger Trigger.dev job to process stored data (no auth needed)
+    const triggerApiKey = process.env.TRIGGER_API_KEY;
+    if (triggerApiKey) {
+      const triggerUrl = `https://api.trigger.dev/api/v1/tasks/ingest-threads/trigger`;
+      const triggerPayload = {
+        payload: { userId },
+        concurrencyKey: userId,
+      };
+
+      // Fire and forget - don't wait for response
+      fetch(triggerUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${triggerApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(triggerPayload),
+      }).catch(err => {
+        console.error('Failed to trigger processing job (non-critical):', err);
+      });
+    }
+
+    // 5. Update job status
     if (job) {
       await supabase
         .from('sync_jobs')
         .update({ 
-          status: 'running',
-          details: 'Ingest-threads job triggered successfully'
+          status: SyncStatus.RUNNING,
+          details: `Fetched ${functionResult.totalThreadsFetched || 0} threads. Processing asynchronously.`
         })
         .eq('id', job.id);
     }
 
-    // 6. Return success response
+    // 6. Return success immediately (fetching happens in background)
     return NextResponse.json(
       { 
-        message: 'Thread sync initiated successfully via Trigger.dev',
+        message: 'Gmail sync initiated successfully',
         jobId: job?.id || null,
-        triggerId: triggerResult.id || null
+        batchesFetched: functionResult.batchesFetched || 0,
+        totalThreadsFetched: functionResult.totalThreadsFetched || 0,
+        hasMore: !!functionResult.nextPageToken,
       },
-      { status: 202 }
+      { status: 202 } // Accepted - processing asynchronously
     );
 
   } catch (error) {
