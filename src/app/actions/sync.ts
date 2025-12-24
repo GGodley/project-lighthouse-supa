@@ -26,6 +26,15 @@ interface TriggerDevHandle {
  * @throws Error if trigger fails
  */
 export async function startGmailSync(): Promise<{ success: boolean; handle?: TriggerDevHandle; error?: string; redirectToLogin?: boolean; needsGoogleReconnect?: boolean }> {
+  // Safe environment variable presence check (booleans only, no values)
+  console.log("[ENV] presence", {
+    hasNextPublicUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+    hasNextPublicAnon: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    hasServiceRole: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    hasAltServiceRole: !!process.env.SUPABASE_SERVICE_ROLE,
+    vercelEnv: process.env.VERCEL_ENV,
+  });
+
   // Initialize Supabase client using cookies-bound SSR pattern
   const supabase = await createClient();
 
