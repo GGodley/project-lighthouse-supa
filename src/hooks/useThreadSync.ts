@@ -18,9 +18,9 @@ interface UseThreadSyncReturn {
  * Handles:
  * - Server Action invocation (triggers Trigger.dev job)
  * - Loading and error states
- * - Error toast display for unauthorized errors
+ * - Redirects for session expiry vs Google reconnect
  * 
- * Uses Cookie Backpack pattern - Server Action reads token from secure HTTP-only cookie.
+ * Server Action reads provider_token from Supabase session and stores in google_tokens table.
  * Trigger.dev manages queue and job status - no database polling needed.
  */
 export function useThreadSync(): UseThreadSyncReturn {
@@ -45,10 +45,15 @@ export function useThreadSync(): UseThreadSyncReturn {
         setSyncDetails('Sync started successfully. Trigger.dev is processing in the background.');
         setProgressPercentage(null); // Trigger.dev manages progress
       } else {
-        // Handle session expired or other errors
-        if (result.error === 'Session expired. Please log in again.' || result.redirectToLogin) {
+        // Handle different error types
+        if (result.needsGoogleReconnect) {
+          // Session exists but provider_token is missing - redirect to reconnect Google
+          setSyncDetails('Google connection missing. Redirecting to reconnect...');
+          window.location.href = '/login?reconnect=google';
+          return;
+        } else if (result.redirectToLogin) {
+          // No session - redirect to login
           setSyncDetails('Session expired. Redirecting to login...');
-          // Redirect to login page
           window.location.href = '/login?error=Session expired. Please log in again.';
           return;
         } else {
