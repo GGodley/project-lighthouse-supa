@@ -117,26 +117,28 @@ serve(async (req: Request) => {
       .single();
 
     if (tokenError || !tokenData?.access_token) {
-      return new Response(
+      const res = new Response(
         JSON.stringify({ 
           error: "missing_google_token",
           message: "Google access token not found. Please reconnect your Google account."
         }),
-        { status: 412, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 412, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Fetch-Gmail-Batch-Version": "BROKER_AUTH_V3" } }
       );
+      return res;
     }
 
     // Optional expiry check (if expires_at is set and expired, return error early)
     if (tokenData.expires_at) {
       const expiresAt = new Date(tokenData.expires_at);
       if (expiresAt < new Date()) {
-        return new Response(
+        const res = new Response(
           JSON.stringify({ 
             error: "token_expired",
             message: "Google access token has expired. Please reconnect your Google account."
           }),
-          { status: 412, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 412, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Fetch-Gmail-Batch-Version": "BROKER_AUTH_V3" } }
         );
+        return res;
       }
     }
 
@@ -172,29 +174,32 @@ serve(async (req: Request) => {
       console.error("Gmail API error: [REDACTED]");
       
       if (gmailResponse.status === 401) {
-        return new Response(
+        const res = new Response(
           JSON.stringify({ 
             error: "gmail_unauthorized",
             message: "Gmail authentication failed. Token may have expired."
           }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Fetch-Gmail-Batch-Version": "BROKER_AUTH_V3" } }
         );
+        return res;
       }
       
       if (gmailResponse.status === 403) {
-        return new Response(
+        const res = new Response(
           JSON.stringify({ 
             error: "gmail_forbidden",
             message: "Gmail access forbidden. Required scopes may be missing."
           }),
-          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Fetch-Gmail-Batch-Version": "BROKER_AUTH_V3" } }
         );
+        return res;
       }
       
-      return new Response(
+      const res = new Response(
         JSON.stringify({ error: "Gmail API request failed", details: "[REDACTED]" }),
-        { status: gmailResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: gmailResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Fetch-Gmail-Batch-Version": "BROKER_AUTH_V3" } }
       );
+      return res;
     }
 
     const gmailData: GmailThreadsResponse = await gmailResponse.json();
