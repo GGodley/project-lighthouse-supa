@@ -95,13 +95,14 @@ serve(async (req: Request) => {
     const { userId, pageToken, lastSyncedAt } = body;
 
     if (!userId) {
-      return new Response(
+      const res = new Response(
         JSON.stringify({ error: "Missing userId in request body" }),
         {
           status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
+          headers: { ...corsHeaders, "Content-Type": "application/json", "X-Fetch-Gmail-Batch-Version": "BROKER_AUTH_V3" }
         }
       );
+      return res;
     }
 
     // Create Supabase admin client to fetch token from google_tokens table
