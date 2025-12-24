@@ -53,19 +53,8 @@ serve(async (req: Request) => {
       return res;
     }
 
-    // Validate Authorization header (BROKER_SHARED_SECRET)
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      const res = new Response(
-        JSON.stringify({ error: "Missing Authorization header" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json", "X-Fetch-Gmail-Batch-Version": "BROKER_AUTH_V3" }
-        }
-      );
-      return res;
-    }
-
+    // Validate X-Broker-Secret header (BROKER_SHARED_SECRET)
+    // Use custom header instead of Authorization to avoid Supabase JWT parsing conflicts
     const brokerSecret = Deno.env.get("BROKER_SHARED_SECRET");
     if (!brokerSecret) {
       const res = new Response(
@@ -78,8 +67,8 @@ serve(async (req: Request) => {
       return res;
     }
 
-    const token = authHeader.replace('Bearer ', '');
-    if (token !== brokerSecret) {
+    const providedSecret = req.headers.get("x-broker-secret");
+    if (!providedSecret || providedSecret !== brokerSecret) {
       const res = new Response(
         JSON.stringify({ error: "Unauthorized" }),
         {
