@@ -81,18 +81,21 @@ export const ingestThreadsTask = task({
 
         // Fetch batch from Edge Function
         const brokerSecret = process.env.BROKER_SHARED_SECRET;
+        const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        
         if (!brokerSecret) {
           throw new Error('BROKER_SHARED_SECRET environment variable is not set');
         }
 
-        // Log auth header being sent (safe - only first 6 chars)
-        console.log("[BROKER] sending auth header:", `Bearer ${brokerSecret.slice(0, 6)}...`);
+        // Log broker secret being sent (safe - only first 6 chars)
+        console.log("[BROKER] sending X-Broker-Secret header:", `${brokerSecret.slice(0, 6)}...`);
 
         const fetchResponse = await fetch(edgeFunctionUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${brokerSecret}`,
+            'apikey': supabaseAnonKey || '',
+            'X-Broker-Secret': brokerSecret,
           },
           body: JSON.stringify({ userId, pageToken }),
         });

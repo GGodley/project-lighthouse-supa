@@ -6,7 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-broker-secret'
 };
 
 interface RequestBody {
@@ -28,12 +28,12 @@ serve(async (req: Request) => {
 
   try {
     // Safe header debugging (only prefixes, never full secrets)
-    const auth = req.headers.get("authorization") || "";
+    const brokerSecretHeader = req.headers.get("x-broker-secret") || "";
     const apikey = req.headers.get("apikey") || "";
     
     console.log("[BROKER] header debug", {
-      hasAuthorization: !!auth,
-      authPrefix: auth.slice(0, 12), // e.g. "Bearer abc..."
+      hasBrokerSecret: !!brokerSecretHeader,
+      brokerSecretPrefix: brokerSecretHeader.slice(0, 8),
       hasApikey: !!apikey,
       apikeyPrefix: apikey.slice(0, 8),
     });
