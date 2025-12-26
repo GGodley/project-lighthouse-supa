@@ -52,41 +52,39 @@ export default function UpcomingMeetings() {
       <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">
         Upcoming Meetings
       </h3>
-      {/* Meeting List - centered and with max-width for better readability */}
-      <div className="flex-1 overflow-y-auto space-y-2">
+      {/* Meeting List - single column, fills 100% width */}
+      <div className="flex-1 overflow-y-auto space-y-2 w-full">
         {loading ? (
           <p className="text-gray-500 dark:text-gray-400 text-sm text-center py-8">Loading meetings...</p>
         ) : meetings.length === 0 ? (
           <p className="text-gray-500 dark:text-gray-400 text-sm text-center py-8">No meetings scheduled this week</p>
         ) : (
-          <div className="max-w-2xl mx-auto w-full">
-            {meetings.map((meeting, index) => (
-              <div
-                key={index}
-                className="p-3 rounded-lg bg-white/50 dark:bg-slate-700/50 border border-white/50 dark:border-white/10"
-              >
-                <div className="flex items-start gap-2">
-                  <div className="w-1 h-full bg-blue-500 dark:bg-blue-400 rounded-full" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-slate-800 dark:text-white">
-                      {meeting.title || 'Scheduled call'}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Clock className="w-3 h-3 text-gray-500 dark:text-gray-400" />
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {formatTime(meeting.start_time)} - {formatTime(meeting.end_time)}
-                      </span>
-                    </div>
-                    {meeting.customer_name && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {meeting.customer_name}
-                      </p>
-                    )}
+          meetings.map((meeting, index) => (
+            <div
+              key={index}
+              className="p-3 rounded-lg bg-white/50 dark:bg-slate-700/50 border border-white/50 dark:border-white/10 w-full"
+            >
+              <div className="flex items-start gap-2">
+                <div className="w-1 h-full bg-blue-500 dark:bg-blue-400 rounded-full" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-slate-800 dark:text-white">
+                    {meeting.title || 'Scheduled call'}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Clock className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      {formatTime(meeting.start_time)} - {formatTime(meeting.end_time)}
+                    </span>
                   </div>
+                  {meeting.customer_name && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {meeting.customer_name}
+                    </p>
+                  )}
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          ))
         )}
       </div>
     </div>
