@@ -23,16 +23,37 @@ interface TaskDetailModalProps {
 }
 
 const STATUS_CONFIG = {
-  todo: { label: 'To Do', color: 'bg-slate-600 text-white' },
-  in_progress: { label: 'In Progress', color: 'bg-blue-600 text-white' },
-  blocked: { label: 'Blocked', color: 'bg-red-600 text-white' },
-  done: { label: 'Done', color: 'bg-emerald-600 text-white' },
+  todo: { 
+    label: 'To Do', 
+    color: 'bg-slate-800 text-white border border-slate-700 shadow-sm shadow-slate-200' 
+  },
+  in_progress: { 
+    label: 'In Progress', 
+    color: 'bg-blue-500 text-white border border-blue-400 shadow-sm shadow-blue-200' 
+  },
+  blocked: { 
+    label: 'Blocked', 
+    color: 'bg-pink-500 text-white border border-pink-400 shadow-sm shadow-pink-200' 
+  },
+  done: { 
+    label: 'Done', 
+    color: 'bg-emerald-500 text-white border border-emerald-400 shadow-sm shadow-emerald-200' 
+  },
 }
 
 const PRIORITY_CONFIG = {
-  high: { label: 'High', color: 'bg-red-600 text-white' },
-  medium: { label: 'Medium', color: 'bg-orange-500 text-white' },
-  low: { label: 'Low', color: 'bg-emerald-500 text-white' },
+  high: { 
+    label: 'High', 
+    color: 'bg-rose-500 text-white border border-rose-400' 
+  },
+  medium: { 
+    label: 'Medium', 
+    color: 'bg-yellow-400 text-yellow-900 border border-yellow-300' 
+  },
+  low: { 
+    label: 'Low', 
+    color: 'bg-teal-500 text-white border border-teal-400' 
+  },
 }
 
 export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailModalProps) {
@@ -263,10 +284,10 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
                     key={priorityKey}
                     onClick={() => handlePriorityChange(priorityKey as 'high' | 'medium' | 'low')}
                     disabled={isUpdating}
-                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                    className={`px-4 py-2 rounded-full text-sm transition-all ${
                       isSelected
-                        ? `${config.color} ring-2 ring-offset-1 scale-105 font-bold shadow-sm`
-                        : 'bg-slate-100 text-slate-400 grayscale'
+                        ? `${config.color} ring-2 ring-offset-2 ring-gray-300 transform scale-105 font-bold shadow-sm`
+                        : 'bg-white text-gray-400 border border-gray-200 hover:bg-gray-50'
                     } ${isUpdating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                   >
                     {config.label}
@@ -292,10 +313,10 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
                     key={statusKey}
                     onClick={() => handleStatusChange(statusKey)}
                     disabled={isUpdating}
-                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                    className={`px-4 py-2 rounded-full text-sm transition-all ${
                       isSelected
-                        ? `${config.color} ring-2 ring-offset-1 scale-105 font-bold shadow-sm`
-                        : 'bg-slate-100 text-slate-400 grayscale'
+                        ? `${config.color} ring-2 ring-offset-2 ring-gray-300 transform scale-105 font-bold shadow-sm`
+                        : 'bg-white text-gray-400 border border-gray-200 hover:bg-gray-50'
                     } ${isUpdating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                   >
                     {config.label}

@@ -19,10 +19,37 @@ interface NextStep {
 }
 
 const STATUS_CONFIG = {
-  todo: { label: 'To Do', color: 'bg-slate-600 text-white' },
-  in_progress: { label: 'In Progress', color: 'bg-blue-600 text-white' },
-  blocked: { label: 'Blocked', color: 'bg-red-600 text-white' },
-  done: { label: 'Done', color: 'bg-emerald-600 text-white' },
+  todo: { 
+    label: 'To Do', 
+    color: 'bg-slate-800 text-white border border-slate-700 shadow-sm shadow-slate-200 font-bold' 
+  },
+  in_progress: { 
+    label: 'In Progress', 
+    color: 'bg-blue-500 text-white border border-blue-400 shadow-sm shadow-blue-200 font-bold' 
+  },
+  blocked: { 
+    label: 'Blocked', 
+    color: 'bg-pink-500 text-white border border-pink-400 shadow-sm shadow-pink-200 font-bold' 
+  },
+  done: { 
+    label: 'Done', 
+    color: 'bg-emerald-500 text-white border border-emerald-400 shadow-sm shadow-emerald-200 font-bold' 
+  },
+}
+
+const PRIORITY_CONFIG = {
+  high: { 
+    label: 'High', 
+    color: 'bg-rose-500 text-white border border-rose-400 font-bold' 
+  },
+  medium: { 
+    label: 'Medium', 
+    color: 'bg-yellow-400 text-yellow-900 border border-yellow-300 font-bold' 
+  },
+  low: { 
+    label: 'Low', 
+    color: 'bg-teal-500 text-white border border-teal-400 font-bold' 
+  },
 }
 
 const formatDueDate = (dateString: string | null) => {
@@ -168,27 +195,27 @@ export default function TasksNextSteps() {
                         <Link
                           href={`/dashboard/customer-threads/${task.thread_id}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 border border-yellow-200 hover:bg-yellow-200 transition-colors"
+                          className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200 font-bold hover:bg-yellow-200 transition-colors"
                         >
                           Source
                         </Link>
                       )}
                       
                       {/* Status */}
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${statusColor}`}>
                         {statusLabel}
                       </span>
                       
                       {/* Owner */}
                       {task.owner && (
-                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-medium">
                           {task.owner}
                         </span>
                       )}
                       
                       {/* Company */}
                       {task.company_name && (
-                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-medium">
                           {task.company_name}
                         </span>
                       )}

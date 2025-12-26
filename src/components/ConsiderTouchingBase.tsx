@@ -68,7 +68,7 @@ const ConsiderTouchingBase: React.FC = () => {
 
   return (
     <div className="glass-card p-6 h-full flex flex-col">
-      <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">
+      <h3 className="text-lg font-semibold mb-4">
         Consider Touching Base
       </h3>
       
@@ -83,7 +83,7 @@ const ConsiderTouchingBase: React.FC = () => {
               className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
                 isSelected
                   ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-600 dark:bg-slate-700 dark:text-gray-300 opacity-60'
+                  : 'bg-slate-100 text-slate-400 grayscale'
               }`}
             >
               {period.label}
@@ -96,19 +96,19 @@ const ConsiderTouchingBase: React.FC = () => {
       <div className="space-y-3 flex-1 overflow-y-auto" style={{ maxHeight: '20rem' }}>
         {loading ? (
           <div className="text-center p-8">
-            <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-gray-500 dark:text-gray-400" />
-            <p className="text-sm text-gray-500 dark:text-gray-400">Loading customers...</p>
+            <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+            <p className="text-sm">Loading customers...</p>
           </div>
         ) : error ? (
           <div className="text-center p-8">
-            <XCircle className="h-6 w-6 mx-auto mb-2 text-red-600 dark:text-red-400" />
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <XCircle className="h-6 w-6 mx-auto mb-2 text-red-600" />
+            <p className="text-sm text-red-600">{error}</p>
           </div>
         ) : customers.length === 0 ? (
           <div className="text-center p-8">
-            <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50 text-gray-400 dark:text-gray-500" />
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">All caught up!</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">No customers need touching base at this time.</p>
+            <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+            <p className="text-sm font-medium">All caught up!</p>
+            <p className="text-xs mt-1">No customers need touching base at this time.</p>
           </div>
         ) : (
           customers.map((customer, index) => (
@@ -117,22 +117,22 @@ const ConsiderTouchingBase: React.FC = () => {
               href={`/dashboard/customer-threads/${customer.company_id}`}
               className="block"
             >
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-100/80 dark:bg-slate-700/60 border border-white/20 dark:border-slate-600/20 shadow-sm transition-all hover:scale-[1.01] hover:shadow-md hover:bg-gray-100 dark:hover:bg-slate-700/80 cursor-pointer">
+              <div className="glass-bar-row flex items-center gap-3 p-3 cursor-pointer">
                 {/* Company Avatar */}
                 <CompanyAvatar domain={customer.domain_name || ''} name={customer.company_name} />
                 
                 {/* Name */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-800 dark:text-white truncate">
+                  <p className="text-sm font-medium truncate">
                     {customer.full_name || customer.email || 'Unnamed Customer'}
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  <p className="text-xs truncate opacity-70">
                     {customer.company_name || 'No Company'}
                   </p>
                 </div>
                 
                 {/* Arrow */}
-                <ArrowRight className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+                <ArrowRight className="w-4 h-4 opacity-50 flex-shrink-0" />
               </div>
             </Link>
           ))
