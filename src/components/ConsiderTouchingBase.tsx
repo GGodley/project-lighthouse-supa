@@ -100,7 +100,7 @@ const ConsiderTouchingBase: React.FC = () => {
       </div>
 
       {/* Customer List */}
-      <div className="space-y-3 flex-1 overflow-y-auto">
+      <div className="space-y-3 flex-1 overflow-y-auto" style={{ maxHeight: '20rem' }}>
         {loading ? (
           <div className="text-center p-8">
             <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-gray-500 dark:text-gray-400" />
@@ -122,25 +122,27 @@ const ConsiderTouchingBase: React.FC = () => {
             <Link
               key={customer.customer_id || index}
               href={`/dashboard/customer-threads/${customer.company_id}`}
-              className="flex items-center gap-3 p-3 rounded-lg bg-white/50 dark:bg-slate-700/50 hover:bg-white/70 dark:hover:bg-slate-700/70 transition-colors"
+              className="block"
             >
-              {/* Avatar */}
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-500 dark:bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
-                {getInitials(customer.full_name)}
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-white/60 dark:bg-slate-700/60 border border-white/20 dark:border-slate-600/20 shadow-sm transition-all hover:scale-[1.01] hover:shadow-md hover:bg-white/80 dark:hover:bg-slate-700/80 cursor-pointer">
+                {/* Avatar */}
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-500 dark:bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
+                  {getInitials(customer.full_name)}
+                </div>
+                
+                {/* Name */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-800 dark:text-white truncate">
+                    {customer.full_name || customer.email || 'Unnamed Customer'}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    {customer.company_name || 'No Company'}
+                  </p>
+                </div>
+                
+                {/* Arrow */}
+                <ArrowRight className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />
               </div>
-              
-              {/* Name */}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-800 dark:text-white truncate">
-                  {customer.full_name || customer.email || 'Unnamed Customer'}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                  {customer.company_name || 'No Company'}
-                </p>
-              </div>
-              
-              {/* Arrow */}
-              <ArrowRight className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />
             </Link>
           ))
         )}
