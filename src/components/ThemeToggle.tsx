@@ -1,11 +1,15 @@
 'use client'
 
 import { Sun, Moon } from 'lucide-react'
-import { useTheme } from '@/contexts/ThemeContext'
+import { useTheme } from 'next-themes'
 
 export default function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme()
+  const { theme, setTheme } = useTheme()
   const isDark = theme === 'dark'
+  
+  const toggleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark')
+  }
 
   return (
     <button
