@@ -241,15 +241,37 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
       const threadExists = threads.some(t => t.thread_id === threadParam);
       
       if (threadExists) {
-        // Thread belongs to this company, select it
+        // Thread belongs to this company, select it and load summary
         setSelectedThreadId(threadParam);
         setActiveView('Interaction Timeline');
+        
+        // Load the thread summary
+        const loadThreadSummary = async () => {
+          setLoadingThread(true);
+          try {
+            const { data: thread, error: threadError } = await getThreadById(supabase, threadParam);
+            
+            if (threadError || !thread) {
+              console.error('Thread fetch error:', threadError);
+              setSelectedThreadSummary({ error: threadError?.message || 'Thread not found' });
+            } else {
+              setSelectedThreadSummary(thread.llm_summary);
+            }
+          } catch (err) {
+            console.error('Error fetching thread:', err);
+            setSelectedThreadSummary({ error: 'Failed to load thread' });
+          } finally {
+            setLoadingThread(false);
+          }
+        };
+        
+        loadThreadSummary();
       } else {
         // Thread doesn't exist or doesn't belong to this company
         console.warn(`Thread ${threadParam} not found in company ${companyId}'s threads`);
       }
     }
-  }, [searchParams, threads, threadsLoading, companyId]);
+  }, [searchParams, threads, threadsLoading, companyId, supabase]);
 
   const formatDate = (dateString: string): string => {
     return new Date(dateString).toLocaleDateString('en-US', {

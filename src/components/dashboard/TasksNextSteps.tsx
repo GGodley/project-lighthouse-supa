@@ -82,7 +82,7 @@ export default function TasksNextSteps() {
       <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">
         Tasks / Next Steps
       </h3>
-      <div className="space-y-3 flex-1 overflow-y-auto">
+      <div className="space-y-3 flex-1 overflow-y-auto" style={{ maxHeight: '20rem' }}>
         {loading ? (
           <p className="text-gray-500 dark:text-gray-400 text-sm">Loading tasks...</p>
         ) : tasks.length === 0 ? (
