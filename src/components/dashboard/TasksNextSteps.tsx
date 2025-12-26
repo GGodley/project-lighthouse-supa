@@ -91,7 +91,8 @@ export default function TasksNextSteps() {
           tasks.map((task) => {
             const completed = isCompleted(task.status)
             const progress = getProgressPercentage(task.priority)
-            const isClickable = task.thread_id && task.company_id
+            // Make clickable if we have company_id (even without thread_id)
+            const isClickable = !!task.company_id
             
             const taskContent = (
               <div
@@ -131,10 +132,15 @@ export default function TasksNextSteps() {
             )
             
             if (isClickable) {
+              // Build href: include thread query param only if thread_id exists
+              const href = task.thread_id 
+                ? `/dashboard/customer-threads/${task.company_id}?thread=${task.thread_id}`
+                : `/dashboard/customer-threads/${task.company_id}`
+              
               return (
                 <Link
                   key={task.step_id}
-                  href={`/dashboard/customer-threads/${task.company_id}?thread=${task.thread_id}`}
+                  href={href}
                   className="block"
                 >
                   {taskContent}
