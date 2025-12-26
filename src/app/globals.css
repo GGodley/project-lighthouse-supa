@@ -45,10 +45,19 @@ body {
 
 /* Neutral gradient background for glass morphism effect - Dual Theme */
 .glass-bg {
-  @apply bg-gray-100 dark:bg-slate-950;
   background-size: 400% 400%;
   animation: gradientShift 20s ease infinite;
   min-height: 100vh;
+}
+
+/* Light theme background */
+[data-theme="light"] .glass-bg {
+  background: #f3f4f6; /* bg-gray-100 */
+}
+
+/* Dark theme background */
+[data-theme="dark"] .glass-bg {
+  background: #020617; /* slate-950 */
 }
 
 @keyframes gradientShift {
@@ -60,17 +69,28 @@ body {
 /* Glass morphism card/container effect - Dual Theme Utility Class */
 @layer components {
   .glass-card {
-    @apply backdrop-blur-[12px] rounded-xl transition-colors duration-300
-           /* Light Mode Styles - White Frosted Glass */
-           bg-white/70 border border-white/50 shadow-sm
-           /* Dark Mode Styles - Dark Smoked Glass */
-           dark:bg-slate-800/50 dark:border-white/10 dark:shadow-none;
+    @apply backdrop-blur-[12px] rounded-xl transition-colors duration-300;
     -webkit-backdrop-filter: blur(12px) saturate(180%);
   }
 
-  .glass-card:hover {
-    @apply shadow-md border-white/70
-           dark:bg-slate-800/60 dark:border-white/15 dark:shadow-lg;
+  /* Light Mode Styles - White Frosted Glass */
+  [data-theme="light"] .glass-card {
+    @apply bg-white/70 border border-white/50 shadow-sm;
+  }
+
+  /* Dark Mode Styles - Dark Smoked Glass */
+  [data-theme="dark"] .glass-card {
+    @apply bg-slate-800/50 border-white/10;
+    box-shadow: none;
+  }
+
+  [data-theme="light"] .glass-card:hover {
+    @apply shadow-md border-white/70;
+  }
+
+  [data-theme="dark"] .glass-card:hover {
+    @apply border-white/15;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   }
 }
 
@@ -699,30 +719,62 @@ button:active,
 
 /* React Calendar Dark Mode Styling */
 .react-calendar-custom {
-  @apply bg-white/50 dark:bg-slate-800/50 border border-white/50 dark:border-white/10 rounded-lg p-2;
+  @apply rounded-lg p-2;
   width: 100%;
 }
 
+[data-theme="light"] .react-calendar-custom {
+  @apply bg-white/50 border border-white/50;
+}
+
+[data-theme="dark"] .react-calendar-custom {
+  @apply bg-slate-800/50 border-white/10;
+}
+
 .react-calendar-custom .react-calendar__navigation {
-  @apply text-slate-800 dark:text-white;
+  @apply text-slate-800;
+}
+
+[data-theme="dark"] .react-calendar-custom .react-calendar__navigation {
+  @apply text-white;
 }
 
 .react-calendar-custom .react-calendar__navigation button {
-  @apply text-slate-800 dark:text-white hover:bg-white/50 dark:hover:bg-white/10;
+  @apply text-slate-800 hover:bg-white/50;
+}
+
+[data-theme="dark"] .react-calendar-custom .react-calendar__navigation button {
+  @apply text-white hover:bg-white/10;
 }
 
 .react-calendar-custom .react-calendar__month-view__weekdays {
-  @apply text-slate-600 dark:text-gray-400;
+  @apply text-slate-600;
+}
+
+[data-theme="dark"] .react-calendar-custom .react-calendar__month-view__weekdays {
+  @apply text-gray-400;
 }
 
 .react-calendar-custom .react-calendar__tile {
-  @apply text-slate-800 dark:text-white hover:bg-white/50 dark:hover:bg-white/10;
+  @apply text-slate-800 hover:bg-white/50;
+}
+
+[data-theme="dark"] .react-calendar-custom .react-calendar__tile {
+  @apply text-white hover:bg-white/10;
 }
 
 .react-calendar-custom .react-calendar__tile--active {
-  @apply bg-blue-600 dark:bg-blue-500 text-white;
+  @apply bg-blue-600 text-white;
+}
+
+[data-theme="dark"] .react-calendar-custom .react-calendar__tile--active {
+  @apply bg-blue-500;
 }
 
 .react-calendar-custom .react-calendar__tile--now {
-  @apply bg-blue-100 dark:bg-blue-900/50;
+  @apply bg-blue-100;
+}
+
+[data-theme="dark"] .react-calendar-custom .react-calendar__tile--now {
+  @apply bg-blue-900/50;
 }
