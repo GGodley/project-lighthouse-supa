@@ -11,6 +11,9 @@ interface CompanyAvatarProps {
 export default function CompanyAvatar({ domain, name, className = '' }: CompanyAvatarProps) {
   const [imageError, setImageError] = useState(false);
 
+  // Validate domain - if invalid, show initials immediately
+  const isValidDomain = domain && domain.trim().length > 0;
+
   // Generate initials from company name or domain
   const getInitials = () => {
     if (name) {
@@ -22,16 +25,20 @@ export default function CompanyAvatar({ domain, name, className = '' }: CompanyA
       return name.substring(0, 2).toUpperCase();
     }
     // Fallback to domain initials
-    const domainParts = domain.split('.');
-    if (domainParts.length > 0) {
-      const mainPart = domainParts[0];
-      return mainPart.substring(0, 2).toUpperCase();
+    if (domain) {
+      const domainParts = domain.split('.');
+      if (domainParts.length > 0) {
+        const mainPart = domainParts[0];
+        return mainPart.substring(0, 2).toUpperCase();
+      }
     }
     return 'CO';
   };
 
   // Generate a color based on domain for consistent avatar colors
   const getColorFromDomain = (domainStr: string) => {
+    if (!domainStr) return 'hsl(200, 60%, 50%)'; // Default blue if no domain
+    
     let hash = 0;
     for (let i = 0; i < domainStr.length; i++) {
       hash = domainStr.charCodeAt(i) + ((hash << 5) - hash);
@@ -46,29 +53,38 @@ export default function CompanyAvatar({ domain, name, className = '' }: CompanyA
   };
 
   const initials = getInitials();
-  const bgColor = getColorFromDomain(domain);
+  const bgColor = getColorFromDomain(domain || '');
   
-  // Try to use Clearbit logo API, fallback to initials
-  const logoUrl = `https://logo.clearbit.com/${domain}`;
+  // Use Google's Favicon service instead of Clearbit
+  const googleIconUrl = isValidDomain 
+    ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128`
+    : null;
 
-  return (
-    <div className={`flex-shrink-0 ${className}`}>
-      <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
-        {!imageError ? (
-          <img
-            src={logoUrl}
-            alt={name || domain}
-            className="w-full h-full object-cover"
-            onError={() => setImageError(true)}
-          />
-        ) : (
+  // If no valid domain, show initials immediately
+  if (!isValidDomain || imageError) {
+    return (
+      <div className={`flex-shrink-0 ${className}`}>
+        <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
           <div
             className="w-full h-full flex items-center justify-center text-white font-semibold text-sm"
             style={{ backgroundColor: bgColor }}
           >
             {initials}
           </div>
-        )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex-shrink-0 ${className}`}>
+      <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
+        <img
+          src={googleIconUrl!}
+          alt={name || domain}
+          className="w-full h-full object-cover"
+          onError={() => setImageError(true)}
+        />
       </div>
     </div>
   );
