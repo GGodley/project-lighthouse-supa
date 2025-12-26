@@ -32,6 +32,7 @@ type TaskWithNested = {
   status: string;
   created_at: string;
   thread_id: string | null;
+  meeting_id: string | null;
   requested_by_contact_id: string | null;
   threads: ThreadNested | ThreadNested[] | null;
   customers: CustomerNested | CustomerNested[] | null;
@@ -48,6 +49,7 @@ type TaskResponse = {
   company_id: string | null;
   company_name: string | null;
   thread_id: string | null;
+  meeting_id: string | null;
   created_at: string;
 };
 
@@ -87,6 +89,7 @@ export async function GET(request: Request) {
         owner,
         created_at,
         thread_id,
+        meeting_id,
         requested_by_contact_id,
         threads (
           thread_company_link (
@@ -210,6 +213,7 @@ export async function GET(request: Request) {
         company_id: companyId,
         company_name: companyName,
         thread_id: task.thread_id || null,
+        meeting_id: task.meeting_id || null,
         created_at: task.created_at,
         needsDirectQuery: !companyId && !!task.thread_id, // Need to query thread_company_link directly
       };
