@@ -1,8 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Calendar from 'react-calendar'
-import 'react-calendar/dist/Calendar.css'
 import { Clock } from 'lucide-react'
 
 interface Meeting {
@@ -15,7 +13,6 @@ interface Meeting {
 export default function UpcomingMeetings() {
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedDate, setSelectedDate] = useState(new Date())
 
   useEffect(() => {
     const fetchMeetings = async () => {
@@ -55,31 +52,15 @@ export default function UpcomingMeetings() {
       <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">
         Upcoming Meetings
       </h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
-        {/* Mini Calendar */}
-        <div>
-          <Calendar
-            value={selectedDate}
-            onChange={(value) => {
-              if (value instanceof Date) {
-                setSelectedDate(value)
-              } else if (Array.isArray(value) && value[0] instanceof Date) {
-                setSelectedDate(value[0])
-              }
-            }}
-            className="react-calendar-custom"
-            tileClassName="react-calendar-tile"
-          />
-        </div>
-
-        {/* Meeting List */}
-        <div className="max-h-[300px] overflow-y-auto space-y-2">
-          {loading ? (
-            <p className="text-gray-500 dark:text-gray-400 text-sm">Loading meetings...</p>
-          ) : meetings.length === 0 ? (
-            <p className="text-gray-500 dark:text-gray-400 text-sm">No meetings scheduled this week</p>
-          ) : (
-            meetings.map((meeting, index) => (
+      {/* Meeting List - centered and with max-width for better readability */}
+      <div className="flex-1 overflow-y-auto space-y-2">
+        {loading ? (
+          <p className="text-gray-500 dark:text-gray-400 text-sm text-center py-8">Loading meetings...</p>
+        ) : meetings.length === 0 ? (
+          <p className="text-gray-500 dark:text-gray-400 text-sm text-center py-8">No meetings scheduled this week</p>
+        ) : (
+          <div className="max-w-2xl mx-auto w-full">
+            {meetings.map((meeting, index) => (
               <div
                 key={index}
                 className="p-3 rounded-lg bg-white/50 dark:bg-slate-700/50 border border-white/50 dark:border-white/10"
@@ -104,9 +85,9 @@ export default function UpcomingMeetings() {
                   </div>
                 </div>
               </div>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
