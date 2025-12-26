@@ -83,12 +83,17 @@ body {
   box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.06);
 }
 
+/* Light theme glass header - ensure dark text */
+[data-theme="light"] .glass-header {
+  color: #171717 !important; /* Dark text for light mode */
+}
+
 /* Dark theme glass header */
 [data-theme="dark"] .glass-header {
   background: rgba(30, 33, 40, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.3);
-  color: #f1f5f9; /* Explicit text color for better visibility */
+  color: #f1f5f9 !important; /* Explicit text color for better visibility */
 }
 
 /* Glass morphism for buttons - neutral with subtle accent */
@@ -183,11 +188,17 @@ body {
   -webkit-backdrop-filter: blur(10px);
 }
 
+/* Light theme glass table - ensure dark text */
+[data-theme="light"] .glass-table-header,
+[data-theme="light"] .glass-table thead tr {
+  color: #171717 !important; /* Dark text for light mode */
+}
+
 /* Dark theme glass table */
 [data-theme="dark"] .glass-table-header,
 [data-theme="dark"] .glass-table thead tr {
   background: rgba(30, 33, 40, 0.95);
-  color: #f1f5f9; /* Explicit text color for better visibility */
+  color: #f1f5f9 !important; /* Explicit text color for better visibility */
 }
 
 /* Sticky header enhancement */
@@ -250,13 +261,18 @@ body {
   border-color: rgba(59, 130, 246, 0.4);
 }
 
+/* Light theme glass bar row - ensure dark text */
+[data-theme="light"] .glass-bar-row {
+  color: #171717 !important; /* Dark text for light mode */
+}
+
 /* Dark theme glass bar row */
 [data-theme="dark"] .glass-bar-row {
   background: rgba(30, 33, 40, 0.75);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.3), 
               0 1px 3px 0 rgba(0, 0, 0, 0.2);
-  color: #f1f5f9; /* Explicit text color for better visibility */
+  color: #f1f5f9 !important; /* Explicit text color for better visibility */
 }
 
 [data-theme="dark"] .glass-bar-row:hover {
@@ -302,6 +318,30 @@ body {
   transition-duration: 150ms;
 }
 
+/* Light theme text colors - ensure dark text on light background */
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+[data-theme="light"] body,
+[data-theme="light"] p,
+[data-theme="light"] span,
+[data-theme="light"] div,
+[data-theme="light"] label,
+[data-theme="light"] td,
+[data-theme="light"] th {
+  color: #171717 !important; /* Dark text for light mode */
+}
+
+[data-theme="light"] h1,
+[data-theme="light"] h2,
+[data-theme="light"] h3,
+[data-theme="light"] h4,
+[data-theme="light"] h5,
+[data-theme="light"] h6 {
+  color: #111827 !important; /* Dark headings for light mode */
+}
+
 /* Dark theme text colors */
 [data-theme="dark"] {
   color-scheme: dark;
@@ -326,6 +366,15 @@ body {
 [data-theme="dark"] h5,
 [data-theme="dark"] h6 {
   color: #ffffff !important; /* Pure white for headings */
+}
+
+/* Explicit link colors for light mode */
+[data-theme="light"] a {
+  color: #2563eb !important; /* Blue for links in light mode */
+}
+
+[data-theme="light"] a:hover {
+  color: #1d4ed8 !important; /* Darker blue on hover */
 }
 
 /* Explicit link colors for dark mode - ensure visibility */
@@ -579,19 +628,19 @@ button:active,
 }
 
 /* Force dark grey text in light theme for glass-card elements - highest specificity */
-.glass-card,
-.glass-card h1,
-.glass-card h2,
-.glass-card h3,
-.glass-card h4,
-.glass-card h5,
-.glass-card h6,
-.glass-card p,
-.glass-card span,
-.glass-card div,
-.glass-card li,
-.glass-card ul,
-.glass-card ol {
+[data-theme="light"] .glass-card,
+[data-theme="light"] .glass-card h1,
+[data-theme="light"] .glass-card h2,
+[data-theme="light"] .glass-card h3,
+[data-theme="light"] .glass-card h4,
+[data-theme="light"] .glass-card h5,
+[data-theme="light"] .glass-card h6,
+[data-theme="light"] .glass-card p,
+[data-theme="light"] .glass-card span,
+[data-theme="light"] .glass-card div,
+[data-theme="light"] .glass-card li,
+[data-theme="light"] .glass-card ul,
+[data-theme="light"] .glass-card ol {
   color: #1a1a1a !important;
 }
 
@@ -623,10 +672,10 @@ button:active,
 }
 
 /* Force dark grey text on all paragraphs and spans in glass-card - override dark: classes */
-.glass-card p,
-.glass-card span:not(.text-blue-700):not(.text-green-700):not(.text-red-700):not(.text-purple-700):not(.text-yellow-700):not(.text-pink-600),
-.glass-card li,
-.glass-card div:not([class*="text-"]) {
+[data-theme="light"] .glass-card p,
+[data-theme="light"] .glass-card span:not(.text-blue-700):not(.text-green-700):not(.text-red-700):not(.text-purple-700):not(.text-yellow-700):not(.text-pink-600),
+[data-theme="light"] .glass-card li,
+[data-theme="light"] .glass-card div:not([class*="text-"]) {
   color: #1a1a1a !important;
 }
 
