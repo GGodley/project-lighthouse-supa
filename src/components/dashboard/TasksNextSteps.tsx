@@ -204,9 +204,9 @@ export default function TasksNextSteps() {
                       </span>
                       
                       {/* Source */}
-                      {task.thread_id && (
+                      {(task.thread_id || task.meeting_id) && (
                         <Link
-                          href={`/dashboard/customer-threads/${task.thread_id}`}
+                          href={`/dashboard/customer-threads/${task.thread_id ?? task.meeting_id ?? ''}`}
                           onClick={(e) => e.stopPropagation()}
                           className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200 font-bold hover:bg-yellow-200 transition-colors"
                         >
