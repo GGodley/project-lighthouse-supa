@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { useTheme } from 'next-themes'
 import { 
   Settings, 
   LogOut,
@@ -12,7 +13,6 @@ import {
   Sun,
   Moon
 } from 'lucide-react'
-import { useTheme } from '@/contexts/ThemeContext'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: BarChart3 },
@@ -27,8 +27,12 @@ interface SidebarProps {
 
 export default function Sidebar({ onSignOut }: SidebarProps) {
   const pathname = usePathname()
-  const { theme, toggleTheme } = useTheme()
+  const { theme, setTheme } = useTheme()
   const isDark = theme === 'dark'
+  
+  const toggleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark')
+  }
 
   // Check if a route is active (handles nested routes like /dashboard/customer-threads/[id])
   const isRouteActive = (href: string) => {
@@ -40,40 +44,20 @@ export default function Sidebar({ onSignOut }: SidebarProps) {
   }
 
   return (
-    <div className="flex flex-col w-64 glass-header border-r border-white/20">
-      <div className="flex items-center justify-between h-16 px-4 border-b border-white/20">
-        <h1 className="text-xl font-bold text-gray-900">Lighthouse</h1>
+    <div className="flex flex-col w-64 glass-header border-r border-white/20 dark:border-white/10">
+      <div className="flex items-center justify-between h-16 px-4 border-b border-white/20 dark:border-white/10">
+        <h1 className="text-xl font-bold text-slate-800 dark:text-white">Lighthouse</h1>
         <button
           onClick={toggleTheme}
-          className="p-2 rounded-lg hover:bg-white/30 transition-colors"
+          className="p-2 rounded-lg hover:bg-white/30 dark:hover:bg-white/10 transition-colors"
           aria-label={`Switch to ${isDark ? 'light' : 'dark'} theme`}
           title={`Switch to ${isDark ? 'light' : 'dark'} theme`}
         >
-          <div className="relative w-8 h-5 flex items-center">
-            {/* Track */}
-            <div className={`absolute inset-0 rounded-full transition-colors ${
-              isDark 
-                ? 'bg-gray-700' 
-                : 'bg-gray-300'
-            }`} />
-            
-            {/* Slider */}
-            <div className={`absolute w-4 h-4 rounded-full bg-white shadow-md transition-transform duration-300 ${
-              isDark 
-                ? 'translate-x-4' 
-                : 'translate-x-0.5'
-            }`} />
-            
-            {/* Icons */}
-            <div className="relative w-full h-full flex items-center justify-between px-1 pointer-events-none">
-              <Sun className={`w-3 h-3 transition-opacity ${
-                isDark ? 'opacity-0' : 'opacity-100 text-yellow-500'
-              }`} />
-              <Moon className={`w-3 h-3 transition-opacity ${
-                isDark ? 'opacity-100 text-blue-300' : 'opacity-0'
-              }`} />
-            </div>
-          </div>
+          {isDark ? (
+            <Sun className="w-5 h-5 text-yellow-400" />
+          ) : (
+            <Moon className="w-5 h-5 text-slate-600" />
+          )}
         </button>
       </div>
       
@@ -87,16 +71,20 @@ export default function Sidebar({ onSignOut }: SidebarProps) {
               className={cn(
                 'relative flex items-center px-4 py-3 text-sm rounded-xl transition-all no-underline',
                 isActive
-                  ? 'glass-card font-semibold text-gray-900 shadow-md'
-                  : 'text-gray-950 hover:text-gray-950 hover:bg-white/30'
+                  ? 'glass-card font-semibold text-slate-800 dark:text-white bg-blue-100 dark:bg-blue-500/20 shadow-md'
+                  : 'text-slate-700 dark:text-gray-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/30 dark:hover:bg-white/10'
               )}
             >
               <item.icon className={cn(
                 'w-5 h-5 mr-3 flex-shrink-0',
-                isActive ? 'text-gray-900' : 'text-gray-700'
+                isActive 
+                  ? 'text-blue-700 dark:text-blue-300' 
+                  : 'text-slate-600 dark:text-gray-400'
               )} />
               <span className={cn(
-                isActive ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'
+                isActive 
+                  ? 'font-semibold text-blue-700 dark:text-blue-300' 
+                  : 'font-medium text-slate-700 dark:text-gray-300'
               )}>
                 {item.name}
               </span>
@@ -105,10 +93,10 @@ export default function Sidebar({ onSignOut }: SidebarProps) {
         })}
       </nav>
       
-      <div className="p-4 border-t border-white/20">
+      <div className="p-4 border-t border-white/20 dark:border-white/10">
         <button
           onClick={onSignOut}
-          className="flex items-center w-full px-4 py-3 text-sm font-medium text-gray-600 rounded-xl hover:bg-white/30 hover:text-gray-900 transition-all"
+          className="flex items-center w-full px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 rounded-xl hover:bg-white/30 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-all"
         >
           <LogOut className="w-5 h-5 mr-3" />
           Sign out

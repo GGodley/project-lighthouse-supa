@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Loader2, XCircle, Building2 } from 'lucide-react'
-import HealthScoreBar from '@/components/ui/HealthScoreBar'
+import { Loader2, XCircle, Building2, ArrowRight } from 'lucide-react'
 
 // Customer type matching the API response
 type Customer = {
@@ -29,17 +28,16 @@ type TimePeriod = {
 }
 
 const TIME_PERIODS: TimePeriod[] = [
-  { label: '1 Week', days: 7 },
-  { label: '2 Weeks', days: 14 },
-  { label: '30 Days', days: 30 },
-  { label: '60 Days', days: 60 },
+  { label: '2 weeks', days: 14 },
+  { label: '1 month', days: 30 },
+  { label: '>2 months', days: 60 },
 ]
 
 const ConsiderTouchingBase: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedDays, setSelectedDays] = useState<number>(30) // Default to 30 days (1 month)
+  const [selectedDays, setSelectedDays] = useState<number>(30) // Default to 1 month
 
   useEffect(() => {
     const fetchTouchingBaseCustomers = async () => {
@@ -78,126 +76,86 @@ const ConsiderTouchingBase: React.FC = () => {
     'Very Negative': 'bg-red-50 text-red-700 border border-red-200',
   }
 
-  const getDescriptionText = (days: number) => {
-    if (days === 7) return "Customers that haven't had an interaction in 1 week"
-    if (days === 14) return "Customers that haven't had an interaction in 2+ weeks"
-    if (days === 30) return "Customers that haven't had an interaction in 1 month"
-    if (days === 60) return "Customers that haven't had an interaction in 2 months"
-    return `Customers that haven't had an interaction in ${days} days`
+  const getInitials = (name: string | null) => {
+    if (!name) return '?'
+    const parts = name.trim().split(' ')
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    }
+    return name.substring(0, 2).toUpperCase()
   }
 
   return (
-    <div className="glass-card rounded-2xl p-6">
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold text-gray-900">Consider Touching Base</h2>
-        <p className="text-sm text-gray-600 mt-1">
-          {getDescriptionText(selectedDays)}
-        </p>
-        
-        {/* Time Period Pills */}
-        <div className="flex flex-wrap gap-2 mt-4">
-          {TIME_PERIODS.map((period) => {
-            const isSelected = selectedDays === period.days
-            const handleClick = () => {
-              setSelectedDays(period.days)
-            }
-            return (
-              <button
-                key={`period-${period.days}`}
-                onClick={handleClick}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                  isSelected
-                    ? 'bg-blue-50 text-blue-700 border-blue-200'
-                    : 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200'
-                }`}
-              >
-                {period.label}
-              </button>
-            )
-          })}
-        </div>
+    <div className="glass-card p-6">
+      <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">
+        Consider Touching Base
+      </h3>
+      
+      {/* Filter Pills */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {TIME_PERIODS.map((period) => {
+          const isSelected = selectedDays === period.days
+          return (
+            <button
+              key={`period-${period.days}`}
+              onClick={() => setSelectedDays(period.days)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                isSelected
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-600 dark:bg-slate-700 dark:text-gray-300 opacity-60'
+              }`}
+            >
+              {period.label}
+            </button>
+          )
+        })}
       </div>
 
-      <div className="max-h-[450px] overflow-y-auto">
-        <table className="glass-table w-full text-sm text-left rounded-xl">
-            <thead className="glass-table-header sticky top-0 z-10">
-              <tr className="bg-inherit">
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Customer Name
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Company Name
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Health Score
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Status
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Last Interaction
-                </th>
-              </tr>
-            </thead>
-            <tbody className="space-y-2">
-              {loading ? (
-                <tr>
-                  <td colSpan={5} className="text-center p-8 text-gray-600">
-                    <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-                    <p>Loading customers...</p>
-                  </td>
-                </tr>
-              ) : error ? (
-                <tr>
-                  <td colSpan={5} className="text-center p-8 text-red-600">
-                    <XCircle className="h-6 w-6 mx-auto mb-2" />
-                    <p>{error}</p>
-                  </td>
-                </tr>
-              ) : customers.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="text-center p-8 text-gray-500">
-                    <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p className="text-lg font-medium">All caught up!</p>
-                    <p className="text-sm mt-2">No customers need touching base at this time.</p>
-                  </td>
-                </tr>
-              ) : (
-                customers.map((customer, index) => (
-                  <tr key={customer.customer_id || index} className="glass-bar-row">
-                    <td className="px-6 py-5">
-                      <Link 
-                        href={`/dashboard/customer-threads/${customer.company_id}`} 
-                        className="font-semibold text-gray-900 hover:text-blue-600 transition-colors text-base"
-                      >
-                        {customer.full_name || customer.email || 'Unnamed Customer'}
-                      </Link>
-                    </td>
-                    <td className="px-6 py-5 text-gray-700">
-                      {customer.company_name || 'No Company'}
-                    </td>
-                    <td className="px-6 py-5">
-                      <HealthScoreBar score={customer.health_score} showLabel={true} />
-                    </td>
-                    <td className="px-6 py-5">
-                      <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
-                        statusPillStyles[customer.overall_sentiment || ''] || 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {customer.overall_sentiment || 'Not set'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-5 text-gray-600">
-                      {customer.last_interaction_at ? (
-                        new Date(customer.last_interaction_at).toLocaleDateString('en-CA')
-                      ) : (
-                        <span className="text-gray-400">Never</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      {/* Customer List */}
+      <div className="space-y-3 max-h-[400px] overflow-y-auto">
+        {loading ? (
+          <div className="text-center p-8">
+            <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-gray-500 dark:text-gray-400" />
+            <p className="text-sm text-gray-500 dark:text-gray-400">Loading customers...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center p-8">
+            <XCircle className="h-6 w-6 mx-auto mb-2 text-red-600 dark:text-red-400" />
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          </div>
+        ) : customers.length === 0 ? (
+          <div className="text-center p-8">
+            <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50 text-gray-400 dark:text-gray-500" />
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">All caught up!</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">No customers need touching base at this time.</p>
+          </div>
+        ) : (
+          customers.map((customer, index) => (
+            <Link
+              key={customer.customer_id || index}
+              href={`/dashboard/customer-threads/${customer.company_id}`}
+              className="flex items-center gap-3 p-3 rounded-lg bg-white/50 dark:bg-slate-700/50 hover:bg-white/70 dark:hover:bg-slate-700/70 transition-colors"
+            >
+              {/* Avatar */}
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-500 dark:bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
+                {getInitials(customer.full_name)}
+              </div>
+              
+              {/* Name */}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-800 dark:text-white truncate">
+                  {customer.full_name || customer.email || 'Unnamed Customer'}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  {customer.company_name || 'No Company'}
+                </p>
+              </div>
+              
+              {/* Arrow */}
+              <ArrowRight className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+            </Link>
+          ))
+        )}
       </div>
     </div>
   )

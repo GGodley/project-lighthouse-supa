@@ -27,19 +27,12 @@ body {
 
 /* Apple Liquid Glass Design Styles - Neutral Theme */
 
-/* Neutral gradient background for glass morphism effect - Light Theme */
+/* Neutral gradient background for glass morphism effect - Dual Theme */
 .glass-bg {
-  background: linear-gradient(135deg, #f5f7fa 0%, #e8ebf0 25%, #f0f2f5 50%, #e8ebf0 75%, #f5f7fa 100%);
+  @apply bg-gray-100 dark:bg-slate-950;
   background-size: 400% 400%;
   animation: gradientShift 20s ease infinite;
   min-height: 100vh;
-}
-
-/* Dark theme gradient background */
-[data-theme="dark"] .glass-bg {
-  background: linear-gradient(135deg, #1a1d24 0%, #1f2329 25%, #1d2026 50%, #1f2329 75%, #1a1d24 100%);
-  background-size: 400% 400%;
-  animation: gradientShift 20s ease infinite;
 }
 
 @keyframes gradientShift {
@@ -48,32 +41,21 @@ body {
   100% { background-position: 0% 50%; }
 }
 
-/* Glass morphism card/container effect - neutral */
-.glass-card {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
+/* Glass morphism card/container effect - Dual Theme Utility Class */
+@layer components {
+  .glass-card {
+    @apply backdrop-blur-[12px] rounded-xl transition-colors duration-300
+           /* Light Mode Styles - White Frosted Glass */
+           bg-white/70 border border-white/50 shadow-sm
+           /* Dark Mode Styles - Dark Smoked Glass */
+           dark:bg-slate-800/50 dark:border-white/10 dark:shadow-none;
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+  }
 
-.glass-card:hover {
-  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.12);
-  border-color: rgba(255, 255, 255, 0.7);
-}
-
-/* Dark theme glass card */
-[data-theme="dark"] .glass-card {
-  background: rgba(30, 33, 40, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-}
-
-[data-theme="dark"] .glass-card:hover {
-  background: rgba(30, 33, 40, 0.85);
-  border-color: rgba(255, 255, 255, 0.15);
-  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.4);
+  .glass-card:hover {
+    @apply shadow-md border-white/70
+           dark:bg-slate-800/60 dark:border-white/15 dark:shadow-lg;
+  }
 }
 
 /* Glass morphism for header/nav elements */
@@ -603,4 +585,34 @@ button:active,
 .glass-header nav a:focus {
   text-decoration: none !important;
   color: inherit !important;
+}
+
+/* React Calendar Dark Mode Styling */
+.react-calendar-custom {
+  @apply bg-white/50 dark:bg-slate-800/50 border border-white/50 dark:border-white/10 rounded-lg p-2;
+  width: 100%;
+}
+
+.react-calendar-custom .react-calendar__navigation {
+  @apply text-slate-800 dark:text-white;
+}
+
+.react-calendar-custom .react-calendar__navigation button {
+  @apply text-slate-800 dark:text-white hover:bg-white/50 dark:hover:bg-white/10;
+}
+
+.react-calendar-custom .react-calendar__month-view__weekdays {
+  @apply text-slate-600 dark:text-gray-400;
+}
+
+.react-calendar-custom .react-calendar__tile {
+  @apply text-slate-800 dark:text-white hover:bg-white/50 dark:hover:bg-white/10;
+}
+
+.react-calendar-custom .react-calendar__tile--active {
+  @apply bg-blue-600 dark:bg-blue-500 text-white;
+}
+
+.react-calendar-custom .react-calendar__tile--now {
+  @apply bg-blue-100 dark:bg-blue-900/50;
 }
