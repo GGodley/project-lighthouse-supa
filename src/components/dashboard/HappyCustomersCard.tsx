@@ -24,12 +24,12 @@ export default async function HappyCustomersCard() {
   }
 
   return (
-    <div className="glass-card p-6">
+    <div className="glass-card p-6 h-full flex flex-col">
       <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
         Happy Customers
       </h3>
-      <div className="flex items-center gap-3">
-        <Smile className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+      <div className="flex items-center gap-3 flex-1">
+        <Smile className="w-8 h-8 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
         <div>
           <span className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
             {percentage}%

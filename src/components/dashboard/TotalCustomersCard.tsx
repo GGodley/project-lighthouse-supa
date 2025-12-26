@@ -19,7 +19,7 @@ export default async function TotalCustomersCard() {
   }
 
   return (
-    <div className="glass-card p-6">
+    <div className="glass-card p-6 h-full flex flex-col justify-between">
       <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
         Total Customers
       </h3>
@@ -27,7 +27,7 @@ export default async function TotalCustomersCard() {
         <span className="text-4xl font-bold text-slate-800 dark:text-white">
           {totalCustomers}
         </span>
-        <ArrowUp className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+        <ArrowUp className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
       </div>
     </div>
   )

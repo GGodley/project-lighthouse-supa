@@ -51,11 +51,11 @@ export default function UpcomingMeetings() {
   }
 
   return (
-    <div className="glass-card p-6">
+    <div className="glass-card p-6 h-full flex flex-col">
       <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">
         Upcoming Meetings
       </h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
         {/* Mini Calendar */}
         <div>
           <Calendar

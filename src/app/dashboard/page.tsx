@@ -22,28 +22,30 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-screen glass-bg p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Bento-box Grid Layout */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Bento-box Grid Layout - Precise 3-column grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6" style={{ gridAutoRows: 'minmax(min-content, auto)' }}>
           {/* Row 1: Welcome Banner (span 2) + Total Customers (span 1) */}
           <div className="md:col-span-2">
             <WelcomeBanner />
-            </div>
+          </div>
           <div className="md:col-span-1">
             <TotalCustomersCard />
           </div>
 
-          {/* Row 2: Happy Customers + Customers At Risk + Upcoming Meetings (tall) */}
-          <div className="md:col-span-1">
-            <HappyCustomersCard />
-                </div>
-          <div className="md:col-span-1">
-            <CustomersAtRiskCard />
-                </div>
-          <div className="md:col-span-1 md:row-span-2">
+          {/* Row 2-3: Left column wrapper (Happy + At Risk stacked) + Right column (Upcoming Meetings - tall) */}
+          <div className="md:col-span-1 md:row-span-2 flex flex-col gap-6 min-h-0">
+            <div className="flex-1 min-h-0">
+              <HappyCustomersCard />
+            </div>
+            <div className="flex-1 min-h-0">
+              <CustomersAtRiskCard />
+            </div>
+          </div>
+          <div className="md:col-span-1 md:row-span-2 min-h-0">
             <UpcomingMeetings />
           </div>
 
-          {/* Row 3: Tasks/Next Steps (span 2) + Consider Touching Base (span 1) */}
+          {/* Row 4: Tasks/Next Steps (span 2) + Consider Touching Base (span 1) */}
           <div className="md:col-span-2">
             <TasksNextSteps />
           </div>
@@ -55,3 +57,4 @@ export default async function DashboardPage() {
     </div>
   )
 }
+

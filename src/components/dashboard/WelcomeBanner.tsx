@@ -26,7 +26,7 @@ export default async function WelcomeBanner() {
   }
 
   return (
-    <div className="glass-card p-6">
+    <div className="glass-card p-6 h-full flex flex-col justify-center">
       <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-1">
         {getGreeting()}, {fullName}
       </h2>

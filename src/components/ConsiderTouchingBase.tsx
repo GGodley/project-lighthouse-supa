@@ -74,7 +74,7 @@ const ConsiderTouchingBase: React.FC = () => {
   }
 
   return (
-    <div className="glass-card p-6">
+    <div className="glass-card p-6 h-full flex flex-col">
       <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">
         Consider Touching Base
       </h3>
@@ -100,7 +100,7 @@ const ConsiderTouchingBase: React.FC = () => {
       </div>
 
       {/* Customer List */}
-      <div className="space-y-3 max-h-[400px] overflow-y-auto">
+      <div className="space-y-3 flex-1 overflow-y-auto">
         {loading ? (
           <div className="text-center p-8">
             <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-gray-500 dark:text-gray-400" />

@@ -24,12 +24,12 @@ export default async function CustomersAtRiskCard() {
   }
 
   return (
-    <div className="glass-card p-6">
+    <div className="glass-card p-6 h-full flex flex-col">
       <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
         Customers At Risk
       </h3>
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1">
+      <div className="flex items-center gap-3 flex-1">
+        <div className="flex items-center gap-1 flex-shrink-0">
           <AlertTriangle className="w-6 h-6 text-rose-600 dark:text-rose-500" />
           <Bell className="w-5 h-5 text-rose-600 dark:text-rose-500" />
         </div>
