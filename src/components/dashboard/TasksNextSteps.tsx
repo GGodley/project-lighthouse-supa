@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { CheckCircle2, Circle, ArrowRight } from 'lucide-react'
 import TaskDetailModal from './TaskDetailModal'
 
@@ -40,37 +40,36 @@ export default function TasksNextSteps() {
   const [tasks, setTasks] = useState<NextStep[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedTask, setSelectedTask] = useState<NextStep | null>(null)
-  const router = useRouter()
+
+  const fetchTasks = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch('/api/tasks?sort=priority', { cache: 'no-store' })
+      
+      if (response.ok) {
+        const data: TasksApiResponse = await response.json()
+        // Map the API response to our NextStep format
+        const mappedTasks: NextStep[] = (data.tasks || []).map((task: TaskResponse) => ({
+          step_id: task.step_id,
+          description: task.description,
+          owner: task.owner || null,
+          due_date: task.due_date || null,
+          priority: task.priority || 'low',
+          status: task.status || 'pending',
+          thread_id: task.thread_id || null,
+          meeting_id: task.meeting_id || null,
+          company_id: task.company_id || null
+        }))
+        setTasks(mappedTasks)
+      }
+    } catch (error) {
+      console.error('Error fetching tasks:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        setLoading(true)
-        const response = await fetch('/api/tasks?sort=priority', { cache: 'no-store' })
-        
-        if (response.ok) {
-          const data: TasksApiResponse = await response.json()
-          // Map the API response to our NextStep format
-          const mappedTasks: NextStep[] = (data.tasks || []).map((task: TaskResponse) => ({
-            step_id: task.step_id,
-            description: task.description,
-            owner: task.owner || null,
-            due_date: task.due_date || null,
-            priority: task.priority || 'low',
-            status: task.status || 'pending',
-            thread_id: task.thread_id || null,
-            meeting_id: task.meeting_id || null,
-            company_id: task.company_id || null
-          }))
-          setTasks(mappedTasks)
-        }
-      } catch (error) {
-        console.error('Error fetching tasks:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
     fetchTasks()
   }, [])
 
@@ -87,19 +86,14 @@ export default function TasksNextSteps() {
     return status === 'completed' || status === 'done'
   }
 
-  const handleSourceClick = (e: React.MouseEvent, task: NextStep) => {
-    e.stopPropagation()
-    const linkId = task.thread_id || task.meeting_id
-    if (linkId) {
-      router.push(`/dashboard/customer-threads/${linkId}`)
-    }
-  }
-
-  const handleTaskUpdate = (updatedTask: NextStep) => {
+  const handleTaskUpdate = async (updatedTask: NextStep) => {
+    // Update local state immediately
     setTasks(tasks.map(t => t.step_id === updatedTask.step_id ? updatedTask : t))
     if (selectedTask && selectedTask.step_id === updatedTask.step_id) {
       setSelectedTask(updatedTask)
     }
+    // Refetch to ensure data is in sync
+    await fetchTasks()
   }
 
   return (
@@ -122,17 +116,28 @@ export default function TasksNextSteps() {
               <div
                 key={task.step_id}
                 onClick={() => setSelectedTask(task)}
-                className="relative p-4 rounded-xl bg-white/60 dark:bg-slate-800/60 border border-white/20 shadow-sm hover:shadow-md hover:scale-[1.01] transition-all cursor-pointer group"
+                className="relative p-4 rounded-xl bg-gray-100/80 dark:bg-slate-800/60 border border-white/20 shadow-sm hover:shadow-md hover:scale-[1.01] transition-all cursor-pointer group"
               >
-                {/* Source Button */}
-                {linkId && (
-                  <button
-                    onClick={(e) => handleSourceClick(e, task)}
-                    className="absolute bottom-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 hover:bg-yellow-200 border border-yellow-200 transition-colors z-10"
-                  >
-                    Source
-                  </button>
-                )}
+                {/* Bottom Pills Container */}
+                <div className="absolute bottom-2 right-2 flex items-center gap-2 z-10">
+                  {/* Owner Pill - show if owner exists */}
+                  {task.owner && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">
+                      Owner: {task.owner}
+                    </span>
+                  )}
+                  
+                  {/* Source Button - only show if thread_id exists */}
+                  {task.thread_id && (
+                    <Link
+                      href={`/dashboard/customer-threads/${task.thread_id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-600 border border-yellow-200 hover:bg-yellow-100 transition-colors"
+                    >
+                      Source
+                    </Link>
+                  )}
+                </div>
 
                 {/* Task Content */}
                 <div className="flex items-center gap-3">

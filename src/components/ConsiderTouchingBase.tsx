@@ -117,7 +117,7 @@ const ConsiderTouchingBase: React.FC = () => {
               href={`/dashboard/customer-threads/${customer.company_id}`}
               className="block"
             >
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-white/60 dark:bg-slate-700/60 border border-white/20 dark:border-slate-600/20 shadow-sm transition-all hover:scale-[1.01] hover:shadow-md hover:bg-white/80 dark:hover:bg-slate-700/80 cursor-pointer">
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-100/80 dark:bg-slate-700/60 border border-white/20 dark:border-slate-600/20 shadow-sm transition-all hover:scale-[1.01] hover:shadow-md hover:bg-gray-100 dark:hover:bg-slate-700/80 cursor-pointer">
                 {/* Company Avatar */}
                 <CompanyAvatar domain={customer.domain_name || ''} name={customer.company_name} />
                 
