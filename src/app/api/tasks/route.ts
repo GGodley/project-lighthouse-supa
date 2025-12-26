@@ -200,9 +200,14 @@ export async function GET(request: Request) {
       
       // #region agent log
       if (index === 0) {
-        fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tasks/route.ts:120',message:'Extracting company from nested structure',data:{taskStepId:task.step_id,threadsCount:threads.length,hasThreadCompanyLink:!!threads[0]?.thread_company_link,hasCustomer:!!task.customers,companyName},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tasks/route.ts:120',message:'Extracting company from nested structure',data:{taskStepId:task.step_id,threadsCount:threads.length,hasThreadCompanyLink:!!threads[0]?.thread_company_link,hasCustomer:!!task.customers,customersData:task.customers,requestedByContactId:task.requested_by_contact_id,companyId,companyName},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
       }
       // #endregion
+      
+      // Debug logging for tasks without company_id
+      if (!companyId) {
+        console.log(`[Tasks API] Task ${task.step_id} has no company_id. Thread ID: ${task.thread_id}, Requested by contact: ${task.requested_by_contact_id}, Has customers data: ${!!task.customers}`);
+      }
       
       return {
         step_id: task.step_id,
