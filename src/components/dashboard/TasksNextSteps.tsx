@@ -155,8 +155,11 @@ export default function TasksNextSteps() {
             const dueDateFormatted = formatDueDate(task.due_date)
             const statusLower = (task.status || '').toLowerCase().trim()
             const statusKey = Object.keys(STATUS_CONFIG).find(key => key.toLowerCase() === statusLower)
-            const statusColor = statusKey ? STATUS_CONFIG[statusKey as keyof typeof STATUS_CONFIG].color : 'bg-slate-600 text-white'
+            const statusColor = statusKey ? STATUS_CONFIG[statusKey as keyof typeof STATUS_CONFIG].color : 'bg-slate-800 text-white border border-slate-700 shadow-sm shadow-slate-200 font-bold'
             const statusLabel = statusKey ? STATUS_CONFIG[statusKey as keyof typeof STATUS_CONFIG].label : task.status
+            const priorityKey = task.priority as keyof typeof PRIORITY_CONFIG
+            const priorityColor = PRIORITY_CONFIG[priorityKey] ? PRIORITY_CONFIG[priorityKey].color : 'bg-teal-500 text-white border border-teal-400 font-bold'
+            const priorityLabel = PRIORITY_CONFIG[priorityKey] ? PRIORITY_CONFIG[priorityKey].label : task.priority
             
             return (
               <div
@@ -190,6 +193,16 @@ export default function TasksNextSteps() {
                     
                     {/* Pill Row */}
                     <div className="flex items-center gap-2 flex-wrap">
+                      {/* Priority */}
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${priorityColor}`}>
+                        {priorityLabel}
+                      </span>
+                      
+                      {/* Status */}
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${statusColor}`}>
+                        {statusLabel}
+                      </span>
+                      
                       {/* Source */}
                       {task.thread_id && (
                         <Link
@@ -200,11 +213,6 @@ export default function TasksNextSteps() {
                           Source
                         </Link>
                       )}
-                      
-                      {/* Status */}
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${statusColor}`}>
-                        {statusLabel}
-                      </span>
                       
                       {/* Owner */}
                       {task.owner && (
