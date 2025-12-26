@@ -13,6 +13,7 @@ interface NextStep {
   thread_id: string | null
   meeting_id: string | null
   company_id: string | null
+  company_name: string | null
 }
 
 interface TaskDetailModalProps {
@@ -22,10 +23,16 @@ interface TaskDetailModalProps {
 }
 
 const STATUS_CONFIG = {
-  todo: { label: 'To Do', color: 'bg-slate-200 text-slate-700' },
-  in_progress: { label: 'In Progress', color: 'bg-blue-100 text-blue-700' },
-  blocked: { label: 'Blocked', color: 'bg-red-100 text-red-700' },
-  done: { label: 'Done', color: 'bg-emerald-100 text-emerald-700' },
+  todo: { label: 'To Do', color: 'bg-slate-600 text-white' },
+  in_progress: { label: 'In Progress', color: 'bg-blue-600 text-white' },
+  blocked: { label: 'Blocked', color: 'bg-red-600 text-white' },
+  done: { label: 'Done', color: 'bg-emerald-600 text-white' },
+}
+
+const PRIORITY_CONFIG = {
+  high: { label: 'High', color: 'bg-red-600 text-white' },
+  medium: { label: 'Medium', color: 'bg-orange-500 text-white' },
+  low: { label: 'Low', color: 'bg-emerald-500 text-white' },
 }
 
 export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailModalProps) {
@@ -148,6 +155,19 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
     }
   }
 
+  const handlePriorityChange = async (newPriority: 'high' | 'medium' | 'low') => {
+    const previousPriority = localTask.priority
+    // Optimistic update
+    setLocalTask({ ...localTask, priority: newPriority })
+
+    try {
+      await updateTask({ priority: newPriority })
+    } catch (error) {
+      // Revert on error
+      setLocalTask({ ...localTask, priority: previousPriority })
+    }
+  }
+
   const formatDateForInput = (dateString: string | null) => {
     if (!dateString) return ''
     try {
@@ -259,25 +279,30 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
             />
           </div>
 
-          {/* Priority */}
+          {/* Priority Pills */}
           <div>
             <label className="block text-sm font-medium mb-2">
               Priority
             </label>
-            <select
-              value={localTask.priority}
-              onChange={(e) => {
-                const value = e.target.value as 'high' | 'medium' | 'low'
-                setLocalTask({ ...localTask, priority: value })
-                updateTask({ priority: value })
-              }}
-              className="glass-input w-full px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              disabled={isUpdating}
-            >
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
+            <div className="flex gap-2 flex-wrap">
+              {Object.entries(PRIORITY_CONFIG).map(([priorityKey, config]) => {
+                const isSelected = localTask.priority === priorityKey
+                return (
+                  <button
+                    key={priorityKey}
+                    onClick={() => handlePriorityChange(priorityKey as 'high' | 'medium' | 'low')}
+                    disabled={isUpdating}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                      isSelected
+                        ? `${config.color} ring-2 ring-offset-1 scale-105 font-bold shadow-sm`
+                        : 'bg-slate-100 text-slate-400 grayscale'
+                    } ${isUpdating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    {config.label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           {/* Status Pills */}

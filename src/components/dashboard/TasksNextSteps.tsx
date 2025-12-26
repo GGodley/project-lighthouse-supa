@@ -15,6 +15,24 @@ interface NextStep {
   thread_id: string | null
   meeting_id: string | null
   company_id: string | null
+  company_name: string | null
+}
+
+const STATUS_CONFIG = {
+  todo: { label: 'To Do', color: 'bg-slate-600 text-white' },
+  in_progress: { label: 'In Progress', color: 'bg-blue-600 text-white' },
+  blocked: { label: 'Blocked', color: 'bg-red-600 text-white' },
+  done: { label: 'Done', color: 'bg-emerald-600 text-white' },
+}
+
+const formatDueDate = (dateString: string | null) => {
+  if (!dateString) return null
+  try {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  } catch {
+    return null
+  }
 }
 
 interface TaskResponse {
@@ -58,7 +76,8 @@ export default function TasksNextSteps() {
           status: task.status || 'pending',
           thread_id: task.thread_id || null,
           meeting_id: task.meeting_id || null,
-          company_id: task.company_id || null
+          company_id: task.company_id || null,
+          company_name: task.company_name || null
         }))
         setTasks(mappedTasks)
       }
@@ -73,17 +92,14 @@ export default function TasksNextSteps() {
     fetchTasks()
   }, [])
 
-  const getProgressPercentage = (priority: string) => {
-    switch (priority) {
-      case 'high': return 80
-      case 'medium': return 50
-      case 'low': return 30
-      default: return 0
-    }
-  }
-
   const isCompleted = (status: string) => {
     return status === 'completed' || status === 'done'
+  }
+
+  const getStatusLabel = (status: string) => {
+    const statusLower = (status || '').toLowerCase().trim()
+    const statusKey = Object.keys(STATUS_CONFIG).find(key => key.toLowerCase() === statusLower)
+    return statusKey ? STATUS_CONFIG[statusKey as keyof typeof STATUS_CONFIG].label : status
   }
 
   const handleTaskUpdate = async (updatedTask: NextStep) => {
@@ -109,8 +125,11 @@ export default function TasksNextSteps() {
         ) : (
           tasks.map((task) => {
             const completed = isCompleted(task.status)
-            const progress = getProgressPercentage(task.priority)
-            const linkId = task.thread_id || task.meeting_id
+            const dueDateFormatted = formatDueDate(task.due_date)
+            const statusLower = (task.status || '').toLowerCase().trim()
+            const statusKey = Object.keys(STATUS_CONFIG).find(key => key.toLowerCase() === statusLower)
+            const statusColor = statusKey ? STATUS_CONFIG[statusKey as keyof typeof STATUS_CONFIG].color : 'bg-slate-600 text-white'
+            const statusLabel = statusKey ? STATUS_CONFIG[statusKey as keyof typeof STATUS_CONFIG].label : task.status
             
             return (
               <div
@@ -118,31 +137,17 @@ export default function TasksNextSteps() {
                 onClick={() => setSelectedTask(task)}
                 className="glass-bar-row relative p-4 cursor-pointer group"
               >
-                {/* Bottom Pills Container */}
-                <div className="absolute bottom-2 right-2 flex items-center gap-2 z-10">
-                  {/* Owner Pill - show if owner exists */}
-                  {task.owner && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">
-                      Owner: {task.owner}
-                    </span>
-                  )}
-                  
-                  {/* Source Button - only show if thread_id exists */}
-                  {task.thread_id && (
-                    <Link
-                      href={`/dashboard/customer-threads/${task.thread_id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-600 border border-yellow-200 hover:bg-yellow-100 transition-colors"
-                    >
-                      Source
-                    </Link>
-                  )}
-                </div>
+                {/* Due Date - Top Right */}
+                {dueDateFormatted && (
+                  <div className="absolute top-2 right-2 text-xs text-slate-500">
+                    {dueDateFormatted}
+                  </div>
+                )}
 
                 {/* Task Content */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3 pr-16">
                   {/* Checkbox */}
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 mt-0.5">
                     {completed ? (
                       <CheckCircle2 className="w-5 h-5 text-blue-600" />
                     ) : (
@@ -150,22 +155,44 @@ export default function TasksNextSteps() {
                     )}
                   </div>
 
-                  {/* Task Description */}
-                  <div className="flex-1">
-                    <p className={`text-sm ${completed ? 'line-through opacity-60' : ''}`}>
+                  {/* Task Description and Pills */}
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm mb-2 ${completed ? 'line-through opacity-60' : ''}`}>
                       {task.description}
                     </p>
-                  </div>
-
-                  {/* Progress Bar */}
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300"
-                        style={{ width: `${progress}%` }}
-                      />
+                    
+                    {/* Pill Row */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Source */}
+                      {task.thread_id && (
+                        <Link
+                          href={`/dashboard/customer-threads/${task.thread_id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 border border-yellow-200 hover:bg-yellow-200 transition-colors"
+                        >
+                          Source
+                        </Link>
+                      )}
+                      
+                      {/* Status */}
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor}`}>
+                        {statusLabel}
+                      </span>
+                      
+                      {/* Owner */}
+                      {task.owner && (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                          {task.owner}
+                        </span>
+                      )}
+                      
+                      {/* Company */}
+                      {task.company_name && (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                          {task.company_name}
+                        </span>
+                      )}
                     </div>
-                    <ArrowRight className="w-4 h-4 text-gray-400" />
                   </div>
                 </div>
               </div>
