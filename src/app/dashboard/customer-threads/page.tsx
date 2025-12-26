@@ -10,6 +10,7 @@ import { SyncStatus } from '@/lib/types/sync'
 import HealthScoreBar from '@/components/ui/HealthScoreBar'
 import ProgressBar from '@/components/ui/ProgressBar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
+import CompanyAvatar from '@/components/ui/CompanyAvatar'
 
 
 // Company type based on exact database schema
@@ -704,12 +705,15 @@ const CustomerThreadsPage: React.FC = () => {
                             />
                           </td>
                           <td className="px-6 py-5">
-                            <Link 
-                              href={`/dashboard/customer-threads/${company.company_id}`} 
-                              className="font-semibold text-gray-900 hover:text-blue-600 transition-colors text-base"
-                            >
-                              {company.company_name}
-                            </Link>
+                            <div className="flex items-center gap-3">
+                              <CompanyAvatar domain={company.domain_name} name={company.company_name} />
+                              <Link 
+                                href={`/dashboard/customer-threads/${company.company_id}`} 
+                                className="font-semibold text-gray-900 hover:text-blue-600 transition-colors text-base"
+                              >
+                                {company.company_name}
+                              </Link>
+                            </div>
                           </td>
                           <td className="px-6 py-5">
                             <HealthScoreBar score={company.health_score} showLabel={true} />
@@ -882,12 +886,15 @@ const CustomerThreadsPage: React.FC = () => {
                             />
                           </td>
                           <td className="px-6 py-5">
-                            <Link 
-                              href={`/dashboard/customer-threads/${company.company_id}`} 
-                              className="font-semibold text-gray-900 hover:text-blue-600 transition-colors text-base"
-                            >
-                              {company.company_name}
-                            </Link>
+                            <div className="flex items-center gap-3">
+                              <CompanyAvatar domain={company.domain_name} name={company.company_name} />
+                              <Link 
+                                href={`/dashboard/customer-threads/${company.company_id}`} 
+                                className="font-semibold text-gray-900 hover:text-blue-600 transition-colors text-base"
+                              >
+                                {company.company_name}
+                              </Link>
+                            </div>
                           </td>
                           <td className="px-6 py-5">
                             <HealthScoreBar score={company.health_score} showLabel={true} />
