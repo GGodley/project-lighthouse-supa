@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { CheckCircle2, Circle, ArrowRight } from 'lucide-react'
 
 interface NextStep {
@@ -8,6 +9,8 @@ interface NextStep {
   description: string
   priority: 'high' | 'medium' | 'low'
   status: string
+  thread_id: string | null
+  company_id: string | null
 }
 
 interface TaskResponse {
@@ -19,6 +22,7 @@ interface TaskResponse {
   status: string
   company_id: string | null
   company_name: string | null
+  thread_id: string | null
   created_at: string
 }
 
@@ -44,7 +48,9 @@ export default function TasksNextSteps() {
             step_id: task.step_id,
             description: task.description,
             priority: task.priority || 'low',
-            status: task.status || 'pending'
+            status: task.status || 'pending',
+            thread_id: task.thread_id || null,
+            company_id: task.company_id || null
           }))
           setTasks(mappedTasks)
         }
@@ -85,11 +91,15 @@ export default function TasksNextSteps() {
           tasks.map((task) => {
             const completed = isCompleted(task.status)
             const progress = getProgressPercentage(task.priority)
+            const isClickable = task.thread_id && task.company_id
             
-            return (
+            const taskContent = (
               <div
-                key={task.step_id}
-                className="flex items-center gap-3 p-3 rounded-lg bg-white/50 dark:bg-slate-700/50"
+                className={`flex items-center gap-3 p-3 rounded-xl bg-white/60 dark:bg-slate-700/60 transition-all ${
+                  isClickable 
+                    ? 'hover:scale-[1.01] hover:shadow-md cursor-pointer' 
+                    : 'cursor-default'
+                }`}
               >
                 {/* Checkbox */}
                 <div className="flex-shrink-0">
@@ -117,6 +127,24 @@ export default function TasksNextSteps() {
                   </div>
                   <ArrowRight className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                 </div>
+              </div>
+            )
+            
+            if (isClickable) {
+              return (
+                <Link
+                  key={task.step_id}
+                  href={`/dashboard/customer-threads/${task.company_id}?thread=${task.thread_id}`}
+                  className="block"
+                >
+                  {taskContent}
+                </Link>
+              )
+            }
+            
+            return (
+              <div key={task.step_id}>
+                {taskContent}
               </div>
             )
           })
