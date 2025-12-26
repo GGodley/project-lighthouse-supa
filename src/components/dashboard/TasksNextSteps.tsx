@@ -98,14 +98,14 @@ export default function TasksNextSteps() {
 
   return (
     <div className="glass-card p-6 h-full flex flex-col">
-      <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">
+      <h3 className="text-lg font-semibold mb-4">
         Tasks / Next Steps
       </h3>
       <div className="space-y-3 flex-1 overflow-y-auto" style={{ maxHeight: '20rem' }}>
         {loading ? (
-          <p className="text-gray-500 dark:text-gray-400 text-sm">Loading tasks...</p>
+          <p className="text-sm">Loading tasks...</p>
         ) : tasks.length === 0 ? (
-          <p className="text-gray-500 dark:text-gray-400 text-sm">No tasks at this time</p>
+          <p className="text-sm">No tasks at this time</p>
         ) : (
           tasks.map((task) => {
             const completed = isCompleted(task.status)
@@ -116,7 +116,7 @@ export default function TasksNextSteps() {
               <div
                 key={task.step_id}
                 onClick={() => setSelectedTask(task)}
-                className="relative p-4 rounded-xl bg-white/50 dark:bg-slate-800/50 border border-white/20 dark:border-white/10 shadow-sm hover:bg-white/70 dark:hover:bg-slate-700/60 hover:shadow-md hover:scale-[1.01] transition-all cursor-pointer group"
+                className="glass-bar-row relative p-4 cursor-pointer group"
               >
                 {/* Bottom Pills Container */}
                 <div className="absolute bottom-2 right-2 flex items-center gap-2 z-10">
@@ -144,28 +144,28 @@ export default function TasksNextSteps() {
                   {/* Checkbox */}
                   <div className="flex-shrink-0">
                     {completed ? (
-                      <CheckCircle2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      <CheckCircle2 className="w-5 h-5 text-blue-600" />
                     ) : (
-                      <Circle className="w-5 h-5 text-gray-400 dark:text-gray-500 border-2 border-gray-300 dark:border-gray-600 rounded-full" />
+                      <Circle className="w-5 h-5 text-gray-400 border-2 border-gray-300 rounded-full" />
                     )}
                   </div>
 
                   {/* Task Description */}
                   <div className="flex-1">
-                    <p className={`text-sm ${completed ? 'line-through text-gray-500 dark:text-gray-400' : 'text-slate-800 dark:text-white'}`}>
+                    <p className={`text-sm ${completed ? 'line-through opacity-60' : ''}`}>
                       {task.description}
                     </p>
                   </div>
 
                   {/* Progress Bar */}
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <div className="w-24 h-2 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300"
                         style={{ width: `${progress}%` }}
                       />
                     </div>
-                    <ArrowRight className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                    <ArrowRight className="w-4 h-4 text-gray-400" />
                   </div>
                 </div>
               </div>
