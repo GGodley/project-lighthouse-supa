@@ -158,32 +158,55 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
     }
   }
 
+  const handleSave = async () => {
+    // Save all pending changes
+    if (localTask.company_id) {
+      const updates: Partial<NextStep> = {}
+      if (localTask.description !== task.description) updates.description = localTask.description
+      if (localTask.owner !== task.owner) updates.owner = localTask.owner
+      if (localTask.due_date !== task.due_date) updates.due_date = localTask.due_date
+      if (localTask.priority !== task.priority) updates.priority = localTask.priority
+      if (localTask.status !== task.status) updates.status = localTask.status
+
+      if (Object.keys(updates).length > 0) {
+        await updateTask(updates)
+      }
+    }
+    onClose()
+  }
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose()
         }
       }}
     >
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
-
       {/* Modal Container */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 w-full max-w-lg relative z-10">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto relative z-10">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
             Task Details
           </h2>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors text-gray-600 dark:text-gray-400"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSave}
+              disabled={isUpdating}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Save
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors text-gray-600 dark:text-gray-400"
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -264,7 +287,10 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
             </label>
             <div className="flex gap-2 flex-wrap">
               {Object.entries(STATUS_CONFIG).map(([statusKey, config]) => {
-                const isSelected = localTask.status === statusKey
+                // Normalize both to lowercase strings for comparison
+                const currentStatus = (localTask.status || '').toLowerCase().trim()
+                const statusKeyLower = statusKey.toLowerCase().trim()
+                const isSelected = currentStatus === statusKeyLower
                 return (
                   <button
                     key={statusKey}
@@ -272,7 +298,7 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
                     disabled={isUpdating}
                     className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
                       isSelected
-                        ? `${config.color} ring-2 ring-offset-2 scale-105 font-bold shadow-sm`
+                        ? `${config.color} ring-2 ring-offset-1 scale-105 font-bold shadow-sm`
                         : 'bg-gray-50 text-gray-400 border border-gray-100 hover:bg-gray-100 grayscale opacity-70'
                     } ${isUpdating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                   >
