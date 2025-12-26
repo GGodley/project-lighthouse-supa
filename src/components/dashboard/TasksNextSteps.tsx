@@ -116,7 +116,7 @@ export default function TasksNextSteps() {
               <div
                 key={task.step_id}
                 onClick={() => setSelectedTask(task)}
-                className="relative p-4 rounded-xl bg-gray-100/80 dark:bg-slate-800/60 border border-white/20 shadow-sm hover:shadow-md hover:scale-[1.01] transition-all cursor-pointer group"
+                className="relative p-4 rounded-xl bg-white/50 dark:bg-slate-800/50 border border-white/20 dark:border-white/10 shadow-sm hover:bg-white/70 dark:hover:bg-slate-700/60 hover:shadow-md hover:scale-[1.01] transition-all cursor-pointer group"
               >
                 {/* Bottom Pills Container */}
                 <div className="absolute bottom-2 right-2 flex items-center gap-2 z-10">

@@ -185,23 +185,23 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
       }}
     >
       {/* Modal Container */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto relative z-10">
+      <div className="bg-white dark:bg-slate-950 rounded-2xl shadow-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto relative z-10">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
             Task Details
           </h2>
           <div className="flex items-center gap-2">
             <button
               onClick={handleSave}
               disabled={isUpdating}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Save
             </button>
             <button
               onClick={onClose}
-              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors text-gray-600 dark:text-gray-400"
+              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors text-gray-600 dark:text-gray-400 dark:hover:text-gray-200"
               aria-label="Close"
             >
               <X className="h-5 w-5" />
@@ -213,7 +213,7 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
         <div className="space-y-4">
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-slate-900 dark:text-white mb-2">
               Description
             </label>
             <textarea
@@ -221,14 +221,14 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
               onChange={(e) => setLocalTask({ ...localTask, description: e.target.value })}
               onBlur={(e) => handleFieldBlur('description', e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-lg bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
               disabled={isUpdating}
             />
           </div>
 
           {/* Owner */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-slate-900 dark:text-white mb-2">
               Owner
             </label>
             <input
@@ -236,14 +236,14 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
               value={localTask.owner || ''}
               onChange={(e) => setLocalTask({ ...localTask, owner: e.target.value || null })}
               onBlur={(e) => handleFieldBlur('owner', e.target.value || null)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-lg bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={isUpdating}
             />
           </div>
 
           {/* Due Date */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-slate-900 dark:text-white mb-2">
               Due Date
             </label>
             <input
@@ -254,14 +254,14 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
                 setLocalTask({ ...localTask, due_date: value })
                 handleFieldBlur('due_date', value)
               }}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-lg bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={isUpdating}
             />
           </div>
 
           {/* Priority */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-slate-900 dark:text-white mb-2">
               Priority
             </label>
             <select
@@ -271,7 +271,7 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
                 setLocalTask({ ...localTask, priority: value })
                 updateTask({ priority: value })
               }}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-lg bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={isUpdating}
             >
               <option value="high">High</option>
@@ -282,7 +282,7 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
 
           {/* Status Pills */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-slate-900 dark:text-white mb-2">
               Status
             </label>
             <div className="flex gap-2 flex-wrap">
