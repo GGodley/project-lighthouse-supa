@@ -19,6 +19,12 @@
   }
 }
 
+/* Override media query with theme system - gives theme system control */
+[data-theme="dark"] {
+  --background: #0f172a; /* Lighter dark blue instead of pure black for better contrast */
+  --foreground: #f1f5f9; /* Brighter text for better visibility */
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -72,6 +78,7 @@ body {
   background: rgba(30, 33, 40, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.3);
+  color: #f1f5f9; /* Explicit text color for better visibility */
 }
 
 /* Glass morphism for buttons - neutral with subtle accent */
@@ -170,6 +177,7 @@ body {
 [data-theme="dark"] .glass-table-header,
 [data-theme="dark"] .glass-table thead tr {
   background: rgba(30, 33, 40, 0.95);
+  color: #f1f5f9; /* Explicit text color for better visibility */
 }
 
 /* Sticky header enhancement */
@@ -238,6 +246,7 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.3), 
               0 1px 3px 0 rgba(0, 0, 0, 0.2);
+  color: #f1f5f9; /* Explicit text color for better visibility */
 }
 
 [data-theme="dark"] .glass-bar-row:hover {
@@ -288,6 +297,28 @@ body {
   color-scheme: dark;
 }
 
+/* Explicit link colors for dark mode - ensure visibility */
+[data-theme="dark"] a {
+  color: #60a5fa; /* Light blue for links */
+}
+
+[data-theme="dark"] a:hover {
+  color: #93c5fd; /* Lighter blue on hover */
+}
+
+/* Ensure all text in glass elements is visible */
+[data-theme="dark"] .glass-card a,
+[data-theme="dark"] .glass-bar-row a,
+[data-theme="dark"] .glass-header a {
+  color: #60a5fa; /* Light blue links */
+}
+
+[data-theme="dark"] .glass-card a:hover,
+[data-theme="dark"] .glass-bar-row a:hover,
+[data-theme="dark"] .glass-header a:hover {
+  color: #93c5fd; /* Lighter on hover */
+}
+
 [data-theme="dark"] .text-gray-900,
 [data-theme="dark"] h1,
 [data-theme="dark"] h2,
@@ -321,18 +352,22 @@ body {
 /* Dark theme background adjustments for status pills and badges */
 [data-theme="dark"] .bg-green-50 {
   background-color: rgba(20, 83, 45, 0.3);
+  color: #86efac; /* Light green text for better visibility */
 }
 
 [data-theme="dark"] .bg-red-50 {
   background-color: rgba(127, 29, 29, 0.3);
+  color: #fca5a5; /* Light red text for better visibility */
 }
 
 [data-theme="dark"] .bg-yellow-50 {
   background-color: rgba(113, 63, 18, 0.3);
+  color: #fde047; /* Light yellow text for better visibility */
 }
 
 [data-theme="dark"] .bg-blue-50 {
   background-color: rgba(30, 58, 138, 0.3);
+  color: #93c5fd; /* Light blue text for better visibility */
 }
 
 [data-theme="dark"] .bg-purple-50 {
