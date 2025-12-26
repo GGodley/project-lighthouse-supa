@@ -10,6 +10,23 @@ interface NextStep {
   status: string
 }
 
+interface TaskResponse {
+  step_id: string
+  description: string
+  owner: string | null
+  due_date: string | null
+  priority: 'high' | 'medium' | 'low'
+  status: string
+  company_id: string | null
+  company_name: string | null
+  created_at: string
+}
+
+interface TasksApiResponse {
+  tasks: TaskResponse[]
+  totalCount: number
+}
+
 export default function TasksNextSteps() {
   const [tasks, setTasks] = useState<NextStep[]>([])
   const [loading, setLoading] = useState(true)
@@ -21,9 +38,9 @@ export default function TasksNextSteps() {
         const response = await fetch('/api/tasks?sort=priority', { cache: 'no-store' })
         
         if (response.ok) {
-          const data = await response.json()
+          const data: TasksApiResponse = await response.json()
           // Map the API response to our NextStep format
-          const mappedTasks = (data.tasks || []).map((task: any) => ({
+          const mappedTasks: NextStep[] = (data.tasks || []).map((task: TaskResponse) => ({
             step_id: task.step_id,
             description: task.description,
             priority: task.priority || 'low',

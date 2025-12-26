@@ -2,7 +2,6 @@
 
 import { createClient } from '@/utils/supabase/server';
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
 
 /**
  * Trigger.dev API response handle type

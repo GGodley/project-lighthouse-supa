@@ -1,6 +1,20 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
+// Type for the selected meeting fields from the query
+type MeetingSelect = {
+  title: string | null
+  start_time: string | null
+  end_time: string | null
+  customer_id: string | null
+}
+
+// Type for the selected customer fields from the query
+type CustomerSelect = {
+  customer_id: string
+  full_name: string | null
+}
+
 export async function GET(request: Request) {
   try {
     const supabase = await createClient()
@@ -38,7 +52,7 @@ export async function GET(request: Request) {
     }
 
     // Fetch customer names separately
-    const customerIds = [...new Set((meetings || []).map((m: any) => m.customer_id).filter(Boolean))]
+    const customerIds = [...new Set((meetings || []).map((m: MeetingSelect) => m.customer_id).filter((id): id is string => Boolean(id)))]
     const customerMap = new Map<string, string | null>()
     
     if (customerIds.length > 0) {
@@ -48,14 +62,14 @@ export async function GET(request: Request) {
         .in('customer_id', customerIds)
       
       if (customers) {
-        customers.forEach(c => {
+        customers.forEach((c: CustomerSelect) => {
           customerMap.set(c.customer_id, c.full_name)
         })
       }
     }
 
     // Transform the data to include customer name
-    const transformedMeetings = (meetings || []).map((meeting: any) => ({
+    const transformedMeetings = (meetings || []).map((meeting: MeetingSelect) => ({
       title: meeting.title,
       start_time: meeting.start_time,
       end_time: meeting.end_time,

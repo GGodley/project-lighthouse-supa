@@ -24,6 +24,7 @@ type TaskWithNested = {
   owner: string | null;
   due_date: string | null;
   priority: 'high' | 'medium' | 'low';
+  status: string;
   created_at: string;
   threads: ThreadNested | ThreadNested[] | null;
 };
@@ -35,6 +36,7 @@ type TaskResponse = {
   owner: string | null;
   due_date: string | null;
   priority: 'high' | 'medium' | 'low';
+  status: string;
   company_id: string | null;
   company_name: string | null;
   created_at: string;
@@ -71,6 +73,7 @@ export async function GET(request: Request) {
         step_id,
         description,
         priority,
+        status,
         due_date,
         owner,
         created_at,
@@ -170,6 +173,7 @@ export async function GET(request: Request) {
         owner: task.owner,
         due_date: task.due_date,
         priority: task.priority,
+        status: task.status || 'pending',
         company_id: companyId,
         company_name: companyName,
         created_at: task.created_at,

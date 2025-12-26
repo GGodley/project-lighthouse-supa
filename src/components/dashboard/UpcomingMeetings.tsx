@@ -60,7 +60,13 @@ export default function UpcomingMeetings() {
         <div>
           <Calendar
             value={selectedDate}
-            onChange={setSelectedDate}
+            onChange={(value) => {
+              if (value instanceof Date) {
+                setSelectedDate(value)
+              } else if (Array.isArray(value) && value[0] instanceof Date) {
+                setSelectedDate(value[0])
+              }
+            }}
             className="react-calendar-custom"
             tileClassName="react-calendar-tile"
           />

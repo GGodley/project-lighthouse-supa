@@ -64,18 +64,6 @@ const ConsiderTouchingBase: React.FC = () => {
     fetchTouchingBaseCustomers()
   }, [selectedDays])
 
-  const statusPillStyles: { [key: string]: string } = {
-    'Healthy': 'bg-green-50 text-green-700 border border-green-200',
-    'At Risk': 'bg-red-50 text-red-700 border border-red-200',
-    'Neutral': 'bg-yellow-50 text-yellow-700 border border-yellow-200',
-    'Needs Attention': 'bg-yellow-50 text-yellow-700 border border-yellow-200',
-    // Sentiment values
-    'Positive': 'bg-green-50 text-green-700 border border-green-200',
-    'Very Positive': 'bg-green-50 text-green-700 border border-green-200',
-    'Negative': 'bg-red-50 text-red-700 border border-red-200',
-    'Very Negative': 'bg-red-50 text-red-700 border border-red-200',
-  }
-
   const getInitials = (name: string | null) => {
     if (!name) return '?'
     const parts = name.trim().split(' ')
