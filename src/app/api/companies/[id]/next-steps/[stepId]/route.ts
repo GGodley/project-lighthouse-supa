@@ -82,7 +82,7 @@ export async function PATCH(
       
       if (!meetingError && meeting?.customers) {
         const customers = Array.isArray(meeting.customers) ? meeting.customers : [meeting.customers];
-        isLinked = customers.some((c: any) => c.company_id === companyId);
+        isLinked = customers.some((c: { company_id: string }) => c.company_id === companyId);
       }
     }
 

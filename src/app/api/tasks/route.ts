@@ -152,7 +152,7 @@ export async function GET(request: Request) {
     const tasksArray = (tasks || []) as TaskWithNested[];
     
     // First, try to extract company info from nested relationships
-    const tasksWithCompaniesPartial: Array<TaskResponse & { needsDirectQuery: boolean }> = tasksArray.map((task: TaskWithNested, index: number) => {
+    const tasksWithCompaniesPartial: Array<TaskResponse & { needsDirectQuery: boolean }> = tasksArray.map((task: TaskWithNested) => {
       // Extract company information from nested structure
       // Structure: task.threads.thread_company_link[0].companies.company_name
       let companyName: string | null = null;
@@ -265,7 +265,7 @@ export async function GET(request: Request) {
     }
     
     // Remove the needsDirectQuery flag and return final tasks
-    const tasksWithCompanies: TaskResponse[] = tasksWithCompaniesPartial.map(({ needsDirectQuery, ...task }) => task);
+    const tasksWithCompanies: TaskResponse[] = tasksWithCompaniesPartial.map(({ needsDirectQuery: _, ...task }) => task);
 
     // Apply proper priority sorting if sort is 'priority'
     // PostgreSQL enum ordering doesn't match our desired order (high -> medium -> low)
