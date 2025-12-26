@@ -147,7 +147,9 @@ export async function GET(request: Request) {
 
     // Transform the nested data structure to flat structure
     const tasksArray = (tasks || []) as TaskWithNested[];
-    const tasksWithCompanies: TaskResponse[] = tasksArray.map((task: TaskWithNested, index: number) => {
+    
+    // First, try to extract company info from nested relationships
+    const tasksWithCompaniesPartial: Array<TaskResponse & { needsDirectQuery: boolean }> = tasksArray.map((task: TaskWithNested, index: number) => {
       // Extract company information from nested structure
       // Structure: task.threads.thread_company_link[0].companies.company_name
       let companyName: string | null = null;
@@ -198,17 +200,6 @@ export async function GET(request: Request) {
         }
       }
       
-      // #region agent log
-      if (index === 0) {
-        fetch('http://127.0.0.1:7242/ingest/c491ee85-efeb-4d2c-9d52-24ddd844a378',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tasks/route.ts:120',message:'Extracting company from nested structure',data:{taskStepId:task.step_id,threadsCount:threads.length,hasThreadCompanyLink:!!threads[0]?.thread_company_link,hasCustomer:!!task.customers,customersData:task.customers,requestedByContactId:task.requested_by_contact_id,companyId,companyName},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
-      }
-      // #endregion
-      
-      // Debug logging for tasks without company_id
-      if (!companyId) {
-        console.log(`[Tasks API] Task ${task.step_id} has no company_id. Thread ID: ${task.thread_id}, Requested by contact: ${task.requested_by_contact_id}, Has customers data: ${!!task.customers}`);
-      }
-      
       return {
         step_id: task.step_id,
         description: task.description,
@@ -220,8 +211,57 @@ export async function GET(request: Request) {
         company_name: companyName,
         thread_id: task.thread_id || null,
         created_at: task.created_at,
+        needsDirectQuery: !companyId && !!task.thread_id, // Need to query thread_company_link directly
       };
     });
+    
+    // For tasks that need direct query, fetch company info from thread_company_link
+    const tasksNeedingQuery = tasksWithCompaniesPartial.filter(t => t.needsDirectQuery);
+    if (tasksNeedingQuery.length > 0) {
+      const threadIds = tasksNeedingQuery.map(t => t.thread_id).filter((id): id is string => !!id);
+      
+      if (threadIds.length > 0) {
+        const { data: threadCompanyLinks, error: tclError } = await supabase
+          .from('thread_company_link')
+          .select('thread_id, company_id, companies(company_id, company_name)')
+          .in('thread_id', threadIds);
+        
+        if (!tclError && threadCompanyLinks) {
+          // Create a map of thread_id -> company info
+          const threadToCompanyMap = new Map<string, { company_id: string; company_name: string | null }>();
+          
+          for (const tcl of threadCompanyLinks) {
+            if (tcl.thread_id && tcl.company_id) {
+              let companyName: string | null = null;
+              if (tcl.companies) {
+                const companies = Array.isArray(tcl.companies) ? tcl.companies : [tcl.companies];
+                if (companies.length > 0) {
+                  companyName = companies[0]?.company_name || null;
+                }
+              }
+              threadToCompanyMap.set(tcl.thread_id, {
+                company_id: tcl.company_id,
+                company_name: companyName,
+              });
+            }
+          }
+          
+          // Update tasks with company info from direct query
+          for (const task of tasksWithCompaniesPartial) {
+            if (task.needsDirectQuery && task.thread_id) {
+              const companyInfo = threadToCompanyMap.get(task.thread_id);
+              if (companyInfo) {
+                task.company_id = companyInfo.company_id;
+                task.company_name = companyInfo.company_name;
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Remove the needsDirectQuery flag and return final tasks
+    const tasksWithCompanies: TaskResponse[] = tasksWithCompaniesPartial.map(({ needsDirectQuery, ...task }) => task);
 
     // Apply proper priority sorting if sort is 'priority'
     // PostgreSQL enum ordering doesn't match our desired order (high -> medium -> low)
