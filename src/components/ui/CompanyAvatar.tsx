@@ -9,7 +9,7 @@ interface CompanyAvatarProps {
 }
 
 export default function CompanyAvatar({ domain, name, className = '' }: CompanyAvatarProps) {
-  const [imageError, setImageError] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
   // Validate domain - if invalid, show initials immediately
   const isValidDomain = domain && domain.trim().length > 0;
@@ -55,13 +55,13 @@ export default function CompanyAvatar({ domain, name, className = '' }: CompanyA
   const initials = getInitials();
   const bgColor = getColorFromDomain(domain || '');
   
-  // Use Google's Favicon service instead of Clearbit
-  const googleIconUrl = isValidDomain 
-    ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128`
+  // Use unavatar.io with strict fallback mode
+  const unavatarUrl = isValidDomain 
+    ? `https://unavatar.io/${domain}?fallback=false`
     : null;
 
   // If no valid domain, show initials immediately
-  if (!isValidDomain || imageError) {
+  if (!isValidDomain || imgError) {
     return (
       <div className={`flex-shrink-0 ${className}`}>
         <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
@@ -80,10 +80,10 @@ export default function CompanyAvatar({ domain, name, className = '' }: CompanyA
     <div className={`flex-shrink-0 ${className}`}>
       <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
         <img
-          src={googleIconUrl!}
+          src={unavatarUrl!}
           alt={name || domain}
           className="w-full h-full object-cover"
-          onError={() => setImageError(true)}
+          onError={() => setImgError(true)}
         />
       </div>
     </div>
