@@ -10,6 +10,7 @@ type CustomerWithCompany = Database['public']['Tables']['customers']['Row'] & {
   companies: {
     company_id: string;
     company_name: string | null;
+    domain_name: string;
   }[] | null;
 };
 
@@ -73,7 +74,8 @@ export async function GET(request: Request) {
         created_at,
         companies(
           company_id,
-          company_name
+          company_name,
+          domain_name
         )
       `)
       .eq('user_id', user.id)
@@ -99,6 +101,7 @@ export async function GET(request: Request) {
         email: customer.email,
         company_id: customer.company_id,
         company_name: company?.company_name || null,
+        domain_name: company?.domain_name || null,
         health_score: customer.health_score,
         overall_sentiment: customer.overall_sentiment,
         last_interaction_at: customer.last_interaction_at,

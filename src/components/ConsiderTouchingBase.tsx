@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Loader2, XCircle, Building2, ArrowRight } from 'lucide-react'
+import CompanyAvatar from '@/components/ui/CompanyAvatar'
 
 // Customer type matching the API response
 type Customer = {
@@ -11,6 +12,7 @@ type Customer = {
   email: string
   company_id: string
   company_name: string | null
+  domain_name: string | null
   health_score: number | null
   overall_sentiment: string | null
   last_interaction_at: string | null
@@ -64,15 +66,6 @@ const ConsiderTouchingBase: React.FC = () => {
     fetchTouchingBaseCustomers()
   }, [selectedDays])
 
-  const getInitials = (name: string | null) => {
-    if (!name) return '?'
-    const parts = name.trim().split(' ')
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-    }
-    return name.substring(0, 2).toUpperCase()
-  }
-
   return (
     <div className="glass-card p-6 h-full flex flex-col">
       <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">
@@ -125,10 +118,8 @@ const ConsiderTouchingBase: React.FC = () => {
               className="block"
             >
               <div className="flex items-center gap-3 p-3 rounded-xl bg-white/60 dark:bg-slate-700/60 border border-white/20 dark:border-slate-600/20 shadow-sm transition-all hover:scale-[1.01] hover:shadow-md hover:bg-white/80 dark:hover:bg-slate-700/80 cursor-pointer">
-                {/* Avatar */}
-                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-500 dark:bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
-                  {getInitials(customer.full_name)}
-                </div>
+                {/* Company Avatar */}
+                <CompanyAvatar domain={customer.domain_name || ''} name={customer.company_name} />
                 
                 {/* Name */}
                 <div className="flex-1 min-w-0">
