@@ -97,7 +97,7 @@ export async function GET(request: Request) {
             )
           )
         ),
-        customers:requested_by_contact_id (
+        customers (
           company_id,
           companies (
             company_id,
