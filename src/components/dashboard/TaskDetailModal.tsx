@@ -108,44 +108,15 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
   }
 
   const handleStatusChange = async (newStatus: string) => {
-    if (!localTask.company_id) {
-      console.error('Cannot update task: missing company_id')
-      return
-    }
-
     const previousStatus = localTask.status
     // Optimistic update - change color immediately
     setLocalTask({ ...localTask, status: newStatus })
 
     try {
-      setIsUpdating(true)
-      const response = await fetch(`/api/companies/${localTask.company_id}/next-steps/${localTask.step_id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to update status')
-      }
-
-      const data = await response.json()
-      const finalTask = {
-        ...localTask,
-        status: newStatus,
-        ...data,
-      }
-      setLocalTask(finalTask)
-      onUpdate(finalTask)
+      await updateTask({ status: newStatus })
     } catch (error) {
-      console.error('Error updating status:', error)
-      // Revert on error - restore previous status color
+      // Revert on error
       setLocalTask({ ...localTask, status: previousStatus })
-      alert('Failed to update status. Please try again.')
-    } finally {
-      setIsUpdating(false)
     }
   }
 
@@ -324,7 +295,7 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
                     className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
                       isSelected
                         ? `${config.color} ring-2 ring-offset-1 scale-105 font-bold shadow-sm`
-                        : 'bg-gray-50 text-gray-400 border border-gray-100 hover:bg-gray-100 grayscale opacity-70'
+                        : 'bg-slate-100 text-slate-400 grayscale'
                     } ${isUpdating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                   >
                     {config.label}
