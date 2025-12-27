@@ -160,8 +160,8 @@ export default function InteractionTimeline({ companyId, onItemClick }: Interact
                       {item.title || (isConversation ? 'Conversation' : 'Meeting')}
                     </p>
                     
-                    {/* Summary */}
-                    <p className="text-sm text-gray-600">
+                    {/* Summary - timeline_summary in lighter grey */}
+                    <p className="text-sm text-gray-400">
                       {item.summary || 'No summary available.'}
                     </p>
                   </div>
