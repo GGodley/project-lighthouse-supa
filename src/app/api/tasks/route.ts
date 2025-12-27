@@ -34,6 +34,7 @@ type TaskWithNested = {
   thread_id: string | null;
   meeting_id: string | null;
   requested_by_contact_id: string | null;
+  thread_company_link: { company_id: string } | { company_id: string }[] | null;
   threads: ThreadNested | ThreadNested[] | null;
   customers: CustomerNested | CustomerNested[] | null;
 };
@@ -91,6 +92,9 @@ export async function GET(request: Request) {
         thread_id,
         meeting_id,
         requested_by_contact_id,
+        thread_company_link!left (
+          company_id
+        ),
         threads (
           thread_company_link (
             company_id,
@@ -151,40 +155,53 @@ export async function GET(request: Request) {
     // Transform the nested data structure to flat structure
     const tasksArray = (tasks || []) as TaskWithNested[];
     
-    // First, try to extract company info from nested relationships
-    const tasksWithCompaniesPartial: Array<TaskResponse & { needsDirectQuery: boolean }> = tasksArray.map((task: TaskWithNested) => {
-      // Extract company information from nested structure
-      // Structure: task.threads.thread_company_link[0].companies.company_name
-      let companyName: string | null = null;
+    // Map tasks and extract company_id from thread_company_link join
+    const formattedTasks: TaskResponse[] = tasksArray.map((task: TaskWithNested) => {
+      // Safely extract company_id from direct thread_company_link join
       let companyId: string | null = null;
+      let companyName: string | null = null;
       
-      // Handle threads as array or single object
-      const threads = Array.isArray(task.threads) ? task.threads : (task.threads ? [task.threads] : []);
-      
-      // Get first thread's first company link's first company
-      if (threads.length > 0 && threads[0].thread_company_link) {
-        const threadCompanyLinks = Array.isArray(threads[0].thread_company_link) 
-          ? threads[0].thread_company_link 
-          : [threads[0].thread_company_link];
+      // Priority 1: Extract from direct thread_company_link join
+      if (task.thread_company_link) {
+        const link = Array.isArray(task.thread_company_link) 
+          ? task.thread_company_link[0] 
+          : task.thread_company_link;
         
-        if (threadCompanyLinks.length > 0) {
-          // Get company_id directly from thread_company_link
-          companyId = threadCompanyLinks[0].company_id || null;
+        if (link?.company_id) {
+          companyId = link.company_id;
+        }
+      }
+      
+      // Priority 2: Extract from threads relationship (for company_name)
+      if (!companyId || !companyName) {
+        const threads = Array.isArray(task.threads) ? task.threads : (task.threads ? [task.threads] : []);
+        
+        if (threads.length > 0 && threads[0].thread_company_link) {
+          const threadCompanyLinks = Array.isArray(threads[0].thread_company_link) 
+            ? threads[0].thread_company_link 
+            : [threads[0].thread_company_link];
           
-          if (threadCompanyLinks[0].companies) {
-            const companies = Array.isArray(threadCompanyLinks[0].companies)
-              ? threadCompanyLinks[0].companies
-              : [threadCompanyLinks[0].companies];
+          if (threadCompanyLinks.length > 0) {
+            // Get company_id if not already set
+            if (!companyId) {
+              companyId = threadCompanyLinks[0].company_id || null;
+            }
             
-            if (companies.length > 0) {
-              const firstCompany = companies[0];
-              companyName = firstCompany?.company_name || null;
+            // Get company_name
+            if (threadCompanyLinks[0].companies) {
+              const companies = Array.isArray(threadCompanyLinks[0].companies)
+                ? threadCompanyLinks[0].companies
+                : [threadCompanyLinks[0].companies];
+              
+              if (companies.length > 0) {
+                companyName = companies[0]?.company_name || null;
+              }
             }
           }
         }
       }
       
-      // FALLBACK: If no company from thread, try from customer via requested_by_contact_id
+      // Priority 3: FALLBACK - Try from customer via requested_by_contact_id
       if (!companyId && task.customers) {
         const customers = Array.isArray(task.customers) ? task.customers : (task.customers ? [task.customers] : []);
         
@@ -215,57 +232,11 @@ export async function GET(request: Request) {
         thread_id: task.thread_id || null,
         meeting_id: task.meeting_id || null,
         created_at: task.created_at,
-        needsDirectQuery: !companyId && !!task.thread_id, // Need to query thread_company_link directly
       };
     });
     
-    // For tasks that need direct query, fetch company info from thread_company_link
-    const tasksNeedingQuery = tasksWithCompaniesPartial.filter(t => t.needsDirectQuery);
-    if (tasksNeedingQuery.length > 0) {
-      const threadIds = tasksNeedingQuery.map(t => t.thread_id).filter((id): id is string => !!id);
-      
-      if (threadIds.length > 0) {
-        const { data: threadCompanyLinks, error: tclError } = await supabase
-          .from('thread_company_link')
-          .select('thread_id, company_id, companies(company_id, company_name)')
-          .in('thread_id', threadIds);
-        
-        if (!tclError && threadCompanyLinks) {
-          // Create a map of thread_id -> company info
-          const threadToCompanyMap = new Map<string, { company_id: string; company_name: string | null }>();
-          
-          for (const tcl of threadCompanyLinks) {
-            if (tcl.thread_id && tcl.company_id) {
-              let companyName: string | null = null;
-              if (tcl.companies) {
-                const companies = Array.isArray(tcl.companies) ? tcl.companies : [tcl.companies];
-                if (companies.length > 0) {
-                  companyName = companies[0]?.company_name || null;
-                }
-              }
-              threadToCompanyMap.set(tcl.thread_id, {
-                company_id: tcl.company_id,
-                company_name: companyName,
-              });
-            }
-          }
-          
-          // Update tasks with company info from direct query
-          for (const task of tasksWithCompaniesPartial) {
-            if (task.needsDirectQuery && task.thread_id) {
-              const companyInfo = threadToCompanyMap.get(task.thread_id);
-              if (companyInfo) {
-                task.company_id = companyInfo.company_id;
-                task.company_name = companyInfo.company_name;
-              }
-            }
-          }
-        }
-      }
-    }
-    
-    // Remove the needsDirectQuery flag and return final tasks
-    const tasksWithCompanies: TaskResponse[] = tasksWithCompaniesPartial.map(({ needsDirectQuery: _, ...task }) => task);
+    // Use formatted tasks (company_id already extracted from left join)
+    const tasksWithCompanies: TaskResponse[] = formattedTasks;
 
     // Apply proper priority sorting if sort is 'priority'
     // PostgreSQL enum ordering doesn't match our desired order (high -> medium -> low)
