@@ -282,7 +282,7 @@ export const hydrateThreadTask = task({
     );
 
     try {
-      // Step 1: Check existing thread for history ID (early exit check)
+      // Step 1: Check existing thread for history ID
       const { data: threadRow, error: threadError } = await supabaseAdmin
         .from("threads")
         .select("history_id")
@@ -296,22 +296,8 @@ export const hydrateThreadTask = task({
 
       const storedHistoryId = threadRow?.history_id;
       
-      // Early exit if historyId matches (no changes, subject already set at creation)
-      if (incomingHistoryId && storedHistoryId && storedHistoryId.toString() === incomingHistoryId) {
-        console.log(`⏭️  Early exit: historyId unchanged (${incomingHistoryId})`);
-        return {
-          ok: true,
-          userId,
-          threadId,
-          gmailMessageCount: 0,
-          newMessagesStored: 0,
-          skippedMessages: 0,
-          reasonCounts: {},
-          analysisTriggered: false,
-        };
-      }
-
-      // Step 2: Fetch full thread from Gmail (history ID changed, needs processing)
+      // Step 2: Get history ID from Gmail (lightweight metadata fetch for early exit check)
+      // Since threads.list doesn't return historyId, we need to fetch it to compare
       const edgeFunctionUrl = `${supabaseUrl}/functions/v1/fetch-gmail-thread`;
       const brokerSecret = process.env.BROKER_SHARED_SECRET;
       const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -324,6 +310,100 @@ export const hydrateThreadTask = task({
         throw new Error("SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable is not set");
       }
 
+      // First, try to use incomingHistoryId if provided, otherwise fetch metadata to get it
+      let hydratedHistoryId: string | null = null;
+      
+      if (incomingHistoryId && incomingHistoryId.trim() !== "") {
+        // Use provided history ID (if threads.list ever returns it)
+        hydratedHistoryId = incomingHistoryId;
+      } else {
+        // Fetch lightweight metadata to get history ID for comparison
+        const metadataResponse = await fetch(edgeFunctionUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: supabaseAnonKey,
+            Authorization: `Bearer ${supabaseAnonKey}`,
+            "x-broker-secret": brokerSecret,
+          },
+          body: JSON.stringify({ userId, threadId, format: "metadata" }),
+        });
+
+        if (!metadataResponse.ok) {
+          const errorText = await metadataResponse.text();
+          let errorData;
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { error: "unknown" };
+          }
+
+          // Handle errors
+          if (
+            (metadataResponse.status === 401 && errorData.error === "gmail_unauthorized") ||
+            (metadataResponse.status === 412 && (errorData.error === "missing_google_token" || errorData.error === "token_expired"))
+          ) {
+            await supabaseAdmin
+              .from("sync_jobs")
+              .update({
+                status: "failed",
+                details: "TOKEN_EXPIRED_RECONNECT: Google token expired. Please reconnect your Google account.",
+                error: "TOKEN_EXPIRED_RECONNECT",
+              })
+              .eq("user_id", userId);
+            throw new Error("TOKEN_EXPIRED_RECONNECT");
+          }
+
+          if (metadataResponse.status === 403 && errorData.error === "gmail_forbidden") {
+            await supabaseAdmin
+              .from("sync_jobs")
+              .update({
+                status: "failed",
+                details: "TOKEN_SCOPE_MISSING: Gmail permissions are missing. Please grant required scopes.",
+                error: "TOKEN_SCOPE_MISSING",
+              })
+              .eq("user_id", userId);
+            throw new Error("TOKEN_SCOPE_MISSING");
+          }
+
+          if (metadataResponse.status === 404) {
+            console.log(`⚠️  Thread ${threadId} not found in Gmail, skipping`);
+            return {
+              ok: true,
+              userId,
+              threadId,
+              gmailMessageCount: 0,
+              newMessagesStored: 0,
+              skippedMessages: 0,
+              reasonCounts: {},
+              analysisTriggered: false,
+            };
+          }
+
+          throw new Error(`Failed to fetch Gmail thread metadata: ${metadataResponse.status} - ${errorData.error || "unknown"}`);
+        }
+
+        const metadataData: { thread: GmailThread } = await metadataResponse.json();
+        const metadataThread = metadataData.thread;
+        hydratedHistoryId = metadataThread.historyId || metadataThread.history_id || null;
+      }
+
+      // Early exit if history ID matches (no changes, verified via lightweight metadata fetch)
+      if (storedHistoryId && hydratedHistoryId && storedHistoryId.toString() === hydratedHistoryId.toString()) {
+        console.log(`⏭️  Early exit: historyId unchanged (${hydratedHistoryId}) - verified via lightweight metadata fetch`);
+        return {
+          ok: true,
+          userId,
+          threadId,
+          gmailMessageCount: 0,
+          newMessagesStored: 0,
+          skippedMessages: 0,
+          reasonCounts: {},
+          analysisTriggered: false,
+        };
+      }
+
+      // Step 3: Fetch full thread from Gmail (history ID changed, needs processing)
       const fetchResponse = await fetch(edgeFunctionUrl, {
         method: "POST",
         headers: {
@@ -395,7 +475,10 @@ export const hydrateThreadTask = task({
       const thread = responseData.thread;
 
       // Extract historyId from full thread response (may be historyId or history_id)
-      const hydratedHistoryId = thread.historyId || thread.history_id || null;
+      // Use the one from full thread if we didn't get it from metadata
+      if (!hydratedHistoryId) {
+        hydratedHistoryId = thread.historyId || thread.history_id || null;
+      }
       const gmailMessages = thread.messages || [];
 
       console.log(`📧 Fetched ${gmailMessages.length} messages from Gmail for thread ${threadId}`);
