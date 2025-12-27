@@ -34,7 +34,6 @@ type TaskWithNested = {
   thread_id: string | null;
   meeting_id: string | null;
   requested_by_contact_id: string | null;
-  thread_company_link: { company_id: string } | { company_id: string }[] | null;
   threads: ThreadNested | ThreadNested[] | null;
   customers: CustomerNested | CustomerNested[] | null;
 };
@@ -92,9 +91,6 @@ export async function GET(request: Request) {
         thread_id,
         meeting_id,
         requested_by_contact_id,
-        thread_company_link!left (
-          company_id
-        ),
         threads (
           thread_company_link (
             company_id,
@@ -158,26 +154,15 @@ export async function GET(request: Request) {
     // First, try to extract company info from nested relationships
     const tasksWithCompaniesPartial: Array<TaskResponse & { needsDirectQuery: boolean }> = tasksArray.map((task: TaskWithNested) => {
       // Extract company information from nested structure
-      // Priority 1: Direct thread_company_link join (most reliable)
+      // Structure: task.threads.thread_company_link[0].companies.company_name
       let companyName: string | null = null;
       let companyId: string | null = null;
       
-      // Extract from direct thread_company_link join
-      if (task.thread_company_link) {
-        const threadCompanyLinks = Array.isArray(task.thread_company_link) 
-          ? task.thread_company_link 
-          : [task.thread_company_link];
-        
-        if (threadCompanyLinks.length > 0 && threadCompanyLinks[0].company_id) {
-          companyId = threadCompanyLinks[0].company_id;
-        }
-      }
-      
-      // Priority 2: Handle threads as array or single object (for company_name and fallback company_id)
+      // Handle threads as array or single object
       const threads = Array.isArray(task.threads) ? task.threads : (task.threads ? [task.threads] : []);
       
-      // Get first thread's first company link's first company (only if we don't have companyId yet)
-      if (!companyId && threads.length > 0 && threads[0].thread_company_link) {
+      // Get first thread's first company link's first company
+      if (threads.length > 0 && threads[0].thread_company_link) {
         const threadCompanyLinks = Array.isArray(threads[0].thread_company_link) 
           ? threads[0].thread_company_link 
           : [threads[0].thread_company_link];
@@ -199,7 +184,7 @@ export async function GET(request: Request) {
         }
       }
       
-      // Priority 3: FALLBACK - If no company from thread, try from customer via requested_by_contact_id
+      // FALLBACK: If no company from thread, try from customer via requested_by_contact_id
       if (!companyId && task.customers) {
         const customers = Array.isArray(task.customers) ? task.customers : (task.customers ? [task.customers] : []);
         
