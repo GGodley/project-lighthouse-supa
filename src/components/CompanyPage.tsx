@@ -4,6 +4,7 @@ import { Phone, Mail, AlertCircle, CheckCircle, List, Clock, Users, ChevronDown,
 import { createClient } from '@supabase/supabase-js';
 import ThreadConversationView from './ThreadConversationView';
 import MeetingDetailView from './MeetingDetailView';
+import InteractionTimeline from './InteractionTimeline';
 import { getThreadById } from '@/lib/threads/queries';
 import { LLMSummary } from '@/lib/types/threads';
 import HealthScoreBar from '@/components/ui/HealthScoreBar';
@@ -577,141 +578,59 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
 
         {/* Interaction Timeline View */}
         {activeView === 'Interaction Timeline' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Left Side - Interaction Timeline List */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-semibold text-slate-800 mb-2">Interaction Timeline</h2>
-              <p className="text-sm text-gray-600 mb-6">Complete history of calls and emails with detailed summaries.</p>
-              
-              <div className="space-y-4">
-                {interaction_timeline && interaction_timeline.length > 0 ? (
-                  interaction_timeline.map((interaction, index) => {
-                    const isThread = interaction.interaction_type === 'email' && interaction.id;
-                    const isMeeting = interaction.interaction_type === 'meeting' && interaction.id;
-                    const isClickable = isThread || isMeeting;
-                    const isSelected = (isThread && selectedThreadId === interaction.id) || (isMeeting && selectedMeetingId === interaction.id);
-                    
-                    return (
-                      <div 
-                        key={index} 
-                        className={`glass-bar-row p-5 ${isClickable ? 'cursor-pointer hover:shadow-md transition-all hover:bg-white/90' : ''} ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/50' : ''}`}
-                        onClick={async () => {
-                          if (isThread && interaction.id) {
-                            setLoadingThread(true);
-                            setSelectedThreadId(interaction.id);
-                            setSelectedMeetingId(null);
-                            setSelectedMeeting(null);
-                            
-                            try {
-                              // Fetch the thread to get its summary
-                              const { data: thread, error: threadError } = await getThreadById(supabase, interaction.id);
-                              
-                              if (threadError || !thread) {
-                                setSelectedThreadSummary({ error: threadError?.message || 'Thread not found' });
-                              } else {
-                                setSelectedThreadSummary(thread.llm_summary);
-                              }
-                            } catch (err) {
-                              console.error('Error fetching thread:', err);
-                              setSelectedThreadSummary({ error: 'Failed to load thread' });
-                            } finally {
-                              setLoadingThread(false);
-                            }
-                          } else if (isMeeting && interaction.id) {
-                            setLoadingMeeting(true);
-                            setSelectedMeetingId(interaction.id);
-                            setSelectedThreadId(null);
-                            setSelectedThreadSummary(null);
-                            
-                            try {
-                              // Fetch the meeting details
-                              const { data: meeting, error: meetingError } = await supabase
-                                .from('meetings')
-                                .select('*')
-                                .eq('google_event_id', interaction.id)
-                                .single();
-                              
-                              if (meetingError || !meeting) {
-                                console.error('Error fetching meeting:', meetingError);
-                                setSelectedMeeting(null);
-                              } else {
-                                setSelectedMeeting(meeting);
-                              }
-                            } catch (err) {
-                              console.error('Error fetching meeting:', err);
-                              setSelectedMeeting(null);
-                            } finally {
-                              setLoadingMeeting(false);
-                            }
-                          }
-                        }}
-                      >
-                        <div className="flex items-start gap-4">
-                          {/* Icon */}
-                          <div className={`flex-shrink-0 w-12 h-12 rounded-xl border flex items-center justify-center ${
-                            interaction.interaction_type === 'meeting' 
-                              ? 'bg-pink-50 border-pink-200' 
-                              : 'bg-blue-50 border-blue-200'
-                          }`}>
-                            {interaction.interaction_type === 'meeting' ? (
-                              <Phone className="w-6 h-6 text-pink-600" />
-                            ) : (
-                              <Mail className="w-6 h-6 text-blue-600" />
-                            )}
-                          </div>
-
-                          {/* Content */}
-                          <div className="flex-1 min-w-0">
-                            {/* Header */}
-                            <div className="flex items-center justify-between mb-2">
-                              <h3 className="font-semibold text-gray-900 truncate text-base">
-                                {interaction.title || 'No Title'}
-                              </h3>
-                              <span className="text-sm text-gray-600 flex-shrink-0 ml-2 font-medium">
-                                {formatDate(interaction.interaction_date)}
-                              </span>
-                            </div>
-
-                            {/* Type and Sentiment */}
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-sm font-medium text-gray-700">
-                                {interaction.interaction_type === 'meeting' ? 'Meeting' : 'Email Thread'}
-                              </span>
-                              {interaction.sentiment && (
-                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${getSentimentColor(interaction.sentiment)}`}>
-                                  {interaction.sentiment}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Summary */}
-                            <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                              {interaction.summary || 'No summary available'}
-                            </p>
-
-                            {/* Click hint */}
-                            {isClickable && (
-                              <span className="text-xs text-blue-600">
-                                {isThread ? 'Click to view full thread conversation →' : 'Click to view meeting details →'}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>No interactions found for this company.</p>
-                    {!interaction_timeline && (
-                      <p className="text-xs mt-2 text-gray-400">interaction_timeline is null or undefined</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-          </div>
+          <InteractionTimeline
+            companyId={companyId}
+            onItemClick={async (id: string, type: 'conversation' | 'meeting') => {
+              if (type === 'conversation') {
+                setLoadingThread(true);
+                setSelectedThreadId(id);
+                setSelectedMeetingId(null);
+                setSelectedMeeting(null);
+                
+                try {
+                  // Fetch the thread to get its summary
+                  const { data: thread, error: threadError } = await getThreadById(supabase, id);
+                  
+                  if (threadError || !thread) {
+                    setSelectedThreadSummary({ error: threadError?.message || 'Thread not found' });
+                  } else {
+                    setSelectedThreadSummary(thread.llm_summary);
+                  }
+                } catch (err) {
+                  console.error('Error fetching thread:', err);
+                  setSelectedThreadSummary({ error: 'Failed to load thread' });
+                } finally {
+                  setLoadingThread(false);
+                }
+              } else if (type === 'meeting') {
+                setLoadingMeeting(true);
+                setSelectedMeetingId(id);
+                setSelectedThreadId(null);
+                setSelectedThreadSummary(null);
+                
+                try {
+                  // Fetch the meeting details - id is the numeric id from meetings table
+                  const { data: meeting, error: meetingError } = await supabase
+                    .from('meetings')
+                    .select('*')
+                    .eq('id', parseInt(id, 10))
+                    .single();
+                  
+                  if (meetingError || !meeting) {
+                    console.error('Error fetching meeting:', meetingError);
+                    setSelectedMeeting(null);
+                  } else {
+                    setSelectedMeeting(meeting);
+                  }
+                } catch (err) {
+                  console.error('Error fetching meeting:', err);
+                  setSelectedMeeting(null);
+                } finally {
+                  setLoadingMeeting(false);
+                }
+              }
+            }}
+          />
         )}
 
       {/* Thread Conversation Modal Overlay */}
