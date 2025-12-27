@@ -282,10 +282,10 @@ export const hydrateThreadTask = task({
     );
 
     try {
-      // Step 1: Precondition - History ID Check (Early Exit)
+      // Step 1: Check existing thread for history ID and subject
       const { data: threadRow, error: threadError } = await supabaseAdmin
         .from("threads")
-        .select("history_id")
+        .select("history_id, subject")
         .eq("user_id", userId)
         .eq("thread_id", threadId)
         .maybeSingle();
@@ -295,23 +295,145 @@ export const hydrateThreadTask = task({
       }
 
       const storedHistoryId = threadRow?.history_id;
+      const needsSubjectUpdate = !threadRow?.subject || threadRow.subject === "(No Subject)" || threadRow.subject === "No Subject";
+
+      // Step 2: If we need subject update or might early exit, fetch lightweight metadata first
+      let threadSubject = threadRow?.subject || "(No Subject)";
+      let hydratedHistoryId: string | null = null;
       
-      // Early exit if historyId matches and incomingHistoryId is non-empty
-      if (incomingHistoryId && storedHistoryId && storedHistoryId.toString() === incomingHistoryId) {
-        console.log(`⏭️  Early exit: historyId unchanged (${incomingHistoryId})`);
-        return {
-          ok: true,
-          userId,
-          threadId,
-          gmailMessageCount: 0,
-          newMessagesStored: 0,
-          skippedMessages: 0,
-          reasonCounts: {},
-          analysisTriggered: false,
-        };
+      if (needsSubjectUpdate || (incomingHistoryId && storedHistoryId && storedHistoryId.toString() === incomingHistoryId)) {
+        // Fetch thread with metadata format (lightweight - just headers, no body)
+        const edgeFunctionUrl = `${supabaseUrl}/functions/v1/fetch-gmail-thread`;
+        const brokerSecret = process.env.BROKER_SHARED_SECRET;
+        const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+        if (!brokerSecret) {
+          throw new Error("BROKER_SHARED_SECRET environment variable is not set");
+        }
+
+        if (!supabaseAnonKey) {
+          throw new Error("SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable is not set");
+        }
+
+        const metadataResponse = await fetch(edgeFunctionUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: supabaseAnonKey,
+            Authorization: `Bearer ${supabaseAnonKey}`,
+            "x-broker-secret": brokerSecret,
+          },
+          body: JSON.stringify({ userId, threadId, format: "metadata" }),
+        });
+
+        if (!metadataResponse.ok) {
+          const errorText = await metadataResponse.text();
+          let errorData;
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { error: "unknown" };
+          }
+
+          // Handle errors (same as before)
+          if (
+            (metadataResponse.status === 401 && errorData.error === "gmail_unauthorized") ||
+            (metadataResponse.status === 412 && (errorData.error === "missing_google_token" || errorData.error === "token_expired"))
+          ) {
+            await supabaseAdmin
+              .from("sync_jobs")
+              .update({
+                status: "failed",
+                details: "TOKEN_EXPIRED_RECONNECT: Google token expired. Please reconnect your Google account.",
+                error: "TOKEN_EXPIRED_RECONNECT",
+              })
+              .eq("user_id", userId);
+            throw new Error("TOKEN_EXPIRED_RECONNECT");
+          }
+
+          if (metadataResponse.status === 403 && errorData.error === "gmail_forbidden") {
+            await supabaseAdmin
+              .from("sync_jobs")
+              .update({
+                status: "failed",
+                details: "TOKEN_SCOPE_MISSING: Gmail permissions are missing. Please grant required scopes.",
+                error: "TOKEN_SCOPE_MISSING",
+              })
+              .eq("user_id", userId);
+            throw new Error("TOKEN_SCOPE_MISSING");
+          }
+
+          if (metadataResponse.status === 404) {
+            console.log(`⚠️  Thread ${threadId} not found in Gmail, skipping`);
+            return {
+              ok: true,
+              userId,
+              threadId,
+              gmailMessageCount: 0,
+              newMessagesStored: 0,
+              skippedMessages: 0,
+              reasonCounts: {},
+              analysisTriggered: false,
+            };
+          }
+
+          // If metadata fetch fails but we don't need subject, continue with full fetch
+          if (!needsSubjectUpdate) {
+            console.log(`⚠️  Metadata fetch failed, but subject exists. Continuing with full fetch.`);
+          } else {
+            throw new Error(`Failed to fetch Gmail thread metadata: ${metadataResponse.status} - ${errorData.error || "unknown"}`);
+          }
+        } else {
+          const metadataData: { thread: GmailThread } = await metadataResponse.json();
+          const metadataThread = metadataData.thread;
+          
+          // Extract historyId from metadata response
+          hydratedHistoryId = metadataThread.historyId || metadataThread.history_id || null;
+          const metadataMessages = metadataThread.messages || [];
+
+          // Extract subject from first message headers (metadata format includes headers)
+          if (metadataMessages.length > 0) {
+            const firstMessage = metadataMessages[0];
+            const headers = firstMessage.payload?.headers || [];
+            const subjectHeader = headers.find(
+              (h: GmailHeader) => h.name?.toLowerCase() === 'subject'
+            );
+            threadSubject = subjectHeader?.value || "(No Subject)";
+          }
+
+          console.log(`📋 Extracted subject from metadata: "${threadSubject}"`);
+
+          // Update subject in database
+          await supabaseAdmin
+            .from("threads")
+            .upsert({
+              thread_id: threadId,
+              user_id: userId,
+              subject: threadSubject,
+            }, {
+              onConflict: 'thread_id',
+              ignoreDuplicates: false
+            });
+          console.log(`✅ Updated subject for thread ${threadId}`);
+
+          // Early exit if historyId matches (subject already updated)
+          if (incomingHistoryId && storedHistoryId && storedHistoryId.toString() === incomingHistoryId) {
+            console.log(`⏭️  Early exit: historyId unchanged (${incomingHistoryId}), subject updated via lightweight metadata fetch`);
+            return {
+              ok: true,
+              userId,
+              threadId,
+              gmailMessageCount: metadataMessages.length,
+              newMessagesStored: 0,
+              skippedMessages: 0,
+              reasonCounts: {},
+              analysisTriggered: false,
+            };
+          }
+        }
       }
 
-      // Step 2: Fetch full thread from Gmail
+      // Step 3: Fetch full thread from Gmail (only if we didn't early exit)
       const edgeFunctionUrl = `${supabaseUrl}/functions/v1/fetch-gmail-thread`;
       const brokerSecret = process.env.BROKER_SHARED_SECRET;
       const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -324,19 +446,6 @@ export const hydrateThreadTask = task({
         throw new Error("SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable is not set");
       }
 
-      // Debug logging before edge function call
-      console.log(`[DEBUG] About to call edge function:`, {
-        edgeFunctionUrl,
-        threadId,
-        userId,
-        threadIdType: typeof threadId,
-        threadIdValue: threadId,
-        threadIdLength: threadId?.length,
-      });
-
-      const requestBody = { userId, threadId, format: "full" };
-      console.log(`[DEBUG] Request body:`, JSON.stringify(requestBody));
-
       const fetchResponse = await fetch(edgeFunctionUrl, {
         method: "POST",
         headers: {
@@ -345,14 +454,7 @@ export const hydrateThreadTask = task({
           Authorization: `Bearer ${supabaseAnonKey}`,
           "x-broker-secret": brokerSecret,
         },
-        body: JSON.stringify(requestBody),
-      });
-
-      // Debug logging after edge function call
-      console.log(`[DEBUG] Edge function response:`, {
-        status: fetchResponse.status,
-        statusText: fetchResponse.statusText,
-        ok: fetchResponse.ok,
+        body: JSON.stringify({ userId, threadId, format: "full" }),
       });
 
       if (!fetchResponse.ok) {
@@ -415,22 +517,22 @@ export const hydrateThreadTask = task({
       const thread = responseData.thread;
 
       // Extract historyId from full thread response (may be historyId or history_id)
-      const hydratedHistoryId = thread.historyId || thread.history_id || null;
+      hydratedHistoryId = thread.historyId || thread.history_id || hydratedHistoryId;
       const gmailMessages = thread.messages || [];
 
       console.log(`📧 Fetched ${gmailMessages.length} messages from Gmail for thread ${threadId}`);
 
-      // Extract subject from first message headers
-      let threadSubject = "(No Subject)";
+      // Extract subject from full thread (ensures we have the latest subject)
       if (gmailMessages.length > 0) {
         const firstMessage = gmailMessages[0];
         const headers = firstMessage.payload?.headers || [];
         const subjectHeader = headers.find(
           (h: GmailHeader) => h.name?.toLowerCase() === 'subject'
         );
-        threadSubject = subjectHeader?.value || "(No Subject)";
+        if (subjectHeader?.value) {
+          threadSubject = subjectHeader.value;
+        }
       }
-      console.log(`📋 Extracted subject: "${threadSubject}"`);
 
       // Step 3: Message-Level Incremental Diff
       const { data: existingMessages, error: existingError } = await supabaseAdmin
@@ -505,14 +607,18 @@ export const hydrateThreadTask = task({
 
           await supabaseAdmin
             .from("threads")
-            .update({
+            .upsert({
+              thread_id: threadId,
+              user_id: userId,
+              subject: threadSubject,
               is_ignored: true,
               ignored_reason: ignoredReason,
               history_id: hydratedHistoryId || incomingHistoryId || null,
               last_hydrated_at: new Date().toISOString(),
-            })
-            .eq("user_id", userId)
-            .eq("thread_id", threadId);
+            }, {
+              onConflict: 'thread_id',
+              ignoreDuplicates: false
+            });
 
           console.log(`🏷️  Marked thread ${threadId} as ignored: ${ignoredReason}`);
         }
@@ -522,12 +628,16 @@ export const hydrateThreadTask = task({
       if (newHumanMessages.length === 0) {
         await supabaseAdmin
           .from("threads")
-          .update({
+          .upsert({
+            thread_id: threadId,
+            user_id: userId,
+            subject: threadSubject,
             history_id: hydratedHistoryId || incomingHistoryId || null,
             last_hydrated_at: new Date().toISOString(),
-          })
-          .eq("user_id", userId)
-          .eq("thread_id", threadId);
+          }, {
+            onConflict: 'thread_id',
+            ignoreDuplicates: false
+          });
 
         return {
           ok: true,
@@ -629,20 +739,24 @@ export const hydrateThreadTask = task({
         console.log(`✅ Upserted ${messagesToInsert.length} new messages to thread_messages`);
       }
 
-      // Step 7: Thread Update (History ID from Full Thread Response)
-      const { error: updateError } = await supabaseAdmin
+      // Step 7: Thread Upsert (History ID from Full Thread Response)
+      // Use upsert to handle both create and update cases
+      const { error: upsertError } = await supabaseAdmin
         .from("threads")
-        .update({
+        .upsert({
+          thread_id: threadId,
+          user_id: userId,
           subject: threadSubject,
           history_id: hydratedHistoryId || incomingHistoryId || null,
           last_hydrated_at: new Date().toISOString(),
           last_message_date: maxSentDate,
-        })
-        .eq("user_id", userId)
-        .eq("thread_id", threadId);
+        }, {
+          onConflict: 'thread_id',
+          ignoreDuplicates: false
+        });
 
-      if (updateError) {
-        throw new Error(`Failed to update threads: ${updateError.message}`);
+      if (upsertError) {
+        throw new Error(`Failed to upsert threads: ${upsertError.message}`);
       }
 
       // Step 8: Trigger Analysis (Conditionally)
