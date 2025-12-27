@@ -336,6 +336,69 @@ body {
   transition-duration: 150ms;
 }
 
+/* Data Grid Table - High-density table style matching Basepoint/Attio */
+.data-grid-table {
+  border-collapse: collapse;
+  width: 100%;
+  background: white;
+}
+
+.data-grid-header {
+  background: rgba(249, 250, 251, 0.5);
+}
+
+.data-grid-header th {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.75rem;
+  color: #4b5563;
+}
+
+.data-grid-row {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.data-grid-row td {
+  padding: 0.5rem 1rem;
+  vertical-align: middle;
+  border-right: 1px solid #e5e7eb;
+  height: 44px;
+}
+
+.data-grid-row td:last-child {
+  border-right: none;
+}
+
+.data-grid-row:hover {
+  background-color: #f9fafb;
+}
+
+[data-theme="dark"] .data-grid-table {
+  background: rgba(30, 33, 40, 0.6);
+}
+
+[data-theme="dark"] .data-grid-header {
+  background: rgba(30, 33, 40, 0.8);
+}
+
+[data-theme="dark"] .data-grid-header th {
+  color: #d1d5db;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .data-grid-row {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .data-grid-row td {
+  border-right-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .data-grid-row:hover {
+  background-color: rgba(30, 33, 40, 0.8);
+}
+
 /* Light theme text colors - ensure dark text on light background */
 [data-theme="light"] {
   color-scheme: light;

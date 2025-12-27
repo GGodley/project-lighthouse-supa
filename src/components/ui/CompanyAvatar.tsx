@@ -60,13 +60,26 @@ export default function CompanyAvatar({ domain, name, className = '' }: CompanyA
     ? `https://unavatar.io/${domain}?fallback=false`
     : null;
 
+  // Extract size classes from className or default to w-10 h-10
+  const hasSizeClasses = className.includes('w-') && className.includes('h-');
+  const sizeClasses = hasSizeClasses 
+    ? (className.match(/(w-\d+|h-\d+)/g) || []).join(' ')
+    : 'w-10 h-10';
+  
+  // Determine text size based on width class
+  const textSizeClass = sizeClasses.includes('w-5') || sizeClasses.includes('w-4') 
+    ? 'text-[8px]' 
+    : sizeClasses.includes('w-6') || sizeClasses.includes('w-7') || sizeClasses.includes('w-8')
+    ? 'text-[10px]'
+    : 'text-sm';
+
   // If no valid domain, show initials immediately
   if (!isValidDomain || imgError) {
     return (
-      <div className={`flex-shrink-0 ${className}`}>
-        <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
+      <div className="flex-shrink-0">
+        <div className={`relative ${sizeClasses} rounded-md overflow-hidden bg-gray-200 flex items-center justify-center`}>
           <div
-            className="w-full h-full flex items-center justify-center text-white font-semibold text-sm"
+            className={`w-full h-full flex items-center justify-center text-white font-semibold ${textSizeClass}`}
             style={{ backgroundColor: bgColor }}
           >
             {initials}
@@ -77,8 +90,8 @@ export default function CompanyAvatar({ domain, name, className = '' }: CompanyA
   }
 
   return (
-    <div className={`flex-shrink-0 ${className}`}>
-      <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
+    <div className="flex-shrink-0">
+      <div className={`relative ${sizeClasses} rounded-md overflow-hidden bg-gray-200 flex items-center justify-center`}>
         <img
           src={unavatarUrl!}
           alt={name || domain}

@@ -83,14 +83,14 @@ export default function HealthScoreBar({
   const bubbleStyle = getBubbleStyle();
   
   return (
-    <div className={`flex items-center gap-3 ${className}`}>
+    <div className={`flex items-center gap-2 ${className}`}>
       {showLabel && (
-        <span className="health-score-label text-sm font-semibold min-w-[60px] tabular-nums">
+        <span className="health-score-label text-xs font-semibold min-w-[50px] tabular-nums">
           {normalizedScore > 0 ? '+' : ''}{normalizedScore}
         </span>
       )}
       <div 
-        className="health-score-bar-container flex-1 relative h-2.5 rounded-full overflow-hidden"
+        className="health-score-bar-container flex-1 relative h-2 rounded-full overflow-hidden"
         style={{
           background: 'rgba(255, 255, 255, 0.7)',
           backdropFilter: 'blur(20px) saturate(180%)',

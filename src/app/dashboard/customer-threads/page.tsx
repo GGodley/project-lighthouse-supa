@@ -106,15 +106,15 @@ const CustomerThreadsPage: React.FC = () => {
 
   // Helper functions
   const statusPillStyles: { [key: string]: string } = {
-    'Healthy': 'bg-green-50 text-green-700 border border-green-200',
-    'At Risk': 'bg-red-50 text-red-700 border border-red-200',
-    'Neutral': 'bg-yellow-50 text-yellow-700 border border-yellow-200',
-    'Needs Attention': 'bg-yellow-50 text-yellow-700 border border-yellow-200',
+    'Healthy': 'bg-green-100 text-green-800',
+    'At Risk': 'bg-red-100 text-red-800',
+    'Neutral': 'bg-yellow-100 text-yellow-800',
+    'Needs Attention': 'bg-orange-100 text-orange-800',
     // Sentiment values
-    'Positive': 'bg-green-50 text-green-700 border border-green-200',
-    'Very Positive': 'bg-green-50 text-green-700 border border-green-200',
-    'Negative': 'bg-red-50 text-red-700 border border-red-200',
-    'Very Negative': 'bg-red-50 text-red-700 border border-red-200',
+    'Positive': 'bg-green-100 text-green-800',
+    'Very Positive': 'bg-emerald-100 text-emerald-800',
+    'Negative': 'bg-red-100 text-red-800',
+    'Very Negative': 'bg-rose-100 text-rose-800',
   };
 
   // Sort handler - cycles through: desc → asc → null (default)
@@ -339,12 +339,12 @@ const CustomerThreadsPage: React.FC = () => {
     return (
       <th 
         scope="col" 
-        className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider"
+        className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-r border-gray-200 bg-gray-50/50"
       >
         <button
           onClick={() => handleSort(columnKey)}
-          className={`flex items-center space-x-1 px-2 py-1 rounded transition-colors hover:bg-gray-100 ${
-            isActive ? 'bg-gray-100' : ''
+          className={`flex items-center space-x-1 px-2 py-1 rounded transition-colors hover:bg-gray-100/50 ${
+            isActive ? 'bg-gray-100/50' : ''
           }`}
         >
           <span>{label}</span>
@@ -657,13 +657,13 @@ const CustomerThreadsPage: React.FC = () => {
 
           {!isMainTableCollapsed && (
             <div className="overflow-x-auto">
-              <table className="glass-table w-full text-sm text-left rounded-xl">
-                <thead className="glass-table-header sticky top-0 z-10">
+              <table className="data-grid-table w-full text-sm text-left">
+                <thead className="data-grid-header sticky top-0 z-10">
                   <tr>
-                    <th scope="col" className="p-4">
+                    <th scope="col" className="px-4 py-2.5 border-b border-r border-gray-200 bg-gray-50/50">
                       <input 
                         type="checkbox" 
-                        className="rounded" 
+                        className="rounded w-4 h-4 cursor-pointer" 
                         checked={sortedCompanies.length > 0 && selectedCompanies.length === sortedCompanies.length}
                         onChange={handleSelectAll}
                       />
@@ -674,19 +674,19 @@ const CustomerThreadsPage: React.FC = () => {
                     {renderSortableHeader('last_interaction', 'Last Interaction')}
                   </tr>
                 </thead>
-                <tbody className="space-y-2">
+                <tbody>
                   {loading ? (
-                    <tr><td colSpan={5} className="text-center p-8 text-gray-600">
+                    <tr><td colSpan={5} className="text-center p-8 text-gray-600 border-b border-gray-200">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                       <p>Loading companies...</p>
                     </td></tr>
                   ) : error ? (
-                    <tr><td colSpan={5} className="text-center p-8 text-red-600">
+                    <tr><td colSpan={5} className="text-center p-8 text-red-600 border-b border-gray-200">
                       <XCircle className="h-6 w-6 mx-auto mb-2" />
                       <p>{error}</p>
                     </td></tr>
                   ) : sortedCompanies.length === 0 ? (
-                    <tr><td colSpan={5} className="text-center p-8 text-gray-500">
+                    <tr><td colSpan={5} className="text-center p-8 text-gray-500 border-b border-gray-200">
                       <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                       <p className="text-lg font-medium">No companies found</p>
                       <p className="text-sm mt-2">Companies will appear here after thread sync.</p>
@@ -695,8 +695,11 @@ const CustomerThreadsPage: React.FC = () => {
                     sortedCompanies.map((company, index) => {
                       const isSelected = selectedCompanies.includes(company.company_id);
                       return (
-                        <tr key={index} className={`glass-bar-row ${isSelected ? 'selected' : ''}`}>
-                          <td className="p-5 pl-6">
+                        <tr 
+                          key={index} 
+                          className={`data-grid-row ${isSelected ? 'bg-blue-50/50' : ''} hover:bg-gray-50 transition-colors`}
+                        >
+                          <td className="px-4 py-2 border-b border-r border-gray-200">
                             <input 
                               type="checkbox" 
                               className="rounded w-4 h-4 cursor-pointer" 
@@ -704,28 +707,28 @@ const CustomerThreadsPage: React.FC = () => {
                               onChange={(e) => handleSelectOne(company.company_id, e.target.checked)}
                             />
                           </td>
-                          <td className="px-6 py-5">
-                            <div className="flex items-center gap-3">
-                              <CompanyAvatar domain={company.domain_name} name={company.company_name} />
+                          <td className="px-4 py-2 border-b border-r border-gray-200">
+                            <div className="flex items-center gap-2.5">
+                              <CompanyAvatar domain={company.domain_name} name={company.company_name} className="w-5 h-5" />
                               <Link 
                                 href={`/dashboard/customer-threads/${company.company_id}`} 
-                                className="font-semibold text-gray-900 hover:text-blue-600 transition-colors text-base"
+                                className="font-medium text-gray-900 hover:text-gray-700 transition-colors text-sm"
                               >
                                 {company.company_name}
                               </Link>
                             </div>
                           </td>
-                          <td className="px-6 py-5">
+                          <td className="px-4 py-2 border-b border-r border-gray-200">
                             <HealthScoreBar score={company.health_score} showLabel={true} />
                           </td>
-                          <td className="px-6 py-5">
-                            <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
-                              statusPillStyles[company.overall_sentiment || ''] || 'bg-gray-100 text-gray-800'
+                          <td className="px-4 py-2 border-b border-r border-gray-200">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                              statusPillStyles[company.overall_sentiment || ''] || 'bg-gray-100 text-gray-700'
                             }`}>
                               {company.overall_sentiment || 'Not set'}
                             </span>
                           </td>
-                          <td className="px-6 py-5 text-gray-600">
+                          <td className="px-4 py-2 border-b border-gray-200 text-gray-500 text-sm">
                             {company.last_interaction_at ? (
                               new Date(company.last_interaction_at).toLocaleDateString('en-CA')
                             ) : (
@@ -836,13 +839,13 @@ const CustomerThreadsPage: React.FC = () => {
 
           {!isArchivedTableCollapsed && (
             <div className="overflow-x-auto">
-              <table className="glass-table w-full text-sm text-left rounded-xl opacity-90">
-                <thead className="glass-table-header sticky top-0 z-10">
+              <table className="data-grid-table w-full text-sm text-left opacity-90">
+                <thead className="data-grid-header sticky top-0 z-10">
                   <tr>
-                    <th scope="col" className="p-4">
+                    <th scope="col" className="px-4 py-2.5 border-b border-r border-gray-200 bg-gray-50/50">
                       <input 
                         type="checkbox" 
-                        className="rounded" 
+                        className="rounded w-4 h-4 cursor-pointer" 
                         checked={sortedArchivedCompanies.length > 0 && selectedArchivedCompanies.length === sortedArchivedCompanies.length}
                         onChange={(e) => {
                           if (e.target.checked) {
@@ -861,7 +864,7 @@ const CustomerThreadsPage: React.FC = () => {
                 </thead>
                 <tbody>
                   {sortedArchivedCompanies.length === 0 ? (
-                    <tr><td colSpan={5} className="text-center p-8 text-gray-500">
+                    <tr><td colSpan={5} className="text-center p-8 text-gray-500 border-b border-gray-200">
                       <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                       <p className="text-lg font-medium">No archived companies</p>
                       <p className="text-sm mt-2">Archived companies will appear here.</p>
@@ -870,8 +873,11 @@ const CustomerThreadsPage: React.FC = () => {
                     sortedArchivedCompanies.map((company, index) => {
                       const isSelected = selectedArchivedCompanies.includes(company.company_id);
                       return (
-                        <tr key={index} className={`glass-bar-row ${isSelected ? 'selected' : ''}`}>
-                          <td className="p-5 pl-6">
+                        <tr 
+                          key={index} 
+                          className={`data-grid-row ${isSelected ? 'bg-blue-50/50' : ''} hover:bg-gray-50 transition-colors`}
+                        >
+                          <td className="px-4 py-2 border-b border-r border-gray-200">
                             <input 
                               type="checkbox" 
                               className="rounded w-4 h-4 cursor-pointer" 
@@ -885,28 +891,28 @@ const CustomerThreadsPage: React.FC = () => {
                               }}
                             />
                           </td>
-                          <td className="px-6 py-5">
-                            <div className="flex items-center gap-3">
-                              <CompanyAvatar domain={company.domain_name} name={company.company_name} />
+                          <td className="px-4 py-2 border-b border-r border-gray-200">
+                            <div className="flex items-center gap-2.5">
+                              <CompanyAvatar domain={company.domain_name} name={company.company_name} className="w-5 h-5" />
                               <Link 
                                 href={`/dashboard/customer-threads/${company.company_id}`} 
-                                className="font-semibold text-gray-900 hover:text-blue-600 transition-colors text-base"
+                                className="font-medium text-gray-900 hover:text-gray-700 transition-colors text-sm"
                               >
                                 {company.company_name}
                               </Link>
                             </div>
                           </td>
-                          <td className="px-6 py-5">
+                          <td className="px-4 py-2 border-b border-r border-gray-200">
                             <HealthScoreBar score={company.health_score} showLabel={true} />
                           </td>
-                          <td className="px-6 py-5">
-                            <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
-                              statusPillStyles[company.overall_sentiment || ''] || 'bg-gray-100 text-gray-800'
+                          <td className="px-4 py-2 border-b border-r border-gray-200">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                              statusPillStyles[company.overall_sentiment || ''] || 'bg-gray-100 text-gray-700'
                             }`}>
                               {company.overall_sentiment || 'Not set'}
                             </span>
                           </td>
-                          <td className="px-6 py-5 text-gray-600">
+                          <td className="px-4 py-2 border-b border-gray-200 text-gray-500 text-sm">
                             {company.last_interaction_at ? (
                               new Date(company.last_interaction_at).toLocaleDateString('en-CA')
                             ) : (
