@@ -80,7 +80,6 @@ export default function InteractionTimeline({ companyId, onItemClick }: Interact
         {items.map((item) => {
           const dateParts = formatTimelineDate(item.timestamp)
           const isConversation = item.type === 'conversation'
-          const isMeeting = item.type === 'meeting'
           
           return (
             <div 
@@ -136,7 +135,7 @@ export default function InteractionTimeline({ companyId, onItemClick }: Interact
                     </div>
                     
                     {/* Title */}
-                    <p className="text-sm text-gray-900 mt-1 font-medium">{item.title || (isConversation ? 'Conversation' : 'Meeting')}</p>
+                    <p className="text-sm text-gray-900 mt-1 font-medium">{item.title || (item.type === 'conversation' ? 'Conversation' : 'Meeting')}</p>
                     
                     {/* Summary */}
                     <p className="text-sm text-gray-600 mt-1">{item.summary || 'No summary available.'}</p>

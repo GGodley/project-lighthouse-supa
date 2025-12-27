@@ -797,6 +797,16 @@ export type Database = {
           title: string
         }[]
       }
+      get_interaction_timeline: {
+        Args: { company_id_param: string }
+        Returns: {
+          id: string
+          title: string
+          summary: string
+          timestamp: string
+          type: string
+        }[]
+      }
     }
     Enums: {
       customer_status: "Healthy" | "Needs Attention" | "At Risk"

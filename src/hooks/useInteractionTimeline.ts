@@ -33,8 +33,16 @@ export function useInteractionTimeline(companyId: string | null) {
 
         if (fetchError) throw fetchError;
 
-        // Type assertion is safe here because we know the SQL function returns TimelineItem[]
-        setItems((data as TimelineItem[]) || []);
+        // Map the database response to TimelineItem[], ensuring type safety
+        const timelineItems: TimelineItem[] = (data || []).map((item) => ({
+          id: item.id,
+          title: item.title,
+          summary: item.summary,
+          timestamp: item.timestamp,
+          type: item.type === 'conversation' ? 'conversation' : 'meeting',
+        }));
+
+        setItems(timelineItems);
       } catch (err) {
         console.error('Error fetching interaction timeline:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch timeline');
