@@ -135,7 +135,7 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
 
     try {
       await updateTask({ status: newStatus })
-    } catch (error) {
+    } catch {
       // Revert on error
       setLocalTask({ ...localTask, status: previousStatus })
     }
@@ -154,7 +154,7 @@ export default function TaskDetailModal({ task, onClose, onUpdate }: TaskDetailM
 
     try {
       await updateTask({ priority: newPriority })
-    } catch (error) {
+    } catch {
       // Revert on error
       setLocalTask({ ...localTask, priority: previousPriority })
     }

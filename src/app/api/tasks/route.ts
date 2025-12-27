@@ -97,8 +97,23 @@ export async function GET(request: Request) {
     }
     
     // Step 2: Fetch the Company Links
-    const threadIds = (tasks || []).map((t: any) => t.thread_id).filter((id: string | null): id is string => !!id);
-    let linksMap: Record<string, string> = {};
+    type NextStepRow = {
+      step_id: string;
+      description: string;
+      owner: string | null;
+      due_date: string | null;
+      priority: 'high' | 'medium' | 'low';
+      status: string;
+      created_at: string;
+      thread_id: string | null;
+      meeting_id: string | null;
+      requested_by_contact_id: string | null;
+      user_id: string;
+      [key: string]: unknown;
+    };
+    
+    const threadIds = (tasks || []).map((t: NextStepRow) => t.thread_id).filter((id: string | null): id is string => !!id);
+    const linksMap: Record<string, string> = {};
     
     if (threadIds.length > 0) {
       const { data: links } = await supabase
@@ -115,7 +130,7 @@ export async function GET(request: Request) {
     }
     
     // Step 3: Merge the data - Map tasks and add company_id from linksMap
-    const formattedTasks: TaskResponse[] = (tasks || []).map((task: any) => {
+    const formattedTasks: TaskResponse[] = (tasks || []).map((task: NextStepRow) => {
       // Get company_id from the linksMap lookup
       const companyId = task.thread_id ? linksMap[task.thread_id] || null : null;
       

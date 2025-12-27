@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, Circle, ArrowRight } from 'lucide-react'
+import { CheckCircle2, Circle } from 'lucide-react'
 import TaskDetailModal from './TaskDetailModal'
 
 interface NextStep {
@@ -121,12 +121,6 @@ export default function TasksNextSteps() {
 
   const isCompleted = (status: string) => {
     return status === 'completed' || status === 'done'
-  }
-
-  const getStatusLabel = (status: string) => {
-    const statusLower = (status || '').toLowerCase().trim()
-    const statusKey = Object.keys(STATUS_CONFIG).find(key => key.toLowerCase() === statusLower)
-    return statusKey ? STATUS_CONFIG[statusKey as keyof typeof STATUS_CONFIG].label : status
   }
 
   const handleTaskUpdate = async (updatedTask: NextStep) => {
