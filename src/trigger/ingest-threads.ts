@@ -217,10 +217,63 @@ export const ingestThreadsTask = task({
 
         // NOW upsert threads (after checkpoint is saved)
         if (threads.length > 0) {
-          // Prepare threads for upsert - store entire thread object in raw_thread_data
+          // Fetch subjects for all threads in parallel (lightweight metadata fetch)
+          const edgeFunctionUrl = `${supabaseUrl}/functions/v1/fetch-gmail-thread`;
+          const brokerSecret = process.env.BROKER_SHARED_SECRET;
+          const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+          if (!brokerSecret || !supabaseAnonKey) {
+            throw new Error("Missing BROKER_SHARED_SECRET or SUPABASE_ANON_KEY");
+          }
+
+          // Fetch metadata for all threads in parallel to extract subjects
+          const subjectPromises = threads.map(async (thread) => {
+            try {
+              const metadataResponse = await fetch(edgeFunctionUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  apikey: supabaseAnonKey,
+                  Authorization: `Bearer ${supabaseAnonKey}`,
+                  "x-broker-secret": brokerSecret,
+                },
+                body: JSON.stringify({ userId, threadId: thread.id, format: "metadata" }),
+              });
+
+              if (!metadataResponse.ok) {
+                console.warn(`⚠️  Failed to fetch metadata for thread ${thread.id}, using default subject`);
+                return { threadId: thread.id, subject: "(No Subject)" };
+              }
+
+              const metadataData: any = await metadataResponse.json();
+              const metadataThread = metadataData.thread;
+              const messages = metadataThread.messages || [];
+              
+              let subject = "(No Subject)";
+              if (messages.length > 0) {
+                const firstMessage = messages[0];
+                const headers = firstMessage.payload?.headers || [];
+                const subjectHeader = headers.find(
+                  (h: { name?: string; value?: string }) => h.name?.toLowerCase() === 'subject'
+                );
+                subject = subjectHeader?.value || "(No Subject)";
+              }
+
+              return { threadId: thread.id, subject };
+            } catch (error) {
+              console.warn(`⚠️  Error fetching subject for thread ${thread.id}:`, error);
+              return { threadId: thread.id, subject: "(No Subject)" };
+            }
+          });
+
+          const subjectResults = await Promise.all(subjectPromises);
+          const subjectMap = new Map(subjectResults.map(r => [r.threadId, r.subject]));
+
+          // Prepare threads for upsert with subjects
           const threadsToUpsert = threads.map((thread) => ({
             thread_id: thread.id,
             user_id: userId,
+            subject: subjectMap.get(thread.id) || "(No Subject)",
             raw_thread_data: thread, // Store entire thread object as JSONB
           }));
 
@@ -238,7 +291,7 @@ export const ingestThreadsTask = task({
             );
           }
 
-          console.log(`✅ Upserted ${threads.length} threads to database`);
+          console.log(`✅ Upserted ${threads.length} threads to database with subjects`);
 
           // IMMEDIATELY trigger hydrate-thread for this batch
           // Determine if this is initial sync (no pageToken means we're starting from the beginning)
