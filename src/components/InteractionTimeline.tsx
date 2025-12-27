@@ -1,5 +1,6 @@
 'use client'
 
+import { Mail, Video } from 'lucide-react'
 import { useInteractionTimeline } from '@/hooks/useInteractionTimeline'
 
 interface DateParts {
@@ -47,6 +48,16 @@ export default function InteractionTimeline({ companyId, onItemClick }: Interact
     }
   }
 
+  function getDateString(timestamp: string | null | undefined): string {
+    if (!timestamp) return ''
+    try {
+      const d = new Date(timestamp)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    } catch {
+      return ''
+    }
+  }
+
   if (loading) {
     return (
       <div className="bg-white p-6 rounded-lg border border-gray-200">
@@ -81,6 +92,9 @@ export default function InteractionTimeline({ companyId, onItemClick }: Interact
           const dateParts = formatTimelineDate(item.timestamp)
           const isConversation = item.type === 'conversation'
           const isLast = index === items.length - 1
+          const currentDateString = getDateString(item.timestamp)
+          const previousDateString = index > 0 ? getDateString(items[index - 1].timestamp) : ''
+          const showDate = index === 0 || currentDateString !== previousDateString
           
           return (
             <div 
@@ -89,17 +103,23 @@ export default function InteractionTimeline({ companyId, onItemClick }: Interact
             >
               {/* Column 1: Date (right-aligned, vertical stack) */}
               <div className="pr-4 pt-1">
-                <div className="flex flex-col items-end text-right">
-                  {dateParts.dayOfWeek && (
-                    <span className="text-xs font-semibold text-gray-500">{dateParts.dayOfWeek}</span>
-                  )}
-                  {dateParts.date && (
-                    <span className="text-xs font-semibold text-gray-500">{dateParts.date}</span>
-                  )}
-                  {dateParts.year && (
-                    <span className="text-xs font-semibold text-gray-500">{dateParts.year}</span>
-                  )}
-                </div>
+                {showDate ? (
+                  <div className="flex flex-col items-end text-right">
+                    {dateParts.dayOfWeek && (
+                      <span className="text-xs font-semibold text-gray-500">{dateParts.dayOfWeek}</span>
+                    )}
+                    {dateParts.date && (
+                      <span className="text-xs font-semibold text-gray-500">{dateParts.date}</span>
+                    )}
+                    {dateParts.year && (
+                      <span className="text-xs font-semibold text-gray-500">{dateParts.year}</span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-end text-right">
+                    {/* Empty space to maintain alignment */}
+                  </div>
+                )}
               </div>
 
               {/* Column 2: Timeline Spine */}
@@ -114,30 +134,37 @@ export default function InteractionTimeline({ companyId, onItemClick }: Interact
 
               {/* Column 3: Content Card */}
               <div className="pl-4 pb-6">
-                <div 
-                  className={`bg-white border border-gray-200 rounded-xl shadow-sm p-4 ${onItemClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
-                  onClick={() => handleItemClick(item.id, item.type)}
-                >
-                  {/* Badge (top-left, inside card) */}
-                  <div className="mb-2">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${
-                      isConversation 
-                        ? 'bg-blue-50 text-blue-600 border-blue-100' 
-                        : 'bg-purple-50 text-purple-600 border-purple-100'
-                    }`}>
-                      {isConversation ? 'Conversation' : 'Meeting'}
-                    </span>
+                <div className="max-w-3xl">
+                  <div 
+                    className={`bg-white border border-gray-200 rounded-xl shadow-sm p-4 ${onItemClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                    onClick={() => handleItemClick(item.id, item.type)}
+                  >
+                    {/* Badge with Icon (top-left, inside card) */}
+                    <div className="mb-2 flex items-center gap-2">
+                      {isConversation ? (
+                        <Mail className="w-4 h-4 text-blue-600" />
+                      ) : (
+                        <Video className="w-4 h-4 text-purple-600" />
+                      )}
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${
+                        isConversation 
+                          ? 'bg-blue-50 text-blue-600 border-blue-100' 
+                          : 'bg-purple-50 text-purple-600 border-purple-100'
+                      }`}>
+                        {isConversation ? 'Conversation' : 'Meeting'}
+                      </span>
+                    </div>
+                    
+                    {/* Title (bold) */}
+                    <p className="text-sm font-semibold text-gray-900 mb-1">
+                      {item.title || (isConversation ? 'Conversation' : 'Meeting')}
+                    </p>
+                    
+                    {/* Summary */}
+                    <p className="text-sm text-gray-600">
+                      {item.summary || 'No summary available.'}
+                    </p>
                   </div>
-                  
-                  {/* Title (bold) */}
-                  <p className="text-sm font-semibold text-gray-900 mb-1">
-                    {item.title || (isConversation ? 'Conversation' : 'Meeting')}
-                  </p>
-                  
-                  {/* Summary */}
-                  <p className="text-sm text-gray-600">
-                    {item.summary || 'No summary available.'}
-                  </p>
                 </div>
               </div>
             </div>
