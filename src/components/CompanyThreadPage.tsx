@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { AlertCircle, List, Clock, Users, Mail, ArrowLeft, CheckCircle, ChevronDown, ChevronRight, Phone } from 'lucide-react';
+import { AlertCircle, List, Clock, Users, Mail, ArrowLeft, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { useSupabase } from '@/components/SupabaseProvider';
 import { useCompanyThreads } from '@/hooks/useCompanyThreads';
 import ThreadConversationView from './ThreadConversationView';
@@ -214,13 +214,6 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
           setNextSteps(data.next_steps);
         }
 
-        // Debug: Log interaction_timeline to see if meetings are included
-        if (data && data.interaction_timeline) {
-          console.log('Interaction Timeline Data:', data.interaction_timeline);
-          const meetings = data.interaction_timeline.filter((i: Interaction) => i.interaction_type === 'meeting');
-          const emails = data.interaction_timeline.filter((i: Interaction) => i.interaction_type === 'email');
-          console.log(`Meetings: ${meetings.length}, Emails: ${emails.length}`);
-        }
       } catch (err) {
         console.error('Error fetching company data:', err);
         const errorMessage = err instanceof Error ? err.message : 'Failed to fetch company data';
@@ -319,22 +312,7 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
     );
   }
 
-  const { company_details, product_feedback, interaction_timeline } = companyData;
-
-  const getSentimentColor = (sentiment: string | null): string => {
-    switch (sentiment?.toLowerCase()) {
-      case 'positive':
-      case 'very positive':
-        return 'bg-green-100 text-green-800';
-      case 'neutral':
-        return 'bg-blue-100 text-blue-800';
-      case 'frustrated':
-      case 'negative':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
+  const { company_details, product_feedback } = companyData;
 
   // Sentiment chip styles for company overall sentiment
   const sentimentStyles: Record<string, string> = {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Phone, Mail, AlertCircle, CheckCircle, List, Clock, Users, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertCircle, CheckCircle, List, Clock, Users, ChevronDown, ChevronRight } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import ThreadConversationView from './ThreadConversationView';
 import MeetingDetailView from './MeetingDetailView';
@@ -167,20 +167,6 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
     fetchCompanyData();
   }, [companyId]);
 
-  const getSentimentColor = (sentiment: string | null): string => {
-    switch (sentiment?.toLowerCase()) {
-      case 'positive':
-      case 'very positive':
-        return 'bg-green-100 text-green-800';
-      case 'neutral':
-        return 'bg-blue-100 text-blue-800';
-      case 'frustrated':
-      case 'negative':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
 
   const formatDate = (dateString: string): string => {
     return new Date(dateString).toLocaleDateString('en-US', {

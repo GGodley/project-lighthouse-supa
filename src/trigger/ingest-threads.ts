@@ -245,16 +245,37 @@ export const ingestThreadsTask = task({
                 return { threadId: thread.id, subject: "(No Subject)" };
               }
 
-              const metadataData: any = await metadataResponse.json();
+              interface GmailMessageHeader {
+                name?: string;
+                value?: string;
+              }
+
+              interface GmailMessagePayload {
+                headers?: GmailMessageHeader[];
+              }
+
+              interface GmailMessage {
+                payload?: GmailMessagePayload;
+              }
+
+              interface GmailThread {
+                messages?: GmailMessage[];
+              }
+
+              interface GmailMetadataResponse {
+                thread?: GmailThread;
+              }
+
+              const metadataData = await metadataResponse.json() as GmailMetadataResponse;
               const metadataThread = metadataData.thread;
-              const messages = metadataThread.messages || [];
+              const messages = metadataThread?.messages || [];
               
               let subject = "(No Subject)";
               if (messages.length > 0) {
                 const firstMessage = messages[0];
                 const headers = firstMessage.payload?.headers || [];
                 const subjectHeader = headers.find(
-                  (h: { name?: string; value?: string }) => h.name?.toLowerCase() === 'subject'
+                  (h: GmailMessageHeader) => h.name?.toLowerCase() === 'subject'
                 );
                 subject = subjectHeader?.value || "(No Subject)";
               }
