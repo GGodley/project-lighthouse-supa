@@ -1,6 +1,6 @@
 'use client'
 
-import { Mail, Video } from 'lucide-react'
+import { Mail, Video, Maximize2 } from 'lucide-react'
 import { useInteractionTimeline } from '@/hooks/useInteractionTimeline'
 
 interface DateParts {
@@ -104,15 +104,15 @@ export default function InteractionTimeline({ companyId, onItemClick }: Interact
               {/* Column 1: Date (right-aligned, vertical stack) */}
               <div className="pr-4 pt-1">
                 {showDate ? (
-                  <div className="flex flex-col items-end text-right">
+                  <div className="flex flex-col items-end text-right leading-tight">
                     {dateParts.dayOfWeek && (
-                      <span className="text-xs font-semibold text-gray-500">{dateParts.dayOfWeek}</span>
+                      <span className="text-base font-bold text-gray-900">{dateParts.dayOfWeek}</span>
                     )}
                     {dateParts.date && (
-                      <span className="text-xs font-semibold text-gray-500">{dateParts.date}</span>
+                      <span className="text-xs font-medium text-gray-500">{dateParts.date}</span>
                     )}
                     {dateParts.year && (
-                      <span className="text-xs font-semibold text-gray-500">{dateParts.year}</span>
+                      <span className="text-xs font-medium text-gray-500">{dateParts.year}</span>
                     )}
                   </div>
                 ) : (
@@ -136,22 +136,28 @@ export default function InteractionTimeline({ companyId, onItemClick }: Interact
               <div className="pl-4 pb-6">
                 <div className="max-w-3xl">
                   <div 
-                    className={`bg-white border border-gray-200 rounded-xl shadow-sm p-4 ${onItemClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                    className={`relative bg-white border border-gray-200 rounded-xl shadow-sm p-4 ${onItemClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
                     onClick={() => handleItemClick(item.id, item.type)}
                   >
-                    {/* Badge with Icon (top-left, inside card) */}
-                    <div className="mb-2 flex items-center gap-2">
-                      {isConversation ? (
-                        <Mail className="w-4 h-4 text-blue-600" />
-                      ) : (
-                        <Video className="w-4 h-4 text-purple-600" />
-                      )}
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${
+                    {/* Badge Row: Type Badge (left) + Status Badge (right) */}
+                    <div className="mb-2 flex items-center justify-between">
+                      {/* Unified Type Badge with Icon */}
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold border ${
                         isConversation 
-                          ? 'bg-blue-50 text-blue-600 border-blue-100' 
-                          : 'bg-purple-50 text-purple-600 border-purple-100'
+                          ? 'bg-green-50 text-green-700 border-green-200' 
+                          : 'bg-blue-50 text-blue-700 border-blue-200'
                       }`}>
+                        {isConversation ? (
+                          <Mail className="w-3 h-3" />
+                        ) : (
+                          <Video className="w-3 h-3" />
+                        )}
                         {isConversation ? 'Conversation' : 'Meeting'}
+                      </span>
+                      
+                      {/* Status Badge (top-right) */}
+                      <span className="bg-gray-100 text-gray-600 rounded-full px-2 py-0.5 text-xs font-medium">
+                        Completed
                       </span>
                     </div>
                     
@@ -160,10 +166,13 @@ export default function InteractionTimeline({ companyId, onItemClick }: Interact
                       {item.title || (isConversation ? 'Conversation' : 'Meeting')}
                     </p>
                     
-                    {/* Summary - timeline_summary in lighter grey */}
-                    <p className="text-sm text-gray-400">
+                    {/* Summary */}
+                    <p className="text-sm text-gray-600">
                       {item.summary || 'No summary available.'}
                     </p>
+                    
+                    {/* Expand Icon (bottom-right) */}
+                    <Maximize2 className="absolute bottom-3 right-3 w-4 h-4 text-gray-300 hover:text-gray-500 transition-colors" />
                   </div>
                 </div>
               </div>
