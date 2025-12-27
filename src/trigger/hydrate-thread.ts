@@ -420,6 +420,18 @@ export const hydrateThreadTask = task({
 
       console.log(`📧 Fetched ${gmailMessages.length} messages from Gmail for thread ${threadId}`);
 
+      // Extract subject from first message headers
+      let threadSubject = "(No Subject)";
+      if (gmailMessages.length > 0) {
+        const firstMessage = gmailMessages[0];
+        const headers = firstMessage.payload?.headers || [];
+        const subjectHeader = headers.find(
+          (h: GmailHeader) => h.name?.toLowerCase() === 'subject'
+        );
+        threadSubject = subjectHeader?.value || "(No Subject)";
+      }
+      console.log(`📋 Extracted subject: "${threadSubject}"`);
+
       // Step 3: Message-Level Incremental Diff
       const { data: existingMessages, error: existingError } = await supabaseAdmin
         .from("thread_messages")
@@ -621,6 +633,7 @@ export const hydrateThreadTask = task({
       const { error: updateError } = await supabaseAdmin
         .from("threads")
         .update({
+          subject: threadSubject,
           history_id: hydratedHistoryId || incomingHistoryId || null,
           last_hydrated_at: new Date().toISOString(),
           last_message_date: maxSentDate,
