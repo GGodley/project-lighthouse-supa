@@ -6,7 +6,7 @@ RETURNS TABLE (
   id text,
   title text,
   summary text,
-  timestamp timestamptz,
+  interaction_timestamp timestamptz,
   type text
 )
 LANGUAGE plpgsql
@@ -19,7 +19,7 @@ BEGIN
     t.thread_id::text as id,
     COALESCE(t.subject, 'No Subject') as title,
     COALESCE(t.summary, t.snippet, 'No summary available.') as summary,
-    t.last_analyzed_at as timestamp,
+    t.last_analyzed_at as interaction_timestamp,
     'conversation'::text as type
   FROM threads t
   JOIN thread_company_link tcl ON t.thread_id = tcl.thread_id
@@ -33,13 +33,13 @@ BEGIN
     m.id::text as id,
     COALESCE(m.title, 'Meeting') as title,
     COALESCE(m.summary, 'No summary available.') as summary,
-    m.start_time as timestamp,
+    m.start_time as interaction_timestamp,
     'meeting'::text as type
   FROM meetings m
   WHERE m.company_id = company_id_param
     AND m.start_time IS NOT NULL
   
-  ORDER BY timestamp DESC;
+  ORDER BY interaction_timestamp DESC;
 END;
 $$;
 

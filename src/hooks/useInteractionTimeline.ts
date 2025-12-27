@@ -34,11 +34,12 @@ export function useInteractionTimeline(companyId: string | null) {
         if (fetchError) throw fetchError;
 
         // Map the database response to TimelineItem[], ensuring type safety
+        // Note: SQL function returns 'interaction_timestamp' but we map it to 'timestamp' for the component
         const timelineItems: TimelineItem[] = (data || []).map((item) => ({
           id: item.id,
           title: item.title,
           summary: item.summary,
-          timestamp: item.timestamp,
+          timestamp: item.interaction_timestamp,
           type: item.type === 'conversation' ? 'conversation' : 'meeting',
         }));
 

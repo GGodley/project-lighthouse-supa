@@ -803,7 +803,7 @@ export type Database = {
           id: string
           title: string
           summary: string
-          timestamp: string
+          interaction_timestamp: string
           type: string
         }[]
       }
