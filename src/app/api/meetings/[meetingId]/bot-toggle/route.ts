@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { meetingId: string } }
+  context: { params: Promise<{ meetingId: string }> }
 ) {
   try {
     const supabase = await createClient()
@@ -16,7 +16,7 @@ export async function PATCH(
       )
     }
 
-    const { meetingId } = params
+    const { meetingId } = await context.params
     const body = await request.json()
     const { bot_enabled } = body
 

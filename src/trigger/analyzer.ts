@@ -148,22 +148,23 @@ function sanitizeLLMResponse(rawContent: string | null): SanitizedLLMResponse {
 
 // --- Gmail parsing helpers (ported from Supabase edge function) ---
 
-const decodeBase64Url = (data: string | undefined): string | undefined => {
-  if (!data) return undefined;
-
-  try {
-    let base64 = data.replace(/-/g, "+").replace(/_/g, "/");
-    while (base64.length % 4) {
-      base64 += "=";
-    }
-
-    const buffer = Buffer.from(base64, "base64");
-    return buffer.toString("utf8");
-  } catch (e) {
-    console.error("Base64 decoding failed for data chunk.", e);
-    return undefined;
-  }
-};
+// Unused function - kept for potential future use (used in commented-out collectBodies)
+// const decodeBase64Url = (data: string | undefined): string | undefined => {
+//   if (!data) return undefined;
+//
+//   try {
+//     let base64 = data.replace(/-/g, "+").replace(/_/g, "/");
+//     while (base64.length % 4) {
+//       base64 += "=";
+//     }
+//
+//     const buffer = Buffer.from(base64, "base64");
+//     return buffer.toString("utf8");
+//   } catch (e) {
+//     console.error("Base64 decoding failed for data chunk.", e);
+//     return undefined;
+//   }
+// };
 
 // Unused function - kept for potential future use
 // const collectBodies = (

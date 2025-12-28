@@ -13,15 +13,6 @@ type ThreadCompanyLinkNested = {
   companies: CompanyNested | CompanyNested[] | null;
 };
 
-type ThreadNested = {
-  thread_company_link: ThreadCompanyLinkNested | ThreadCompanyLinkNested[] | null;
-};
-
-type CustomerNested = {
-  company_id: string;
-  companies: CompanyNested | CompanyNested[] | null;
-};
-
 // Type for transformed task data
 type TaskResponse = {
   step_id: string;
