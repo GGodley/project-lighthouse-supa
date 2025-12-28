@@ -52,19 +52,20 @@ type GmailMessage = {
 };
 
 
-type ThreadMessageUpsert = {
-  message_id: string;
-  thread_id: string;
-  user_id: string;
-  customer_id: string | null;
-  from_address: string | null;
-  to_addresses: string[] | null;
-  cc_addresses: string[] | null;
-  sent_date: string | null;
-  snippet: string | null;
-  body_text: string | null;
-  body_html: string | null;
-};
+// Unused type - kept for potential future use
+// type ThreadMessageUpsert = {
+//   message_id: string;
+//   thread_id: string;
+//   user_id: string;
+//   customer_id: string | null;
+//   from_address: string | null;
+//   to_addresses: string[] | null;
+//   cc_addresses: string[] | null;
+//   sent_date: string | null;
+//   snippet: string | null;
+//   body_text: string | null;
+//   body_html: string | null;
+// };
 
 type NextStepInsert = {
   thread_id: string;
@@ -164,53 +165,54 @@ const decodeBase64Url = (data: string | undefined): string | undefined => {
   }
 };
 
-const collectBodies = (
-  payload: GmailMessagePayload | undefined
-): { text?: string; html?: string } => {
-  let text: string | undefined;
-  let html: string | undefined;
-
-  const visitPart = (part: GmailMessagePart | undefined) => {
-    if (!part) return;
-
-    if (part?.body?.data) {
-      const mimeType = part.mimeType || "";
-      const decodedData = decodeBase64Url(part.body.data);
-
-      if (decodedData) {
-        if (mimeType === "text/plain" && !text) {
-          text = decodedData;
-        }
-        if (mimeType === "text/html" && !html) {
-          html = decodedData;
-        }
-      }
-    }
-
-    if (part?.parts && Array.isArray(part.parts)) {
-      for (const child of part.parts) {
-        visitPart(child);
-      }
-    }
-  };
-
-  if (payload) {
-    // First, try to process parts recursively (existing logic)
-    visitPart(payload);
-    
-    // Fallback: If no body was found in parts, check payload.body.data directly
-    // This handles simple Gmail messages where body is stored directly in payload.body.data
-    if (!text && !html && payload.body?.data) {
-      const decodedData = decodeBase64Url(payload.body.data);
-      if (decodedData) {
-        // Default to text/plain for simple messages when mimeType is unknown
-        text = decodedData;
-      }
-    }
-  }
-
-  return { text, html };
-};
+// Unused function - kept for potential future use
+// const collectBodies = (
+//   payload: GmailMessagePayload | undefined
+// ): { text?: string; html?: string } => {
+//   let text: string | undefined;
+//   let html: string | undefined;
+//
+//   const visitPart = (part: GmailMessagePart | undefined) => {
+//     if (!part) return;
+//
+//     if (part?.body?.data) {
+//       const mimeType = part.mimeType || "";
+//       const decodedData = decodeBase64Url(part.body.data);
+//
+//       if (decodedData) {
+//         if (mimeType === "text/plain" && !text) {
+//           text = decodedData;
+//         }
+//         if (mimeType === "text/html" && !html) {
+//           html = decodedData;
+//         }
+//       }
+//     }
+//
+//     if (part?.parts && Array.isArray(part.parts)) {
+//       for (const child of part.parts) {
+//         visitPart(child);
+//       }
+//     }
+//   };
+//
+//   if (payload) {
+//     // First, try to process parts recursively (existing logic)
+//     visitPart(payload);
+//     
+//     // Fallback: If no body was found in parts, check payload.body.data directly
+//     // This handles simple Gmail messages where body is stored directly in payload.body.data
+//     if (!text && !html && payload.body?.data) {
+//       const decodedData = decodeBase64Url(payload.body.data);
+//       if (decodedData) {
+//         // Default to text/plain for simple messages when mimeType is unknown
+//         text = decodedData;
+//       }
+//     }
+//   }
+//
+//   return { text, html };
+// };
 
 const getHeader = (
   headers: GmailHeader[] | undefined,

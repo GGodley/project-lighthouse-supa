@@ -22,23 +22,6 @@ type CustomerNested = {
   companies: CompanyNested | CompanyNested[] | null;
 };
 
-// Type for raw task data from Supabase query with nested relationships
-type TaskWithNested = {
-  step_id: string;
-  description: string;
-  owner: string | null;
-  due_date: string | null;
-  priority: 'high' | 'medium' | 'low';
-  status: string;
-  created_at: string;
-  thread_id: string | null;
-  meeting_id: string | null;
-  requested_by_contact_id: string | null;
-  thread_company_link: { company_id: string } | { company_id: string }[] | null;
-  threads: ThreadNested | ThreadNested[] | null;
-  customers: CustomerNested | CustomerNested[] | null;
-};
-
 // Type for transformed task data
 type TaskResponse = {
   step_id: string;

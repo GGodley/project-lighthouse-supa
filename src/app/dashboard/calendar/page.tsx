@@ -5,17 +5,27 @@ import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import { EventInput } from '@fullcalendar/core'
-import { useSupabase } from '@/components/SupabaseProvider'
-import { Database } from '@/types/database'
-import MeetingBotToggle from '@/components/MeetingBotToggle'
 
-type Meeting = Database['public']['Tables']['meetings']['Row']
+// Type for meeting response from API
+type MeetingResponse = {
+  id: string;
+  title: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  description: string | null;
+  attendees: string[] | null;
+  hangout_link: string | null;
+  bot_enabled: boolean | null;
+};
+
+type MeetingsApiResponse = {
+  meetings: MeetingResponse[];
+};
 
 export default function CalendarPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [events, setEvents] = useState<EventInput[]>([])
   const [error, setError] = useState<string | null>(null)
-  const supabase = useSupabase()
 
   // Fetch meetings from database (without syncing)
   const fetchMeetings = useCallback(async () => {
@@ -29,10 +39,11 @@ export default function CalendarPage() {
         throw new Error('Failed to fetch meetings')
       }
 
-      const { meetings } = await meetingsResponse.json()
+      const data: MeetingsApiResponse = await meetingsResponse.json()
+      const { meetings } = data;
       
       // Transform meetings to FullCalendar events
-      const calendarEvents: EventInput[] = meetings.map((meeting: any) => ({
+      const calendarEvents: EventInput[] = meetings.map((meeting: MeetingResponse) => ({
         id: String(meeting.id || `local-${Date.now()}`),
         title: meeting.title || 'Untitled Meeting',
         start: meeting.start_time,
@@ -192,7 +203,7 @@ export default function CalendarPage() {
                       if (!response.ok) {
                         throw new Error('Failed to update')
                       }
-                    } catch (err) {
+                    } catch {
                       checkbox.checked = !checkbox.checked // Revert on error
                       alert('Failed to update bot setting')
                     }
