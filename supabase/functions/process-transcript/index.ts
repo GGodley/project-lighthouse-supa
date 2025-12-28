@@ -2,9 +2,22 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { createHmac } from 'https://deno.land/std@0.168.0/node/crypto.ts';
 import { decode } from "https://deno.land/std@0.208.0/encoding/base64.ts";
 
+/**
+ * Process Transcript Edge Function - Handles Recall.ai transcript.done webhook
+ * 
+ * Flow:
+ * 1. Verify webhook signature
+ * 2. Find meeting by recall_bot_id
+ * 3. Fetch transcript from Recall.ai
+ * 4. Format transcript with speaker names
+ * 5. Save transcript to meetings.transcripts
+ * 6. Update status to 'completed'
+ * 7. Delete meeting data from Recall.ai
+ * 8. Trigger Trigger.dev task for LLM analysis
+ */
 Deno.serve(async (req) => {
   try {
-    console.log("[START] Webhook received. Beginning process.");
+    console.log("[START] Webhook received from Recall.ai");
 
     // --- 1. Signature Verification ---
     console.log("[LOG] Verifying Svix signature...");
@@ -31,188 +44,202 @@ Deno.serve(async (req) => {
 
     // --- 2. Payload Processing ---
     const payload = JSON.parse(rawBody);
-    console.log(`[LOG] Event type is: '${payload.event}'`);
+    console.log(`[LOG] Event type: '${payload.event}'`);
 
     if (payload.event === 'transcript.done') {
-      console.log("[LOG] Event is 'transcript.done'. Starting main logic.");
+      console.log("[LOG] Processing transcript.done event");
 
       const botIdFromPayload = payload.data?.bot?.id;
-      if (!botIdFromPayload) throw new Error('Could not find bot.id in payload.');
-      console.log(`[LOG] Extracted bot_id from payload: ${botIdFromPayload}`);
-      
+      if (!botIdFromPayload) {
+        throw new Error('Could not find bot.id in payload.');
+      }
+      console.log(`[LOG] Bot ID: ${botIdFromPayload}`);
+
       const supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       );
 
-      // --- 3. Database Lookup ---
-      console.log(`[LOG] Searching for meeting with recall_bot_id: ${botIdFromPayload}`);
-      const { data: meeting, error: meetingFetchError } = await supabaseClient
+      // --- 3. Find Meeting by recall_bot_id ---
+      console.log(`[LOG] Finding meeting with recall_bot_id: ${botIdFromPayload}`);
+      const { data: meeting, error: meetingError } = await supabaseClient
         .from('meetings')
-        .select('google_event_id')
+        .select('id, google_event_id, user_id, customer_id')
         .eq('recall_bot_id', botIdFromPayload)
         .maybeSingle();
 
-      if (meetingFetchError) {
-        console.error(`Database fetch error: ${meetingFetchError.message}`);
-        throw new Error(`Database fetch error: ${meetingFetchError.message}`);
+      if (meetingError) {
+        throw new Error(`Database error: ${meetingError.message}`);
       }
-      
+
       if (!meeting) {
-        console.warn(`No meeting found for bot_id: ${botIdFromPayload}. Returning 200 to stop webhook retries.`);
+        console.warn(`No meeting found for bot_id: ${botIdFromPayload}`);
         return new Response("OK (no matching meeting found)", { status: 200 });
       }
-      
-      console.log(`[LOG] Found meeting with google_event_id: ${meeting.google_event_id}`);
-      
-      // Note: We don't change status here - meeting should already be 'recording_scheduled'
-      // The transcript processing doesn't change the meeting status
-      console.log(`[LOG] Processing transcript for meeting (status remains 'recording_scheduled')`);
-      
-      // Now fetch the transcription job using BOTH the meeting's google_event_id
-      // and the current bot_id. This makes the lookup resilient to historical
-      // jobs for the same meeting that were created by previous bots.
-      const {
-        data: jobs,
-        error: fetchError,
-        count: jobCount,
-      } = await supabaseClient
-        .from('transcription_jobs')
-        .select('id, status', { count: 'exact' })
-        .eq('meeting_id', meeting.google_event_id)
-        .eq('recall_bot_id', botIdFromPayload)
-        .order('created_at', { ascending: false })
-        .limit(1);
 
-      if (fetchError) {
-        console.error(`Database fetch error: ${fetchError.message}`);
-        throw new Error(`Database fetch error: ${fetchError.message}`);
-      }
+      console.log(`[LOG] Found meeting: id=${meeting.id}, google_event_id=${meeting.google_event_id}`);
 
-      const job = jobs && jobs.length > 0 ? jobs[0] : null;
-
-      if (jobCount && jobCount > 1) {
-        console.warn(
-          `[WARN] Multiple transcription_jobs found for meeting_id=${meeting.google_event_id} and recall_bot_id=${botIdFromPayload}. Using the most recent one by created_at.`
-        );
-      }
-
-      if (!job) {
-        console.warn(`No transcription job found for meeting: ${meeting.google_event_id}. Returning 200 to stop webhook retries.`);
-        return new Response("OK (no matching job found)", { status: 200 });
-      }
-      
-      console.log(`[LOG] Found job ${job.id} with status: '${job.status}'`);
-
-      // --- 4. Idempotency Check ---
-      if (job.status === 'completed' || job.status === 'failed') {
-        console.log(`[LOG] Job is already finished with status: '${job.status}'. Exiting successfully.`);
-        return new Response("OK (already processed)", { status: 200 });
-      }
-      console.log("[LOG] Idempotency check passed. Job status:", job.status);
-
-      // --- 5. Fetch Transcript from Recall.ai ---
+      // --- 4. Fetch Transcript from Recall.ai ---
       const transcriptId = payload.data?.transcript?.id;
-      if (!transcriptId) throw new Error('Webhook payload is missing transcript ID.');
-      console.log(`[LOG] Fetching metadata for transcript_id: ${transcriptId}`);
-      
+      if (!transcriptId) {
+        throw new Error('Webhook payload is missing transcript ID.');
+      }
+      console.log(`[LOG] Fetching transcript ${transcriptId} from Recall.ai`);
+
       const recallApiKey = Deno.env.get('RECALLAI_API_KEY');
-      const metaResponse = await fetch(`https://us-west-2.recall.ai/api/v1/transcript/${transcriptId}`, { headers: { Authorization: `Token ${recallApiKey}` } });
-      if (!metaResponse.ok) throw new Error('Failed to fetch transcript metadata.');
-      
+      if (!recallApiKey) {
+        throw new Error('RECALLAI_API_KEY not configured');
+      }
+
+      // Fetch transcript metadata
+      const metaResponse = await fetch(
+        `https://us-west-2.recall.ai/api/v1/transcript/${transcriptId}`,
+        { headers: { Authorization: `Token ${recallApiKey}` } }
+      );
+      if (!metaResponse.ok) {
+        throw new Error(`Failed to fetch transcript metadata: ${metaResponse.status}`);
+      }
+
       const metaData = await metaResponse.json();
       const downloadUrl = metaData?.data?.download_url;
-      if (!downloadUrl) throw new Error('Metadata is missing the download_url.');
-      console.log(`[LOG] Got download URL. Downloading transcript content...`);
-      
-      const contentResponse = await fetch(downloadUrl);
-      if (!contentResponse.ok) throw new Error('Failed to download transcript content.');
-      const transcriptContent = await contentResponse.json();
-      console.log(`[LOG] Transcript content downloaded successfully.`);
+      if (!downloadUrl) {
+        throw new Error('Metadata is missing the download_url');
+      }
 
-      // --- 6. Process Transcript Text ---
-      let fullText = '';
+      // Download transcript content
+      console.log(`[LOG] Downloading transcript content...`);
+      const contentResponse = await fetch(downloadUrl);
+      if (!contentResponse.ok) {
+        throw new Error(`Failed to download transcript: ${contentResponse.status}`);
+      }
+      const transcriptContent = await contentResponse.json();
+      console.log(`[LOG] Transcript downloaded successfully`);
+
+      // --- 5. Format Transcript with Speaker Names ---
+      // Transcript structure from Recall.ai: Array of segments with participant info
+      let formattedTranscript = '';
       if (Array.isArray(transcriptContent)) {
-        fullText = transcriptContent.map((p: any) => p.words.map((w: any) => w.text).join(' ')).join('\n');
-      }
-      console.log(`[LOG] Transcript processed into fullText (length: ${fullText.length})`);
-      
-      // --- 7. Verify Transcript Data ---
-      const isTranscriptValid = 
-        fullText.length > 100 && 
-        Array.isArray(transcriptContent) && 
-        transcriptContent.length > 0;
-      
-      if (!isTranscriptValid) {
-        console.warn(`[WARNING] Transcript validation failed. fullText length: ${fullText.length}, transcriptContent is array: ${Array.isArray(transcriptContent)}, transcriptContent length: ${Array.isArray(transcriptContent) ? transcriptContent.length : 'N/A'}`);
-        console.warn(`[WARNING] Skipping cleanup - transcript may need to be re-fetched.`);
-        // Still save what we have, but don't trigger cleanup
-      } else {
-        console.log(`[LOG] Transcript validation passed. Proceeding with storage and cleanup.`);
-      }
-      
-      // --- 8. Update transcription_jobs with transcript ---
-      console.log(`[LOG] Attempting to update job ${job.id} in database...`);
-      const { error: updateError } = await supabaseClient
-        .from('transcription_jobs')
-        .update({
-          transcript_text: fullText,
-          utterances: transcriptContent,
-          status: 'awaiting_summary',
-        })
-        .eq('id', job.id);
+        const transcriptLines: string[] = [];
         
-      if (updateError) {
-        // This will catch if the update itself fails for any reason
-        console.error("DATABASE UPDATE FAILED:", updateError);
-        throw new Error(`Failed to update job ${job.id}: ${updateError.message}`);
+        for (const segment of transcriptContent) {
+          // Extract speaker name
+          const speakerName = segment.participant?.name || 
+                            segment.participant?.email?.split('@')[0] || 
+                            'Unknown Speaker';
+          
+          // Extract words and combine into text
+          let segmentText = '';
+          if (Array.isArray(segment.words)) {
+            segmentText = segment.words.map((w: any) => w.text).join(' ');
+          } else if (segment.text) {
+            segmentText = segment.text;
+          }
+
+          if (segmentText.trim()) {
+            // Format: "Speaker Name: text"
+            transcriptLines.push(`${speakerName}: ${segmentText}`);
+          }
+        }
+        
+        formattedTranscript = transcriptLines.join('\n\n');
+      } else {
+        // Fallback: if not array format, try to extract text
+        formattedTranscript = JSON.stringify(transcriptContent);
       }
-      console.log(`[SUCCESS] Job ${job.id} updated successfully in the database.`);
-      
-      // --- 9. Update meetings table with transcript ---
-      // Note: Status remains 'recording_scheduled' - transcript completion doesn't change status
+
+      if (!formattedTranscript || formattedTranscript.trim().length < 50) {
+        throw new Error('Transcript is too short or empty');
+      }
+
+      console.log(`[LOG] Formatted transcript (length: ${formattedTranscript.length})`);
+
+      // --- 6. Save Transcript to Meetings Table ---
       console.log(`[LOG] Saving transcript to meetings table...`);
       const { error: transcriptUpdateError } = await supabaseClient
         .from('meetings')
-        .update({ 
-          transcript: fullText
-          // Status remains 'recording_scheduled' - meeting is complete with transcript
-          // We don't update status here to maintain consistency with our status constraint
+        .update({
+          transcripts: formattedTranscript,
+          status: 'recording_scheduled', // Status remains recording_scheduled (used for completed meetings with transcript)
+          updated_at: new Date().toISOString(),
         })
-        .eq('recall_bot_id', botIdFromPayload);
-        
+        .eq('id', meeting.id);
+
       if (transcriptUpdateError) {
-        console.error(`Failed to save transcript to meetings: ${transcriptUpdateError.message}`);
-        throw new Error(`Failed to save transcript to meetings: ${transcriptUpdateError.message}`);
+        throw new Error(`Failed to save transcript: ${transcriptUpdateError.message}`);
       }
-      console.log(`[SUCCESS] Transcript saved to meetings table.`);
-      
-      // --- 10. Trigger Recall.ai cleanup if transcript is valid ---
-      if (isTranscriptValid) {
-        console.log(`[LOG] Transcript verified. Triggering Recall.ai media cleanup...`);
-        try {
-          await supabaseClient.functions.invoke('cleanup-meeting-data', {
-            body: {
-              record: {
-                meeting_id: meeting.google_event_id,
-                recall_bot_id: botIdFromPayload
-              }
-            }
-          });
-          console.log(`[SUCCESS] Cleanup triggered successfully for meeting ${meeting.google_event_id}`);
-        } catch (cleanupError) {
-          // Best-effort: log but don't fail the webhook
-          console.error(`[WARNING] Failed to trigger cleanup for meeting ${meeting.google_event_id}:`, cleanupError);
-          console.error(`[WARNING] Transcript is saved, but Recall media may still exist. Manual cleanup may be needed.`);
+      console.log(`[SUCCESS] Transcript saved to meetings table`);
+
+      // --- 7. Delete Meeting Data from Recall.ai ---
+      console.log(`[LOG] Deleting meeting data from Recall.ai...`);
+      try {
+        const deleteResponse = await fetch(
+          `https://us-west-2.recall.ai/api/v1/bot/${botIdFromPayload}/delete_media/`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Token ${recallApiKey}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+
+        if (!deleteResponse.ok && deleteResponse.status !== 404) {
+          console.warn(`⚠️  Failed to delete Recall.ai media: ${deleteResponse.status}`);
+        } else {
+          console.log(`[SUCCESS] Recall.ai media deleted`);
         }
+      } catch (deleteError) {
+        console.warn(`⚠️  Error deleting Recall.ai media:`, deleteError);
+        // Don't fail the webhook - transcript is saved
+      }
+
+      // --- 8. Trigger Trigger.dev Function for LLM Analysis ---
+      console.log(`[LOG] Triggering Trigger.dev for LLM analysis...`);
+      try {
+        const triggerApiKey = Deno.env.get("TRIGGER_API_KEY");
+        if (!triggerApiKey) {
+          throw new Error("TRIGGER_API_KEY not configured");
+        }
+
+        const triggerUrl = `https://api.trigger.dev/api/v1/tasks/generate-meeting-summary/trigger`;
+        const triggerResponse = await fetch(triggerUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${triggerApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            payload: {
+              meetingId: meeting.id.toString(), // Pass meetings.id (BIGINT as string)
+              googleEventId: meeting.google_event_id,
+              transcript: formattedTranscript,
+              userId: meeting.user_id,
+            },
+          }),
+        });
+
+        if (!triggerResponse.ok) {
+          const errorText = await triggerResponse.text();
+          throw new Error(
+            `Failed to trigger Trigger.dev: ${triggerResponse.status} - ${errorText}`
+          );
+        }
+
+        console.log(`[SUCCESS] Trigger.dev task triggered for meeting analysis`);
+      } catch (triggerError) {
+        console.error(`⚠️  Failed to trigger Trigger.dev:`, triggerError);
+        // Don't fail the webhook - transcript is saved, can retry analysis later
       }
     }
-    
+
     console.log("[END] Process complete. Returning 200 OK.");
     return new Response(JSON.stringify({ received: true }), { status: 200 });
 
   } catch (error) {
     console.error('Error in process-transcript webhook:', error);
-    return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
+    return new Response(
+      JSON.stringify({ error: 'Internal Server Error' }),
+      { status: 500 }
+    );
   }
 });
