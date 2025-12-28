@@ -16,37 +16,50 @@ export async function POST() {
       )
     }
 
-    // Get the session to extract the access token
-    const { data: { session } } = await supabase.auth.getSession()
-
-    if (!session) {
+    // Trigger Trigger.dev sync-calendar task
+    const triggerApiKey = process.env.TRIGGER_API_KEY;
+    if (!triggerApiKey) {
       return NextResponse.json(
-        { error: 'No active session' },
-        { status: 401 }
-      )
+        { error: 'TRIGGER_API_KEY not configured' },
+        { status: 500 }
+      );
     }
 
-    // Call the sync-calendar Edge Function
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const syncResponse = await fetch(`${supabaseUrl}/functions/v1/sync-calendar`, {
+    const triggerUrl = `https://api.trigger.dev/api/v1/tasks/sync-calendar/trigger`;
+    const triggerPayload = {
+      payload: { userId: user.id },
+      concurrencyKey: user.id,
+    };
+
+    // Fire and forget - don't wait for response
+    const triggerResponse = await fetch(triggerUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${session.access_token}`,
+        'Authorization': `Bearer ${triggerApiKey}`,
         'Content-Type': 'application/json',
       },
-    })
+      body: JSON.stringify(triggerPayload),
+    });
 
-    if (!syncResponse.ok) {
-      const errorData = await syncResponse.json()
-      console.error('Sync calendar error:', errorData)
+    if (!triggerResponse.ok) {
+      const errorText = await triggerResponse.text();
+      console.error('Failed to trigger sync-calendar task:', errorText);
       return NextResponse.json(
-        { error: errorData.error || 'Failed to sync calendar' },
-        { status: syncResponse.status }
-      )
+        { error: 'Failed to trigger calendar sync' },
+        { status: triggerResponse.status }
+      );
     }
 
-    const result = await syncResponse.json()
-    return NextResponse.json(result)
+    const triggerResult = await triggerResponse.json();
+
+    // Return success immediately (processing happens in background)
+    return NextResponse.json(
+      { 
+        message: 'Calendar sync initiated successfully',
+        runId: triggerResult.id || null,
+      },
+      { status: 202 } // Accepted - processing asynchronously
+    );
 
   } catch (error) {
     console.error('API error:', error)

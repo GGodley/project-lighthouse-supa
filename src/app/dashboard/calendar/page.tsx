@@ -7,6 +7,7 @@ import timeGridPlugin from '@fullcalendar/timegrid'
 import { EventInput } from '@fullcalendar/core'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { Database } from '@/types/database'
+import MeetingBotToggle from '@/components/MeetingBotToggle'
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
 
@@ -28,18 +29,20 @@ export default function CalendarPage() {
         throw new Error('Failed to fetch meetings')
       }
 
-      const meetings: Meeting[] = await meetingsResponse.json()
+      const { meetings } = await meetingsResponse.json()
       
       // Transform meetings to FullCalendar events
-      const calendarEvents: EventInput[] = meetings.map((meeting) => ({
-        id: String(meeting.google_event_id ?? `local-${Date.now()}`),
+      const calendarEvents: EventInput[] = meetings.map((meeting: any) => ({
+        id: String(meeting.id || `local-${Date.now()}`),
         title: meeting.title || 'Untitled Meeting',
-        start: (meeting as Meeting & Partial<{ start_time: string }>).start_time,
-        end: (meeting as Meeting & Partial<{ end_time: string }>).end_time ?? undefined,
+        start: meeting.start_time,
+        end: meeting.end_time ?? undefined,
         extendedProps: {
+          meetingId: meeting.id,
           description: meeting.description,
           attendees: meeting.attendees,
           hangoutLink: meeting.hangout_link,
+          botEnabled: meeting.bot_enabled ?? true,
         },
       }))
 
@@ -59,43 +62,34 @@ export default function CalendarPage() {
       setIsLoading(true)
       setError(null)
 
-      // Step 1: Call sync-calendar Edge Function
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session) {
-        throw new Error('No active session')
-      }
-
-      // Get the provider_token from the session
-      const providerToken = session.provider_token
-      
-      if (!providerToken) {
-        console.error('Could not find provider token in session')
-        throw new Error('Could not find provider token. Please re-authenticate.')
-      }
-
-      const { data: syncResult, error: syncError } = await supabase.functions.invoke('sync-calendar', {
-        body: {
-          provider_token: providerToken
-        }
+      // Call sync-calendar API route (triggers Trigger.dev task)
+      const syncResponse = await fetch('/api/sync-calendar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       })
 
-      if (syncError) {
-        console.error('Sync calendar error:', syncError)
-        throw new Error(syncError.message || 'Failed to sync calendar')
+      if (!syncResponse.ok) {
+        const errorData = await syncResponse.json()
+        throw new Error(errorData.error || 'Failed to sync calendar')
       }
 
-      console.log('Sync completed:', syncResult)
+      const syncResult = await syncResponse.json()
+      console.log('Sync initiated:', syncResult)
 
-      // Step 2: Fetch meetings from our database
-      await fetchMeetings()
+      // Wait a bit for initial processing, then fetch meetings
+      // Note: Trigger.dev processes in background, so we fetch what's available
+      setTimeout(() => {
+        fetchMeetings()
+      }, 2000)
       
     } catch (err) {
       console.error('Calendar sync error:', err)
       setError(err instanceof Error ? err.message : 'An error occurred')
       setIsLoading(false)
     }
-  }, [supabase, fetchMeetings])
+  }, [fetchMeetings])
 
   // Fetch meetings on page load (without syncing)
   // Note: Auto-sync on page load has been moved to DashboardSyncManager
@@ -148,18 +142,67 @@ export default function CalendarPage() {
             eventClick={(info) => {
               const event = info.event
               const extendedProps = event.extendedProps as {
+                meetingId?: string
                 location?: string
                 description?: string
                 attendees?: string[]
                 externalAttendees?: string[]
+                botEnabled?: boolean
               }
               
-              alert(`
-                ${event.title}
-                ${extendedProps.location ? `\nLocation: ${extendedProps.location}` : ''}
-                ${extendedProps.description ? `\nDescription: ${extendedProps.description}` : ''}
-                ${extendedProps.externalAttendees && extendedProps.externalAttendees.length > 0 ? `\nExternal Attendees: ${extendedProps.externalAttendees.join(', ')}` : ''}
-              `)
+              // Create a modal/dialog to show meeting details with bot toggle
+              const modal = document.createElement('div')
+              modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'
+              modal.innerHTML = `
+                <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                  <h2 class="text-xl font-bold mb-4">${event.title}</h2>
+                  <div class="space-y-2 mb-4">
+                    ${extendedProps.description ? `<p class="text-gray-600">${extendedProps.description}</p>` : ''}
+                    ${extendedProps.attendees && extendedProps.attendees.length > 0 ? `<p class="text-sm text-gray-500">Attendees: ${Array.isArray(extendedProps.attendees) ? extendedProps.attendees.join(', ') : ''}</p>` : ''}
+                  </div>
+                  <div id="bot-toggle-container" class="mb-4"></div>
+                  <button id="close-modal" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">Close</button>
+                </div>
+              `
+              document.body.appendChild(modal)
+              
+              // Add bot toggle if meetingId exists
+              if (extendedProps.meetingId) {
+                const toggleContainer = modal.querySelector('#bot-toggle-container')
+                if (toggleContainer) {
+                  // We'll use React to render the toggle, but for simplicity, we'll use a basic implementation
+                  // In a production app, you'd use a proper modal component with React
+                  const toggleDiv = document.createElement('div')
+                  toggleDiv.innerHTML = `
+                    <label class="flex items-center gap-2">
+                      <input type="checkbox" id="bot-toggle-checkbox" ${extendedProps.botEnabled ? 'checked' : ''} class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                      <span class="text-sm text-gray-700">Bot Enabled</span>
+                    </label>
+                  `
+                  toggleContainer.appendChild(toggleDiv)
+                  
+                  const checkbox = toggleDiv.querySelector('#bot-toggle-checkbox') as HTMLInputElement
+                  checkbox?.addEventListener('change', async () => {
+                    try {
+                      const response = await fetch(`/api/meetings/${extendedProps.meetingId}/bot-toggle`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ bot_enabled: checkbox.checked }),
+                      })
+                      if (!response.ok) {
+                        throw new Error('Failed to update')
+                      }
+                    } catch (err) {
+                      checkbox.checked = !checkbox.checked // Revert on error
+                      alert('Failed to update bot setting')
+                    }
+                  })
+                }
+              }
+              
+              modal.querySelector('#close-modal')?.addEventListener('click', () => {
+                document.body.removeChild(modal)
+              })
             }}
             eventMouseEnter={(info) => {
               info.el.style.cursor = 'pointer'

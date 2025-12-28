@@ -3,10 +3,12 @@ import { NextResponse } from 'next/server'
 
 // Type for the selected meeting fields from the query
 type MeetingSelect = {
+  id: string
   title: string | null
   start_time: string | null
   end_time: string | null
   customer_id: string | null
+  bot_enabled: boolean | null
 }
 
 // Type for the selected customer fields from the query
@@ -36,10 +38,12 @@ export async function GET(request: Request) {
     const { data: meetings, error } = await supabase
       .from('meetings')
       .select(`
+        id,
         title,
         start_time,
         end_time,
-        customer_id
+        customer_id,
+        bot_enabled
       `)
       .eq('user_id', user.id)
       .gte('start_time', start)
@@ -68,12 +72,14 @@ export async function GET(request: Request) {
       }
     }
 
-    // Transform the data to include customer name
-    const transformedMeetings = (meetings || []).map((meeting: MeetingSelect) => ({
+    // Transform the data to include customer name and bot_enabled
+    const transformedMeetings = (meetings || []).map((meeting: MeetingSelect & { id: string; bot_enabled: boolean | null }) => ({
+      id: meeting.id,
       title: meeting.title,
       start_time: meeting.start_time,
       end_time: meeting.end_time,
-      customer_name: meeting.customer_id ? customerMap.get(meeting.customer_id) || null : null
+      customer_name: meeting.customer_id ? customerMap.get(meeting.customer_id) || null : null,
+      bot_enabled: meeting.bot_enabled ?? true
     }))
 
     return NextResponse.json({ meetings: transformedMeetings })
