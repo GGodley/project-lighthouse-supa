@@ -531,7 +531,7 @@ The "customer" is any participant who is NOT the "CSM"."""
         full_prompt = f"{system_prompt}\n\n{user_query}"
         
         model = genai.GenerativeModel(
-            "gemini-1.5-flash",
+            "gemini-3-flash-preview",
             generation_config={
                 "response_mime_type": "application/json",
                 "temperature": 0.3

@@ -252,7 +252,7 @@ The "customer" is any participant who is NOT the "CSM".`;
     const fullPrompt = `${systemPrompt}\n\n${userQuery}`;
     
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-3-flash-preview",
       generationConfig: {
         responseMimeType: "application/json",
       },
@@ -308,7 +308,7 @@ const processLongThread = async (script: string): Promise<any> => {
       const fullPrompt = `${mapPrompt}\n\n${chunk}`;
       
       const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
+        model: "gemini-3-flash-preview",
       });
 
       // Wrap the API call with retry logic
@@ -410,7 +410,7 @@ Sentiment Categories & Scores:
     const fullPrompt = `${reducePrompt}\n\n${reduceQuery}`;
     
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-3-flash-preview",
       generationConfig: {
         responseMimeType: "application/json",
       },
@@ -554,7 +554,7 @@ Please update the summary to incorporate the new messages and return the updated
     const fullPrompt = `${systemPrompt}\n\n${userQuery}`;
     
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-3-flash-preview",
       generationConfig: {
         responseMimeType: "application/json",
       },
@@ -597,7 +597,7 @@ const summarizeThread = async (
   // Otherwise, process all messages (full summarization)
   const script = formatThreadForLLM(messages, csmEmail);
   const tokenCount = estimateTokens(script);
-  // gemini-1.5-flash has large context window, but we'll use 100k as a safe limit
+  // gemini-3-flash-preview has large context window, but we'll use 100k as a safe limit
   const TOKEN_LIMIT = 100000;
 
   let summaryJson: any;

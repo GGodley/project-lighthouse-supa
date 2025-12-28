@@ -21,7 +21,7 @@ const getSentiment = async (text: string) => {
 
     const prompt = `You are a sentiment analysis expert for customer success. Classify the following email summary as "positive", "negative", or "neutral". Respond with only one of these three words in lowercase.\n\nEmail summary: ${text}`;
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${geminiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

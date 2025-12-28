@@ -170,7 +170,7 @@ export interface ChunkData {
 export function chunkThread(script: string, chunkSize: number = 15): ChunkData {
   const scriptChunks = script.split('\n---\n').filter(s => s.trim().length > 0);
   const tokenCount = estimateTokens(script);
-  const TOKEN_LIMIT = 100000; // gemini-1.5-flash context window (using 100k as safe limit)
+  const TOKEN_LIMIT = 100000; // gemini-3-flash-preview context window (using 100k as safe limit)
   
   let chunks: string[] = [];
   

@@ -1552,7 +1552,7 @@ The "customer" is any participant who is NOT the "CSM".`;
       const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
       
       const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
+        model: "gemini-3-flash-preview",
         generationConfig: {
           temperature: 0.3,
           responseMimeType: "application/json",
