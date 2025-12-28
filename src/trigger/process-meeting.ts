@@ -456,7 +456,28 @@ export const processMeetingTask = task({
         // Meeting doesn't exist - create new meeting
         console.log(`🆕 Creating new meeting: ${googleEventId}`);
 
-        const newMeetingData = {
+        // Type for meeting insert data
+        type MeetingInsert = {
+          google_event_id: string;
+          user_id: string;
+          title: string | null;
+          description: string | null;
+          start_time: string;
+          end_time: string;
+          meeting_url: string | null;
+          hangout_link: string | null;
+          meeting_type: string | null;
+          attendees: string[] | null;
+          meeting_customer: string | null;
+          customer_id: string | null;
+          company_id: string | null;
+          status: string;
+          bot_enabled: boolean;
+          dispatch_status: string;
+          recall_bot_id?: string | null;
+        };
+
+        const newMeetingData: MeetingInsert = {
           google_event_id: googleEventId,
           user_id: userId,
           title: event.summary || "Untitled Meeting",
@@ -498,9 +519,9 @@ export const processMeetingTask = task({
           }
 
           // Add bot ID to meeting data
-          (newMeetingData as any).recall_bot_id = createResult.botId;
-          (newMeetingData as any).status = "recording_scheduled"; // status can be 'recording_scheduled'
-          (newMeetingData as any).dispatch_status = "completed"; // dispatch_status must be 'pending', 'processing', or 'completed'
+          newMeetingData.recall_bot_id = createResult.botId;
+          newMeetingData.status = "recording_scheduled"; // status can be 'recording_scheduled'
+          newMeetingData.dispatch_status = "completed"; // dispatch_status must be 'pending', 'processing', or 'completed'
         }
 
         const { error: insertError } = await supabaseAdmin

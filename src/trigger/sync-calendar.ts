@@ -133,11 +133,9 @@ export const syncCalendarTask = task({
       console.log(`📚 Found ${calendars.length} calendars`);
 
       let totalEventsFetched = 0;
-      const eventsToProcess: Array<{ googleEventId: string; event: GoogleCalendarEvent }> = [];
 
       // Step 2: Fetch events for each calendar
       for (const cal of calendars) {
-        const calId = encodeURIComponent(cal.id);
         let pageToken: string | null = null;
         let batchIndex = 0;
 
