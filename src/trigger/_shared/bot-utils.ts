@@ -79,15 +79,33 @@ export async function createBotInRecall(
   apiKey: string
 ): Promise<CreateBotResult> {
   try {
+    // Get transcription provider from environment variable
+    // Defaults to 'gladia_v2_streaming' if not set
+    // Options: 'gladia_v2_streaming', 'deepgram', 'assembly_ai', or set to empty string for Recall.ai default
+    // Note: Gladia credentials must be configured in Recall.ai dashboard: https://us-west-2.recall.ai/dashboard/transcription
+    const transcriptionProvider = process.env.RECALL_TRANSCRIPTION_PROVIDER?.trim() || 'gladia_v2_streaming';
+    
+    // Build recording config based on provider
+    const recordingConfig: {
+      transcript: {
+        provider?: Record<string, Record<string, never>>;
+        webhook_url: string;
+      };
+    } = {
+      transcript: {
+        webhook_url: webhookUrl,
+        ...(transcriptionProvider && {
+          provider: {
+            [transcriptionProvider]: {},
+          },
+        }),
+      },
+    };
+
     const recallPayload = {
       meeting_url: meetingUrl,
       join_at: joinAt,
-      recording_config: {
-        transcript: {
-          provider: { gladia_v2_streaming: {} },
-          webhook_url: webhookUrl,
-        },
-      },
+      recording_config: recordingConfig,
     };
 
     const response = await fetch('https://us-west-2.recall.ai/api/v1/bot', {

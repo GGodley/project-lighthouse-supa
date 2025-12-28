@@ -3,7 +3,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { processMeetingTask } from "./process-meeting";
 import type { GoogleCalendarEvent } from "./_shared/meeting-utils";
 import { getMeetingUrl } from "./_shared/meeting-utils";
-import { ensureUTCISO } from "./_shared/timezone-utils";
+import { ensureUTCISO, isTimeChanged } from "./_shared/timezone-utils";
 
 /**
  * Sync Calendar Task - Orchestrates Google Calendar sync
@@ -205,7 +205,37 @@ export const syncCalendarTask = task({
           );
 
           if (events.length > 0) {
-            // Process events: extract meeting data and resolve customers
+            // Step 1: Fetch existing meetings from database to compare times
+            const eventIds = events.map((e) => e.id);
+            const { data: existingMeetings, error: fetchError } =
+              await supabaseAdmin
+                .from("meetings")
+                .select("google_event_id, start_time, end_time, meeting_url")
+                .in("google_event_id", eventIds)
+                .eq("user_id", userId);
+
+            if (fetchError) {
+              console.warn(
+                `⚠️  Failed to fetch existing meetings for comparison: ${fetchError.message}`
+              );
+            }
+
+            // Create a map for quick lookup
+            const existingMeetingsMap = new Map<
+              string,
+              { start_time: string | null; end_time: string | null; meeting_url: string | null }
+            >();
+            if (existingMeetings) {
+              for (const meeting of existingMeetings) {
+                existingMeetingsMap.set(meeting.google_event_id, {
+                  start_time: meeting.start_time,
+                  end_time: meeting.end_time,
+                  meeting_url: meeting.meeting_url,
+                });
+              }
+            }
+
+            // Step 2: Process events: extract meeting data and resolve customers
             const meetingsToUpsert = await Promise.all(
               events.map(async (event) => {
                 // Extract meeting details
@@ -360,23 +390,77 @@ export const syncCalendarTask = task({
               `✅ Upserted ${meetingsToUpsert.length} meetings to database`
             );
 
-            // Immediately trigger process-meeting tasks for each event
-            // (like hydrate-thread for threads)
+            // Step 3: Detect time changes and trigger process-meeting tasks only when needed
+            // Only trigger if: time changed OR meeting is new (doesn't exist in database)
             if (events.length > 0) {
-              console.log(
-                `🚀 Dispatching ${events.length} process-meeting jobs in parallel`
-              );
+              const eventsToProcess: Array<{
+                userId: string;
+                googleEventId: string;
+                timeChanged: boolean;
+              }> = [];
 
-              await Promise.all(
-                events.map((event) => {
-                  return processMeetingTask.trigger({
+              for (const event of events) {
+                // Extract new event data for comparison
+                const startIso =
+                  event.start?.dateTime ||
+                  event.start?.date ||
+                  new Date().toISOString();
+                const endIso =
+                  event.end?.dateTime || event.end?.date || startIso;
+                const startTimeUTC = ensureUTCISO(startIso);
+                const endTimeUTC = ensureUTCISO(endIso);
+                const { url: meetingUrl } = getMeetingUrl(event);
+
+                // Get existing meeting data (before upsert)
+                const existingMeeting = existingMeetingsMap.get(event.id);
+
+                // Detect if time changed by comparing existing vs new data
+                let timeChanged = false;
+                if (existingMeeting) {
+                  timeChanged =
+                    isTimeChanged(
+                      existingMeeting.start_time,
+                      startTimeUTC
+                    ) ||
+                    isTimeChanged(existingMeeting.end_time, endTimeUTC) ||
+                    existingMeeting.meeting_url !== meetingUrl;
+                }
+
+                // Only trigger process-meeting if:
+                // 1. Time changed (needs bot update)
+                // 2. Meeting is new (doesn't exist in database - needs bot creation)
+                if (timeChanged || !existingMeeting) {
+                  eventsToProcess.push({
                     userId,
                     googleEventId: event.id,
+                    timeChanged,
                   });
-                })
-              );
+                } else {
+                  console.log(
+                    `⏭️  Skipping ${event.id} - no changes detected, meeting already processed`
+                  );
+                }
+              }
 
-              console.log(`✅ Dispatched ${events.length} process-meeting jobs`);
+              if (eventsToProcess.length > 0) {
+                console.log(
+                  `🚀 Dispatching ${eventsToProcess.length} process-meeting jobs (${events.length - eventsToProcess.length} skipped)`
+                );
+
+                await Promise.all(
+                  eventsToProcess.map((eventData) => {
+                    return processMeetingTask.trigger(eventData);
+                  })
+                );
+
+                console.log(
+                  `✅ Dispatched ${eventsToProcess.length} process-meeting jobs`
+                );
+              } else {
+                console.log(
+                  `⏭️  No process-meeting jobs needed - all events unchanged`
+                );
+              }
             }
 
             totalEventsFetched += events.length;

@@ -35,8 +35,8 @@ export const processMeetingTask = task({
     maxTimeoutInMs: 10000,
     randomize: true,
   },
-  run: async (payload: { userId: string; googleEventId: string }) => {
-    const { userId, googleEventId } = payload;
+  run: async (payload: { userId: string; googleEventId: string; timeChanged?: boolean }) => {
+    const { userId, googleEventId, timeChanged: timeChangedFromSync } = payload;
 
     console.log(
       `🔄 Processing meeting: ${googleEventId} for user: ${userId}`
@@ -121,115 +121,126 @@ export const processMeetingTask = task({
       );
 
       // Step 3: Optionally fetch from Google Calendar to check for changes (NON-BLOCKING)
+      // Skip if timeChanged was already detected in sync-calendar
       let googleStartTime: string | null = null;
       let googleEndTime: string | null = null;
       let googleMeetingUrl: string | null = null;
       let googleMeetingType: string | null = null;
-      let timeChanged = false;
+      let timeChanged = timeChangedFromSync || false; // Use flag from sync-calendar if provided
       let googleEvent: GoogleCalendarEvent | null = null;
 
-      try {
-        const edgeFunctionUrl = `${supabaseUrl}/functions/v1/fetch-calendar-events`;
+      // Only fetch from Google Calendar if time change wasn't already detected in sync-calendar
+      if (!timeChangedFromSync) {
+        try {
+          const edgeFunctionUrl = `${supabaseUrl}/functions/v1/fetch-calendar-events`;
 
-        // Get all calendars
-        const calendarListResponse = await fetch(edgeFunctionUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: supabaseAnonKey,
-            Authorization: `Bearer ${supabaseAnonKey}`,
-            "x-broker-secret": brokerSecret,
-          },
-          body: JSON.stringify({ userId }),
-        });
+          // Get all calendars
+          const calendarListResponse = await fetch(edgeFunctionUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: supabaseAnonKey,
+              Authorization: `Bearer ${supabaseAnonKey}`,
+              "x-broker-secret": brokerSecret,
+            },
+            body: JSON.stringify({ userId }),
+          });
 
-        if (calendarListResponse.ok) {
-          const calendarListData: {
-            calendars?: Array<{ id: string }>;
-          } = await calendarListResponse.json();
-          const calendars = calendarListData.calendars || [];
+          if (calendarListResponse.ok) {
+            const calendarListData: {
+              calendars?: Array<{ id: string }>;
+            } = await calendarListResponse.json();
+            const calendars = calendarListData.calendars || [];
 
-          // Expand time window: 30 days back to 14 days forward
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          const twoWeeksFromNow = new Date();
-          twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
-          const timeMin = thirtyDaysAgo.toISOString();
-          const timeMax = twoWeeksFromNow.toISOString();
+            // Expand time window: 30 days back to 14 days forward
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            const twoWeeksFromNow = new Date();
+            twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
+            const timeMin = thirtyDaysAgo.toISOString();
+            const timeMax = twoWeeksFromNow.toISOString();
 
-          // Search all calendars for the event
-          for (const cal of calendars) {
-            const eventResponse = await fetch(edgeFunctionUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                apikey: supabaseAnonKey,
-                Authorization: `Bearer ${supabaseAnonKey}`,
-                "x-broker-secret": brokerSecret,
-              },
-              body: JSON.stringify({
-                userId,
-                calendarId: cal.id,
-                timeMin,
-                timeMax,
-              }),
-            });
+            // Search all calendars for the event
+            for (const cal of calendars) {
+              const eventResponse = await fetch(edgeFunctionUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  apikey: supabaseAnonKey,
+                  Authorization: `Bearer ${supabaseAnonKey}`,
+                  "x-broker-secret": brokerSecret,
+                },
+                body: JSON.stringify({
+                  userId,
+                  calendarId: cal.id,
+                  timeMin,
+                  timeMax,
+                }),
+              });
 
-            if (eventResponse.ok) {
-              const eventsData: { events?: GoogleCalendarEvent[] } =
-                await eventResponse.json();
-              const foundEvent = eventsData.events?.find(
-                (e) => e.id === googleEventId
-              );
-              if (foundEvent) {
-                googleEvent = foundEvent;
-                break; // Found it, stop searching
+              if (eventResponse.ok) {
+                const eventsData: { events?: GoogleCalendarEvent[] } =
+                  await eventResponse.json();
+                const foundEvent = eventsData.events?.find(
+                  (e) => e.id === googleEventId
+                );
+                if (foundEvent) {
+                  googleEvent = foundEvent;
+                  break; // Found it, stop searching
+                }
               }
             }
-          }
 
-          // If we found the event, extract data for comparison
-          if (googleEvent) {
-            const startIso =
-              googleEvent.start?.dateTime ||
-              googleEvent.start?.date ||
-              dbStartTime ||
-              new Date().toISOString();
-            const endIso =
-              googleEvent.end?.dateTime ||
-              googleEvent.end?.date ||
-              dbEndTime ||
-              startIso;
-            googleStartTime = ensureUTCISO(startIso);
-            googleEndTime = ensureUTCISO(endIso);
-            const urlResult = getMeetingUrl(googleEvent);
-            googleMeetingUrl = urlResult.url;
-            googleMeetingType = urlResult.type;
+            // If we found the event, extract data for comparison
+            if (googleEvent) {
+              const startIso =
+                googleEvent.start?.dateTime ||
+                googleEvent.start?.date ||
+                dbStartTime ||
+                new Date().toISOString();
+              const endIso =
+                googleEvent.end?.dateTime ||
+                googleEvent.end?.date ||
+                dbEndTime ||
+                startIso;
+              googleStartTime = ensureUTCISO(startIso);
+              googleEndTime = ensureUTCISO(endIso);
+              const urlResult = getMeetingUrl(googleEvent);
+              googleMeetingUrl = urlResult.url;
+              googleMeetingType = urlResult.type;
 
-            // Compare database vs Google Calendar to detect changes
-            timeChanged =
-              isTimeChanged(dbStartTime, googleStartTime) ||
-              isTimeChanged(dbEndTime, googleEndTime) ||
-              dbMeetingUrl !== googleMeetingUrl;
+              // Compare database vs Google Calendar to detect changes
+              timeChanged =
+                isTimeChanged(dbStartTime, googleStartTime) ||
+                isTimeChanged(dbEndTime, googleEndTime) ||
+                dbMeetingUrl !== googleMeetingUrl;
 
-            if (timeChanged) {
+              if (timeChanged) {
+                console.log(
+                  `⏰ Time change detected: DB start=${dbStartTime}, Google start=${googleStartTime}`
+                );
+              }
+            } else {
               console.log(
-                `⏰ Time change detected: DB start=${dbStartTime}, Google start=${googleStartTime}`
+                `ℹ️  Event ${googleEventId} not found in Google Calendar, using database data only`
               );
             }
-          } else {
-            console.log(
-              `ℹ️  Event ${googleEventId} not found in Google Calendar, using database data only`
-            );
+          }
+        } catch (error) {
+          // Google Calendar fetch failed - assume no changes, use database data
+          console.warn(
+            `⚠️  Could not fetch from Google Calendar for event ${googleEventId}, using database data:`,
+            error instanceof Error ? error.message : String(error)
+          );
+          // Don't override timeChanged if it was set from sync-calendar
+          if (!timeChangedFromSync) {
+            timeChanged = false;
           }
         }
-      } catch (error) {
-        // Google Calendar fetch failed - assume no changes, use database data
-        console.warn(
-          `⚠️  Could not fetch from Google Calendar for event ${googleEventId}, using database data:`,
-          error instanceof Error ? error.message : String(error)
+      } else {
+        console.log(
+          `ℹ️  Time change already detected in sync-calendar, skipping Google Calendar fetch`
         );
-        timeChanged = false;
       }
 
       // Step 4: Use database data as source of truth (or updated data if time changed)
