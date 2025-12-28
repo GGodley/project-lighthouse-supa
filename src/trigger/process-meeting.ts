@@ -8,24 +8,23 @@ import { deleteBotFromRecall, createBotInRecall } from "./_shared/bot-utils";
 /**
  * Process Meeting Task - Processes individual calendar events
  * 
- * Pattern: Follows hydrate-thread.ts structure (check if exists, compare, update if changed)
+ * Pattern: Database is source of truth, Google Calendar fetch is optional for change detection
  * 
  * Flow (matching user requirements):
- * 1. Check if meeting exists (by google_event_id + user_id)
- * 2. If exists:
+ * 1. Check if meeting exists in database (by google_event_id + user_id)
+ * 2. Use database data as source of truth
+ * 3. Optionally fetch from Google Calendar to check for time changes (non-blocking)
+ * 4. If exists:
  *    - Verify recording is allowed (bot_enabled = true)
  *    - If recording allowed:
- *      - Check if meeting time has changed (compare start_time, end_time, meeting_url)
+ *      - Check if meeting time has changed (compare database vs Google Calendar)
  *      - If time changed:
  *        - Delete old scheduled bot (if recall_bot_id exists)
  *        - Remove recall_bot_id from meeting
  *        - Create new bot with updated time
  *        - Save new recall_bot_id
+ *      - If time not changed but bot doesn't exist, create bot
  *    - If recording not allowed: Update metadata only, skip bot operations
- * 3. If doesn't exist:
- *    - Create new meeting
- *    - If bot_enabled = true, create bot
- *    - Save recall_bot_id
  */
 export const processMeetingTask = task({
   id: "process-meeting",
@@ -82,7 +81,7 @@ export const processMeetingTask = task({
     );
 
     try {
-      // Step 1: Check if meeting exists (by google_event_id + user_id)
+      // Step 1: Check if meeting exists in database (by google_event_id + user_id)
       const { data: existingMeeting, error: meetingError } =
         await supabaseAdmin
           .from("meetings")
@@ -97,197 +96,160 @@ export const processMeetingTask = task({
         );
       }
 
-      // Fetch latest event data from Google Calendar
-      const edgeFunctionUrl = `${supabaseUrl}/functions/v1/fetch-calendar-events`;
-      
-      // We need to get the calendar ID first - for now, we'll fetch from primary calendar
-      // In a production system, you might want to store calendar_id in the meeting record
-      // For now, we'll try to fetch the event from the primary calendar
-      const calendarListResponse = await fetch(edgeFunctionUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
-          "x-broker-secret": brokerSecret,
-        },
-        body: JSON.stringify({ userId }),
-      });
-
-      if (!calendarListResponse.ok) {
-        throw new Error(
-          `Failed to fetch calendar list: ${calendarListResponse.status}`
-        );
-      }
-
-      const calendarListData: {
-        calendars?: Array<{ id: string }>;
-      } = await calendarListResponse.json();
-      const primaryCalendar = calendarListData.calendars?.[0];
-
-      if (!primaryCalendar) {
-        throw new Error("No calendars found for user");
-      }
-
-      // Fetch the specific event
-      const now = new Date();
-      const twoWeeksFromNow = new Date();
-      twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
-      const timeMin = now.toISOString();
-      const timeMax = twoWeeksFromNow.toISOString();
-
-      const eventResponse = await fetch(edgeFunctionUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
-          "x-broker-secret": brokerSecret,
-        },
-        body: JSON.stringify({
-          userId,
-          calendarId: primaryCalendar.id,
-          timeMin,
-          timeMax,
-        }),
-      });
-
-      if (!eventResponse.ok) {
-        // Event might have been deleted - handle gracefully
-        if (eventResponse.status === 404) {
-          console.log(
-            `⚠️  Event ${googleEventId} not found in Google Calendar, skipping`
-          );
-          return {
-            ok: true,
-            userId,
-            googleEventId,
-            processed: false,
-            reason: "event_not_found",
-          };
-        }
-        throw new Error(
-          `Failed to fetch event: ${eventResponse.status}`
-        );
-      }
-
-      const eventsData: { events?: GoogleCalendarEvent[] } =
-        await eventResponse.json();
-      const event = eventsData.events?.find((e) => e.id === googleEventId);
-
-      if (!event) {
+      // If meeting doesn't exist, we can't process it (should have been created in sync-calendar)
+      if (!existingMeeting) {
         console.log(
-          `⚠️  Event ${googleEventId} not found in fetched events, skipping`
+          `⚠️  Meeting ${googleEventId} not found in database, skipping`
         );
         return {
           ok: true,
           userId,
           googleEventId,
           processed: false,
-          reason: "event_not_found",
+          reason: "meeting_not_in_database",
         };
       }
 
-      // Extract meeting details from event
-      const startIso =
-        event.start?.dateTime || event.start?.date || new Date().toISOString();
-      const endIso =
-        event.end?.dateTime || event.end?.date || startIso;
-      const startTimeUTC = ensureUTCISO(startIso);
-      const endTimeUTC = ensureUTCISO(endIso);
-      const { url: meetingUrl, type: meetingType } = getMeetingUrl(event);
-      const hangoutLink =
-        meetingType === "google_meet" ? meetingUrl : null;
+      // Step 2: Use database as source of truth
+      const dbStartTime = existingMeeting.start_time;
+      const dbEndTime = existingMeeting.end_time;
+      const dbMeetingUrl = existingMeeting.meeting_url;
+      const dbMeetingType = existingMeeting.meeting_type;
 
-      // Extract external attendees
-      const attendees: Array<{ email: string }> = event.attendees || [];
-      const userEmail = (await supabaseAdmin.auth.admin.getUserById(userId))
-        .data?.user?.email;
-      const userDomain = userEmail?.split("@")[1];
+      console.log(
+        `✅ Meeting exists in database: ${existingMeeting.id}, bot_enabled: ${existingMeeting.bot_enabled}`
+      );
 
-      const isGoogleCalendarResource = (email: string): boolean => {
-        return (
-          email.startsWith("c_") &&
-          (email.includes("@resource.calendar.google.com") ||
-            email.includes("@group.calendar.google.com"))
-        );
-      };
+      // Step 3: Optionally fetch from Google Calendar to check for changes (NON-BLOCKING)
+      let googleStartTime: string | null = null;
+      let googleEndTime: string | null = null;
+      let googleMeetingUrl: string | null = null;
+      let googleMeetingType: string | null = null;
+      let timeChanged = false;
+      let googleEvent: GoogleCalendarEvent | null = null;
 
-      const externalAttendees = attendees.filter((a) => {
-        if (!a.email) return false;
-        if (isGoogleCalendarResource(a.email)) return false;
-        const domain = a.email.split("@")[1];
-        return Boolean(domain) && domain !== userDomain;
-      });
+      try {
+        const edgeFunctionUrl = `${supabaseUrl}/functions/v1/fetch-calendar-events`;
 
-      const externalEmails = externalAttendees.map((a) => a.email);
+        // Get all calendars
+        const calendarListResponse = await fetch(edgeFunctionUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: supabaseAnonKey,
+            Authorization: `Bearer ${supabaseAnonKey}`,
+            "x-broker-secret": brokerSecret,
+          },
+          body: JSON.stringify({ userId }),
+        });
 
-      // Resolve customer/company (re-resolve if missing)
-      let customerId: string | null = existingMeeting?.customer_id || null;
-      let companyId: string | null = existingMeeting?.company_id || null;
+        if (calendarListResponse.ok) {
+          const calendarListData: {
+            calendars?: Array<{ id: string }>;
+          } = await calendarListResponse.json();
+          const calendars = calendarListData.calendars || [];
 
-      if (externalEmails.length > 0 && (!customerId || !companyId)) {
-        const { data: userCompanies, error: companiesErr } =
-          await supabaseAdmin
-            .from("companies")
-            .select("company_id")
-            .eq("user_id", userId);
+          // Expand time window: 30 days back to 14 days forward
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          const twoWeeksFromNow = new Date();
+          twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
+          const timeMin = thirtyDaysAgo.toISOString();
+          const timeMax = twoWeeksFromNow.toISOString();
 
-        if (!companiesErr && userCompanies && userCompanies.length > 0) {
-          const companyIds = userCompanies.map((c) => c.company_id);
+          // Search all calendars for the event
+          for (const cal of calendars) {
+            const eventResponse = await fetch(edgeFunctionUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                apikey: supabaseAnonKey,
+                Authorization: `Bearer ${supabaseAnonKey}`,
+                "x-broker-secret": brokerSecret,
+              },
+              body: JSON.stringify({
+                userId,
+                calendarId: cal.id,
+                timeMin,
+                timeMax,
+              }),
+            });
 
-          // Try exact email match first
-          const { data: customer, error: findErr } = await supabaseAdmin
-            .from("customers")
-            .select("customer_id, company_id")
-            .in("email", externalEmails)
-            .in("company_id", companyIds)
-            .limit(1)
-            .maybeSingle();
-
-          if (!findErr && customer) {
-            customerId = customer.customer_id;
-            companyId = customer.company_id;
-          } else {
-            // Try domain-based matching
-            const externalDomains = externalAttendees
-              .map((a) => a.email?.split("@")[1])
-              .filter((d): d is string => Boolean(d));
-
-            if (externalDomains.length > 0) {
-              const { data: domainCompany, error: domainErr } =
-                await supabaseAdmin
-                  .from("companies")
-                  .select("company_id, domain_name")
-                  .in("domain_name", externalDomains)
-                  .eq("user_id", userId)
-                  .limit(1)
-                  .maybeSingle();
-
-              if (!domainErr && domainCompany) {
-                const { data: companyCustomer, error: companyCustomerErr } =
-                  await supabaseAdmin
-                    .from("customers")
-                    .select("customer_id, company_id")
-                    .eq("company_id", domainCompany.company_id)
-                    .order("created_at", { ascending: true })
-                    .limit(1)
-                    .maybeSingle();
-
-                if (!companyCustomerErr && companyCustomer) {
-                  customerId = companyCustomer.customer_id;
-                  companyId = companyCustomer.company_id;
-                }
+            if (eventResponse.ok) {
+              const eventsData: { events?: GoogleCalendarEvent[] } =
+                await eventResponse.json();
+              const foundEvent = eventsData.events?.find(
+                (e) => e.id === googleEventId
+              );
+              if (foundEvent) {
+                googleEvent = foundEvent;
+                break; // Found it, stop searching
               }
             }
           }
+
+          // If we found the event, extract data for comparison
+          if (googleEvent) {
+            const startIso =
+              googleEvent.start?.dateTime ||
+              googleEvent.start?.date ||
+              dbStartTime ||
+              new Date().toISOString();
+            const endIso =
+              googleEvent.end?.dateTime ||
+              googleEvent.end?.date ||
+              dbEndTime ||
+              startIso;
+            googleStartTime = ensureUTCISO(startIso);
+            googleEndTime = ensureUTCISO(endIso);
+            const urlResult = getMeetingUrl(googleEvent);
+            googleMeetingUrl = urlResult.url;
+            googleMeetingType = urlResult.type;
+
+            // Compare database vs Google Calendar to detect changes
+            timeChanged =
+              isTimeChanged(dbStartTime, googleStartTime) ||
+              isTimeChanged(dbEndTime, googleEndTime) ||
+              dbMeetingUrl !== googleMeetingUrl;
+
+            if (timeChanged) {
+              console.log(
+                `⏰ Time change detected: DB start=${dbStartTime}, Google start=${googleStartTime}`
+              );
+            }
+          } else {
+            console.log(
+              `ℹ️  Event ${googleEventId} not found in Google Calendar, using database data only`
+            );
+          }
         }
+      } catch (error) {
+        // Google Calendar fetch failed - assume no changes, use database data
+        console.warn(
+          `⚠️  Could not fetch from Google Calendar for event ${googleEventId}, using database data:`,
+          error instanceof Error ? error.message : String(error)
+        );
+        timeChanged = false;
       }
 
-      // Determine status
-      const isPastEvent = new Date(endTimeUTC).getTime() < Date.now();
+      // Step 4: Use database data as source of truth (or updated data if time changed)
+      const finalStartTime =
+        timeChanged && googleStartTime ? googleStartTime : dbStartTime;
+      const finalEndTime =
+        timeChanged && googleEndTime ? googleEndTime : dbEndTime;
+      const finalMeetingUrl =
+        timeChanged && googleMeetingUrl ? googleMeetingUrl : dbMeetingUrl;
+      const finalMeetingType =
+        timeChanged && googleMeetingType ? googleMeetingType : dbMeetingType;
+      const finalHangoutLink =
+        finalMeetingType === "google_meet" ? finalMeetingUrl : null;
+
+      // Determine status based on final values
+      const isPastEvent = finalEndTime
+        ? new Date(finalEndTime).getTime() < Date.now()
+        : false;
       let status: string;
-      if (!meetingUrl) {
+      if (!finalMeetingUrl) {
         status = "missing_url";
       } else if (isPastEvent) {
         status = "passed_event";
@@ -295,246 +257,155 @@ export const processMeetingTask = task({
         status = "new";
       }
 
-      // If meeting exists
-      if (existingMeeting) {
-        console.log(
-          `✅ Meeting exists: ${existingMeeting.id}, bot_enabled: ${existingMeeting.bot_enabled}`
-        );
+      // Step 5: Verify recording is allowed (bot_enabled = true)
+      if (existingMeeting.bot_enabled === true) {
+        // Step 6: If time changed, delete old bot and create new one
+        if (timeChanged) {
+          console.log(
+            `⏰ Meeting time/URL changed - deleting old bot and creating new one`
+          );
 
-        // Step 2: Verify recording is allowed (bot_enabled = true)
-        if (existingMeeting.bot_enabled === true) {
-          // Step 3: Check if meeting time has changed
-          const timeChanged =
-            isTimeChanged(existingMeeting.start_time, startTimeUTC) ||
-            isTimeChanged(existingMeeting.end_time, endTimeUTC) ||
-            existingMeeting.meeting_url !== meetingUrl;
-
-          if (timeChanged) {
+          // Step 7: Delete old scheduled bot (if recall_bot_id exists)
+          if (existingMeeting.recall_bot_id) {
             console.log(
-              `⏰ Meeting time/URL changed - deleting old bot and creating new one`
+              `🗑️  Deleting old bot: ${existingMeeting.recall_bot_id}`
+            );
+            const deleteResult = await deleteBotFromRecall(
+              existingMeeting.recall_bot_id,
+              recallApiKey
             );
 
-            // Step 4: Delete old scheduled bot (if recall_bot_id exists)
-            if (existingMeeting.recall_bot_id) {
-              console.log(
-                `🗑️  Deleting old bot: ${existingMeeting.recall_bot_id}`
+            if (!deleteResult.success && deleteResult.statusCode !== 404) {
+              console.warn(
+                `⚠️  Failed to delete old bot (non-critical): ${deleteResult.error}`
               );
-              const deleteResult = await deleteBotFromRecall(
-                existingMeeting.recall_bot_id,
-                recallApiKey
-              );
-
-              if (!deleteResult.success && deleteResult.statusCode !== 404) {
-                console.warn(
-                  `⚠️  Failed to delete old bot (non-critical): ${deleteResult.error}`
-                );
-                // Continue anyway - bot might already be deleted
-              }
             }
+          }
 
-            // Step 5: Remove bot ID from meeting
-            await supabaseAdmin
-              .from("meetings")
-              .update({
-                recall_bot_id: null,
-                dispatch_status: "pending",
-              })
-              .eq("id", existingMeeting.id);
+          // Step 8: Remove bot ID from meeting
+          await supabaseAdmin
+            .from("meetings")
+            .update({
+              recall_bot_id: null,
+              dispatch_status: "pending",
+            })
+            .eq("id", existingMeeting.id);
+        }
 
-            // Step 6: Create new bot
-            if (meetingUrl && !isPastEvent) {
-              const joinAt = calculateJoinTime(startTimeUTC);
-              console.log(
-                `🤖 Creating new bot for meeting: ${meetingUrl}, join_at: ${joinAt}`
-              );
+        // Step 9: Create bot if conditions are met
+        // This handles both: time changed (new bot) and initial creation (if bot wasn't created before)
+        if (finalMeetingUrl && !isPastEvent) {
+          // Only create bot if we don't already have one (unless time changed, which we handled above)
+          if (!existingMeeting.recall_bot_id || timeChanged) {
+            const joinAt = calculateJoinTime(
+              finalStartTime || new Date().toISOString()
+            );
+            console.log(
+              `🤖 Creating bot for meeting: ${finalMeetingUrl}, join_at: ${joinAt}`
+            );
 
-              const webhookUrl = `${supabaseUrl}/functions/v1/process-transcript`;
-              const createResult = await createBotInRecall(
-                meetingUrl,
-                joinAt,
-                webhookUrl,
-                recallApiKey
-              );
+            const webhookUrl = `${supabaseUrl}/functions/v1/process-transcript`;
+            const createResult = await createBotInRecall(
+              finalMeetingUrl,
+              joinAt,
+              webhookUrl,
+              recallApiKey
+            );
 
-              if (!createResult.success) {
-                throw new Error(
-                  `Failed to create bot: ${createResult.error}`
-                );
-              }
+            if (!createResult.success) {
+              // Log error and update meeting with error details
+              console.error(`❌ Failed to create bot: ${createResult.error}`);
 
-              // Step 7: Save new bot ID
               await supabaseAdmin
                 .from("meetings")
                 .update({
-                  recall_bot_id: createResult.botId,
-                  status: "recording_scheduled", // status can be 'recording_scheduled'
-                  dispatch_status: "completed", // dispatch_status must be 'pending', 'processing', or 'completed'
-                  title: event.summary || "Untitled Meeting",
-                  description: event.description || null,
-                  start_time: startTimeUTC,
-                  end_time: endTimeUTC,
-                  meeting_url: meetingUrl,
-                  hangout_link: hangoutLink,
-                  meeting_type: meetingType,
-                  attendees: externalEmails.length > 0 ? externalEmails : null,
-                  meeting_customer:
-                    externalEmails.length > 0 ? externalEmails[0] : null,
-                  customer_id: customerId,
-                  company_id: companyId,
-                  updated_at: new Date().toISOString(),
+                  dispatch_status: "pending",
+                  error_details: {
+                    type: "bot_creation_failed",
+                    message: createResult.error,
+                    timestamp: new Date().toISOString(),
+                  },
+                  last_error_at: new Date().toISOString(),
+                  retry_count: (existingMeeting.retry_count || 0) + 1,
                 })
                 .eq("id", existingMeeting.id);
 
-              console.log(
-                `✅ Updated meeting with new bot ID: ${createResult.botId}`
-              );
-            } else {
-              // No URL or past event - just update metadata
-              await supabaseAdmin
-                .from("meetings")
-                .update({
-                  status: status,
-                  title: event.summary || "Untitled Meeting",
-                  description: event.description || null,
-                  start_time: startTimeUTC,
-                  end_time: endTimeUTC,
-                  meeting_url: meetingUrl,
-                  hangout_link: hangoutLink,
-                  meeting_type: meetingType,
-                  attendees: externalEmails.length > 0 ? externalEmails : null,
-                  meeting_customer:
-                    externalEmails.length > 0 ? externalEmails[0] : null,
-                  customer_id: customerId,
-                  company_id: companyId,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq("id", existingMeeting.id);
+              // Re-throw to trigger retry
+              throw new Error(`Failed to create bot: ${createResult.error}`);
             }
-          } else {
-            // Time not changed - just update metadata if needed
-            console.log(`⏭️  Meeting time unchanged, updating metadata only`);
+
+            // Step 10: Save new bot ID
             await supabaseAdmin
               .from("meetings")
               .update({
-                title: event.summary || "Untitled Meeting",
-                description: event.description || null,
-                attendees: externalEmails.length > 0 ? externalEmails : null,
-                meeting_customer:
-                  externalEmails.length > 0 ? externalEmails[0] : null,
-                customer_id: customerId,
-                company_id: companyId,
+                recall_bot_id: createResult.botId,
+                status: "recording_scheduled",
+                dispatch_status: "completed",
+                start_time: finalStartTime,
+                end_time: finalEndTime,
+                meeting_url: finalMeetingUrl,
+                hangout_link: finalHangoutLink,
+                meeting_type: finalMeetingType,
+                error_details: null,
+                last_error_at: null,
                 updated_at: new Date().toISOString(),
               })
               .eq("id", existingMeeting.id);
+
+            console.log(
+              `✅ Updated meeting with bot ID: ${createResult.botId}`
+            );
+          } else {
+            // Bot already exists and time didn't change - just update metadata if needed
+            console.log(
+              `⏭️  Bot already exists (${existingMeeting.recall_bot_id}), no changes needed`
+            );
+
+            // Update metadata if time changed but we're keeping the same bot
+            if (timeChanged) {
+              await supabaseAdmin
+                .from("meetings")
+                .update({
+                  start_time: finalStartTime,
+                  end_time: finalEndTime,
+                  meeting_url: finalMeetingUrl,
+                  hangout_link: finalHangoutLink,
+                  meeting_type: finalMeetingType,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("id", existingMeeting.id);
+            }
           }
         } else {
-          // Recording not allowed (bot_enabled = false) - update metadata only
+          // No URL or past event - update status
           console.log(
-            `⏭️  Bot disabled for this meeting, updating metadata only`
+            `⏭️  Meeting has no URL or is past event, updating status only`
           );
           await supabaseAdmin
             .from("meetings")
             .update({
               status: status,
-              title: event.summary || "Untitled Meeting",
-              description: event.description || null,
-              start_time: startTimeUTC,
-              end_time: endTimeUTC,
-              meeting_url: meetingUrl,
-              hangout_link: hangoutLink,
-              meeting_type: meetingType,
-              attendees: externalEmails.length > 0 ? externalEmails : null,
-              meeting_customer:
-                externalEmails.length > 0 ? externalEmails[0] : null,
-              customer_id: customerId,
-              company_id: companyId,
               updated_at: new Date().toISOString(),
             })
             .eq("id", existingMeeting.id);
         }
       } else {
-        // Meeting doesn't exist - create new meeting
-        console.log(`🆕 Creating new meeting: ${googleEventId}`);
-
-        // Type for meeting insert data
-        type MeetingInsert = {
-          google_event_id: string;
-          user_id: string;
-          title: string | null;
-          description: string | null;
-          start_time: string;
-          end_time: string;
-          meeting_url: string | null;
-          hangout_link: string | null;
-          meeting_type: string | null;
-          attendees: string[] | null;
-          meeting_customer: string | null;
-          customer_id: string | null;
-          company_id: string | null;
-          status: string;
-          bot_enabled: boolean;
-          dispatch_status: string;
-          recall_bot_id?: string | null;
-        };
-
-        const newMeetingData: MeetingInsert = {
-          google_event_id: googleEventId,
-          user_id: userId,
-          title: event.summary || "Untitled Meeting",
-          description: event.description || null,
-          start_time: startTimeUTC,
-          end_time: endTimeUTC,
-          meeting_url: meetingUrl,
-          hangout_link: hangoutLink,
-          meeting_type: meetingType,
-          attendees: externalEmails.length > 0 ? externalEmails : null,
-          meeting_customer:
-            externalEmails.length > 0 ? externalEmails[0] : null,
-          customer_id: customerId,
-          company_id: companyId,
-          status: status,
-          bot_enabled: true, // Default enabled
-          dispatch_status: "pending",
-        };
-
-        // If bot_enabled = true and meeting has URL and is not past
-        if (meetingUrl && !isPastEvent) {
-          const joinAt = calculateJoinTime(startTimeUTC);
-          console.log(
-            `🤖 Creating bot for new meeting: ${meetingUrl}, join_at: ${joinAt}`
-          );
-
-          const webhookUrl = `${supabaseUrl}/functions/v1/process-transcript`;
-          const createResult = await createBotInRecall(
-            meetingUrl,
-            joinAt,
-            webhookUrl,
-            recallApiKey
-          );
-
-          if (!createResult.success) {
-            throw new Error(
-              `Failed to create bot: ${createResult.error}`
-            );
-          }
-
-          // Add bot ID to meeting data
-          newMeetingData.recall_bot_id = createResult.botId;
-          newMeetingData.status = "recording_scheduled"; // status can be 'recording_scheduled'
-          newMeetingData.dispatch_status = "completed"; // dispatch_status must be 'pending', 'processing', or 'completed'
-        }
-
-        const { error: insertError } = await supabaseAdmin
+        // Recording not allowed (bot_enabled = false) - update metadata only
+        console.log(
+          `⏭️  Bot disabled for this meeting, updating metadata only`
+        );
+        await supabaseAdmin
           .from("meetings")
-          .insert(newMeetingData);
-
-        if (insertError) {
-          throw new Error(
-            `Failed to create meeting: ${insertError.message}`
-          );
-        }
-
-        console.log(`✅ Created new meeting: ${googleEventId}`);
+          .update({
+            status: status,
+            start_time: finalStartTime,
+            end_time: finalEndTime,
+            meeting_url: finalMeetingUrl,
+            hangout_link: finalHangoutLink,
+            meeting_type: finalMeetingType,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingMeeting.id);
       }
 
       return {
@@ -554,4 +425,3 @@ export const processMeetingTask = task({
     }
   },
 });
-
