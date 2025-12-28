@@ -230,7 +230,7 @@ serve(async (_req) => {
         const fullPrompt = `${prompt}\n\n${truncatedBody}`;
         
         const model = genAI.getGenerativeModel({
-          model: "gemini-3-flash",
+          model: "gemini-1.5-flash",
           generationConfig: {
             responseMimeType: "application/json",
           },

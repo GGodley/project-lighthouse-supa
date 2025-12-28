@@ -87,7 +87,7 @@ def generate_summary(client, prompt: str) -> str:
     # Use Gemini 3 Flash for cost-effective summaries
     full_prompt = f"You are a helpful assistant that writes very concise summaries.\n\n{prompt}"
     model = client.GenerativeModel(
-        "gemini-3-flash",
+        "gemini-1.5-flash",
         generation_config={
             "temperature": 0.3,
             "max_output_tokens": 150,

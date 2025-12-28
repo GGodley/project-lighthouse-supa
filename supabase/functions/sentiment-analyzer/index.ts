@@ -24,7 +24,7 @@ async function classifySentiment(summaryText: string): Promise<'Positive' | 'Neg
 
   const prompt = `Classify the sentiment of the provided text as exactly one of: Positive, Negative, Neutral. Respond with only that single word.\n\nText: ${text}`;
 
-  const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=${geminiKey}`, {
+  const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

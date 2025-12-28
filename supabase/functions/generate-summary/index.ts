@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
     // --- Call Gemini API ---
     console.log("Sending prompt to Gemini...");
     const model = genAI.getGenerativeModel({
-      model: "gemini-3-flash",
+        model: "gemini-1.5-flash",
       generationConfig: {
         responseMimeType: "application/json",
       },
