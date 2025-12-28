@@ -52,8 +52,8 @@ export default function UpcomingMeetings() {
       <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">
         Upcoming Meetings
       </h3>
-      {/* Meeting List - single column, fills 100% width, scrollable with 5 items visible */}
-      <div className="flex-1 overflow-y-auto space-y-2 w-full" style={{ maxHeight: '28rem' }}>
+      {/* Meeting List - single column, fills 100% width, scrollable with 4 items visible */}
+      <div className="flex-1 overflow-y-auto space-y-2 w-full" style={{ maxHeight: '22rem' }}>
         {loading ? (
           <p className="text-gray-500 dark:text-gray-400 text-sm text-center py-8">Loading meetings...</p>
         ) : meetings.length === 0 ? (
