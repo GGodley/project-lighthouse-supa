@@ -191,3 +191,92 @@ export async function startGmailSync(): Promise<{ success: boolean; handle?: Tri
   }
 }
 
+/**
+ * Server Action to start Calendar sync via Trigger.dev
+ * 
+ * This action triggers the 'sync-calendar' Trigger.dev job which orchestrates
+ * fetching Google Calendar events from the Supabase Edge Function.
+ * 
+ * Token is already stored in google_tokens table (from Gmail sync or auth callback).
+ * Trigger.dev handles queue management, so no database tracking needed.
+ * 
+ * @returns Object with success status and optional error message
+ * @throws Error("Unauthorized") if user not authenticated
+ * @throws Error if trigger fails
+ */
+export async function startCalendarSync(): Promise<{ success: boolean; handle?: TriggerDevHandle; error?: string; redirectToLogin?: boolean; needsGoogleReconnect?: boolean }> {
+  // Initialize Supabase client using cookies-bound SSR pattern
+  const supabase = await createClient();
+
+  // Get session (not just user) to access provider_token
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+  // Check authentication
+  if (sessionError || !session?.user) {
+    return { success: false, error: 'Session expired. Please log in again.', redirectToLogin: true };
+  }
+
+  const user = session.user;
+
+  console.log('🔍 [CALENDAR SYNC] Session Check:', {
+    userId: user.id,
+  });
+
+  // Get Trigger.dev API key from environment
+  const triggerApiKey = process.env.TRIGGER_API_KEY;
+  if (!triggerApiKey) {
+    console.error('❌ [CALENDAR SYNC] TRIGGER_API_KEY environment variable is not set');
+    throw new Error('TRIGGER_API_KEY environment variable is not set');
+  }
+
+  // Trigger Trigger.dev job via HTTP API (works in Server Actions)
+  const triggerUrl = 'https://api.trigger.dev/api/v1/tasks/sync-calendar/trigger';
+  const triggerPayload = {
+    payload: {
+      userId: user.id,
+      // Token is fetched from google_tokens table by the Edge Function
+    },
+    concurrencyKey: user.id,
+  };
+
+  console.log('📡 [CALENDAR SYNC] Sending request to Trigger.dev:', {
+    url: triggerUrl,
+    userId: user.id,
+  });
+
+  try {
+    const response = await fetch(triggerUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${triggerApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(triggerPayload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ [CALENDAR SYNC] Trigger.dev API Error:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorText: errorText,
+      });
+      throw new Error(`Failed to trigger calendar sync: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('✅ [CALENDAR SYNC] Trigger.dev job triggered successfully:', {
+      hasResult: !!result,
+      handleId: result?.id || null,
+    });
+    
+    return { success: true, handle: result };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    console.error('❌ [CALENDAR SYNC] Failed to start calendar sync:', {
+      error: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    throw new Error(`Failed to start calendar sync: ${errorMessage}`);
+  }
+}
