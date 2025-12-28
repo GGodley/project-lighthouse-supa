@@ -13,42 +13,39 @@ const getSentiment = async (text: string) => {
     return 'neutral';
   }
   try {
-    const openAiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!openAiKey) {
-      console.warn("OPENAI_API_KEY not set. Defaulting to neutral.");
+    const geminiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!geminiKey) {
+      console.warn("GEMINI_API_KEY not set. Defaulting to neutral.");
       return 'neutral';
     }
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const prompt = `You are a sentiment analysis expert for customer success. Classify the following email summary as "positive", "negative", or "neutral". Respond with only one of these three words in lowercase.\n\nEmail summary: ${text}`;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=${geminiKey}`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openAiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a sentiment analysis expert for customer success. Classify the following email summary as "positive", "negative", or "neutral". Respond with only one of these three words in lowercase.',
-          },
-          {
-            role: 'user',
-            content: text,
-          }
-        ],
-        temperature: 0, // Set to 0 for deterministic results
-        max_tokens: 5,
+        contents: [{
+          parts: [{
+            text: prompt
+          }]
+        }],
+        generationConfig: {
+          temperature: 0,
+          maxOutputTokens: 5,
+        },
       }),
     });
 
     if (!response.ok) {
-      console.error("OpenAI API request failed:", await response.text());
+      console.error("Gemini API request failed:", await response.text());
       return 'neutral'; // Default to neutral on API failure
     }
 
     const json = await response.json();
-    const sentiment = json.choices[0]?.message?.content?.trim().toLowerCase();
+    const sentiment = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim().toLowerCase();
     
     // Validate the response is one of the expected values
     if (['positive', 'negative', 'neutral'].includes(sentiment)) {

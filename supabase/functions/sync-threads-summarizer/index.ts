@@ -1,9 +1,9 @@
-// Stage 5: OpenAI summarization (async, non-blocking)
+// Stage 5: Gemini summarization (async, non-blocking)
 // Processes thread_summarization_queue jobs with parallel chunk processing
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import OpenAI from "https://esm.sh/openai@4.20.1";
+import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai";
 import { formatThreadForLLM } from "../_shared/thread-processing-utils.ts";
 
 const corsHeaders = {
@@ -11,15 +11,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 
-const CONCURRENCY = 3; // Reduced from 5 to 3 to prevent connection pool exhaustion (OpenAI rate limits also considered)
+const CONCURRENCY = 3; // Reduced from 5 to 3 to prevent connection pool exhaustion (Gemini rate limits also considered)
 
-const openai = new OpenAI({
-  apiKey: Deno.env.get("OPENAI_API_KEY")
-});
+const genAI = new GoogleGenerativeAI(Deno.env.get("GEMINI_API_KEY")!);
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function openAiCallWithBackoff<T>(
+async function geminiCallWithBackoff<T>(
   apiCallFunction: () => Promise<T>,
   maxRetries: number = 5
 ): Promise<T> {
@@ -32,12 +30,12 @@ async function openAiCallWithBackoff<T>(
       attempt++;
       
       if (attempt >= maxRetries) {
-        console.error(`❌ OpenAI API call failed after ${maxRetries} attempts:`, error);
+        console.error(`❌ Gemini API call failed after ${maxRetries} attempts:`, error);
         throw error;
       }
       
-      if (error?.code === 'rate_limit_exceeded') {
-        console.warn(`⚠️ OpenAI rate limit hit (attempt ${attempt}/${maxRetries})`);
+      if (error?.code === 'rate_limit_exceeded' || error?.status === 429 || error?.message?.includes('RESOURCE_EXHAUSTED')) {
+        console.warn(`⚠️ Gemini rate limit hit (attempt ${attempt}/${maxRetries})`);
         
         let retryAfterMs = 2000;
         if (error.headers?.['retry-after-ms']) {
@@ -161,24 +159,27 @@ Sentiment Categories & Scores:
 async function processShortThread(script: string): Promise<any> {
   const userQuery = `Email Thread:\n\n${script}\n\nPlease analyze this thread and return the JSON summary.`;
 
+  // Combine system and user prompts since Gemini doesn't use role-based messages
+  const fullPrompt = `${systemPrompt}\n\n${userQuery}`;
+  
+  const model = genAI.getGenerativeModel({
+    model: "gemini-3-flash",
+    generationConfig: {
+      responseMimeType: "application/json",
+    },
+  });
+
   const apiCallFunction = async () => {
-    return await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userQuery }
-      ],
-      response_format: { type: "json_object" }
-    });
+    const result = await model.generateContent(fullPrompt);
+    return result.response.text();
   };
 
-  const completion = await openAiCallWithBackoff(apiCallFunction, 5);
-  const responseContent = completion.choices[0]?.message?.content;
+  const responseContent = await geminiCallWithBackoff(apiCallFunction, 5);
   
   if (responseContent) {
     return JSON.parse(responseContent);
   } else {
-    throw new Error("Invalid response from OpenAI.");
+    throw new Error("Invalid response from Gemini.");
   }
 }
 
@@ -187,18 +188,20 @@ async function processLongThread(chunks: string[]): Promise<any> {
   const chunkSummaries: string[] = [];
   
   const chunkPromises = chunks.map(async (chunk) => {
+    // Combine system and user prompts since Gemini doesn't use role-based messages
+    const fullPrompt = `${mapPrompt}\n\n${chunk}`;
+    
+    const model = genAI.getGenerativeModel({
+      model: "gemini-3-flash",
+    });
+
     const apiCallFunction = async () => {
-      return await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          { role: "system", content: mapPrompt },
-          { role: "user", content: chunk }
-        ]
-      });
+      const result = await model.generateContent(fullPrompt);
+      return result.response.text();
     };
 
-    const completion = await openAiCallWithBackoff(apiCallFunction, 5);
-    return completion.choices[0]?.message?.content || '';
+    const text = await geminiCallWithBackoff(apiCallFunction, 5);
+    return text || '';
   });
 
   const results = await Promise.allSettled(chunkPromises);
@@ -216,24 +219,27 @@ async function processLongThread(chunks: string[]): Promise<any> {
   const combinedSummaries = chunkSummaries.join("\n\n---\n\n");
   const reduceQuery = `Intermediate Summaries:\n\n${combinedSummaries}\n\nPlease analyze these summaries and generate the final JSON report.`;
 
+  // Combine system and user prompts since Gemini doesn't use role-based messages
+  const fullPrompt = `${reducePrompt}\n\n${reduceQuery}`;
+  
+  const model = genAI.getGenerativeModel({
+    model: "gemini-3-flash",
+    generationConfig: {
+      responseMimeType: "application/json",
+    },
+  });
+
   const apiCallFunction = async () => {
-    return await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: reducePrompt },
-        { role: "user", content: reduceQuery }
-      ],
-      response_format: { type: "json_object" }
-    });
+    const result = await model.generateContent(fullPrompt);
+    return result.response.text();
   };
 
-  const completion = await openAiCallWithBackoff(apiCallFunction, 5);
-  const responseContent = completion.choices[0]?.message?.content;
+  const responseContent = await geminiCallWithBackoff(apiCallFunction, 5);
   
   if (responseContent) {
     return JSON.parse(responseContent);
   } else {
-    throw new Error("Invalid response from OpenAI (reduce step).");
+    throw new Error("Invalid response from Gemini (reduce step).");
   }
 }
 

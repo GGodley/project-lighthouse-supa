@@ -16,36 +16,39 @@ async function classifySentiment(summaryText: string): Promise<'Positive' | 'Neg
   const text = (summaryText || '').trim();
   if (!text) return 'Neutral';
 
-  const openAiKey = Deno.env.get("OPENAI_API_KEY");
-  if (!openAiKey) {
-    console.warn("OPENAI_API_KEY not set. Defaulting to Neutral.");
+  const geminiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!geminiKey) {
+    console.warn("GEMINI_API_KEY not set. Defaulting to Neutral.");
     return 'Neutral';
   }
 
-  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+  const prompt = `Classify the sentiment of the provided text as exactly one of: Positive, Negative, Neutral. Respond with only that single word.\n\nText: ${text}`;
+
+  const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=${geminiKey}`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${openAiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-3.5-turbo',
-      messages: [
-        { role: 'system', content: 'Classify the sentiment of the provided text as exactly one of: Positive, Negative, Neutral. Respond with only that single word.' },
-        { role: 'user', content: text },
-      ],
-      temperature: 0,
-      max_tokens: 5,
+      contents: [{
+        parts: [{
+          text: prompt
+        }]
+      }],
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 5,
+      },
     }),
   });
 
   if (!resp.ok) {
-    console.error('OpenAI sentiment error:', await resp.text());
+    console.error('Gemini sentiment error:', await resp.text());
     return 'Neutral';
   }
 
   const json = await resp.json();
-  const raw: string = json?.choices?.[0]?.message?.content?.trim() ?? '';
+  const raw: string = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
   const normalized = raw.toLowerCase();
   if (normalized.includes('positive')) return 'Positive';
   if (normalized.includes('negative')) return 'Negative';

@@ -4,7 +4,7 @@
 //
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import OpenAI from "https://esm.sh/openai@4.20.1";
+import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai";
 import { ensureCompanyAndCustomer } from '../_shared/company-customer-resolver.ts';
 
 const corsHeaders = {
@@ -12,9 +12,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const openai = new OpenAI({
-  apiKey: Deno.env.get("OPENAI_API_KEY"),
-});
+const genAI = new GoogleGenerativeAI(Deno.env.get("GEMINI_API_KEY")!);
 
 // Process only 1 job at a time to avoid OpenAI rate limits
 const MAX_CONCURRENT_JOBS = 1;
@@ -223,50 +221,52 @@ serve(async (_req) => {
   If no feature requests are found, return an empty array [].
 `;
 
-        // FIX: Call OpenAI API with retry logic for rate limits
-        let completion;
+        // FIX: Call Gemini API with retry logic for rate limits
+        let responseContent: string | undefined;
         let retries = 0;
         const maxRetries = 3;
         
+        // Combine system and user prompts since Gemini doesn't use role-based messages
+        const fullPrompt = `${prompt}\n\n${truncatedBody}`;
+        
+        const model = genAI.getGenerativeModel({
+          model: "gemini-3-flash",
+          generationConfig: {
+            responseMimeType: "application/json",
+          },
+        });
+        
         while (retries < maxRetries) {
           try {
-            completion = await openai.chat.completions.create({
-              model: "gpt-4o",
-              messages: [
-                { role: "system", content: prompt },
-                { role: "user", content: truncatedBody }
-              ],
-              response_format: { type: "json_object" },
-            });
+            const result = await model.generateContent(fullPrompt);
+            responseContent = result.response.text();
             break; // Success, exit retry loop
-          } catch (openaiError: any) {
+          } catch (geminiError: any) {
             retries++;
             
             // Check if it's a rate limit error
-            if (openaiError?.status === 429 || openaiError?.message?.includes('rate limit')) {
+            if (geminiError?.status === 429 || geminiError?.message?.includes('rate limit') || geminiError?.message?.includes('RESOURCE_EXHAUSTED')) {
               if (retries >= maxRetries) {
-                throw new Error(`OpenAI rate limit exceeded after ${maxRetries} retries. Job will be retried later.`);
+                throw new Error(`Gemini rate limit exceeded after ${maxRetries} retries. Job will be retried later.`);
               }
               
               // Exponential backoff: 2^retries seconds
               const backoffSeconds = Math.pow(2, retries);
-              const retryAfter = openaiError?.headers?.['retry-after'] || backoffSeconds;
-              console.warn(`⚠️ OpenAI rate limit hit. Waiting ${retryAfter}s before retry ${retries}/${maxRetries}...`);
+              const retryAfter = geminiError?.headers?.['retry-after'] || backoffSeconds;
+              console.warn(`⚠️ Gemini rate limit hit. Waiting ${retryAfter}s before retry ${retries}/${maxRetries}...`);
               
               await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
               continue;
             }
             
             // Not a rate limit error, throw immediately
-            throw openaiError;
+            throw geminiError;
           }
         }
 
-        if (!completion) {
-          throw new Error("Failed to get completion from OpenAI after retries");
+        if (!responseContent) {
+          throw new Error("Failed to get completion from Gemini after retries");
         }
-
-        const responseContent = completion.choices[0]?.message?.content;
         if (!responseContent) {
           throw new Error("Failed to generate analysis from AI model.");
         }

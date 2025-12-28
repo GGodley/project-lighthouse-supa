@@ -3,7 +3,7 @@
 //
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import OpenAI from "https://esm.sh/openai@4.20.1"; // Or your current version
+import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai";
 import { ensureCompanyAndCustomer } from '../_shared/company-customer-resolver.ts';
 
 const corsHeaders = {
@@ -11,9 +11,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 
-const openai = new OpenAI({
-  apiKey: Deno.env.get("OPENAI_API_KEY")
-});
+const genAI = new GoogleGenerativeAI(Deno.env.get("GEMINI_API_KEY")!);
 
 serve(async (req)=>{
   if (req.method === 'OPTIONS') {
@@ -91,7 +89,7 @@ serve(async (req)=>{
 
     console.log(`Generating full analysis for email: ${email.id}`);
 
-    // Step 2: Updated OpenAI Prompt with Feature Requests
+    // Step 2: Updated Gemini Prompt with Feature Requests
     const prompt = `
   You are an expert Customer Success Manager assistant.
   Your task is to analyze a customer email and provide a structured summary, key action items, detailed sentiment analysis, and extract any feature requests.
@@ -136,16 +134,15 @@ serve(async (req)=>{
   If no feature requests are found, return an empty array [].
 `;
     
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o", // Upgraded for better accuracy
-      messages: [
-        { role: "system", content: prompt },
-        { role: "user", content: emailBody }
-      ],
-      response_format: { type: "json_object" }, // Use JSON mode
+    const model = genAI.getGenerativeModel({
+      model: "gemini-3-flash",
+      generationConfig: {
+        responseMimeType: "application/json",
+      },
     });
 
-    const responseContent = completion.choices[0]?.message?.content;
+    const result = await model.generateContent(prompt);
+    const responseContent = result.response.text();
     if (!responseContent) {
       throw new Error("Failed to generate analysis from AI model.");
     }

@@ -12,7 +12,7 @@ import sys
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from openai import OpenAI
+import google.generativeai as genai
 from supabase import create_client, Client
 
 # Configure logging
@@ -33,12 +33,13 @@ def get_supabase_client() -> Client:
     return create_client(supabase_url, supabase_key)
 
 
-def get_openai_client() -> OpenAI:
-    """Initialize and return OpenAI client."""
-    api_key = os.getenv("OPENAI_API_KEY")
+def get_gemini_client():
+    """Initialize and return Gemini client."""
+    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        raise ValueError("OPENAI_API_KEY environment variable is required")
-    return OpenAI(api_key=api_key)
+        raise ValueError("GEMINI_API_KEY environment variable is required")
+    genai.configure(api_key=api_key)
+    return genai
 
 
 def estimate_tokens(text: str) -> int:
@@ -215,7 +216,7 @@ def analyze_thread(user_id: str, thread_id: str) -> Dict[str, Any]:
         Dictionary with analysis results and status
     """
     supabase = get_supabase_client()
-    openai_client = get_openai_client()
+    genai_client = get_gemini_client()
     
     result: Dict[str, Any] = {
         "success": False,
@@ -386,7 +387,7 @@ def analyze_thread(user_id: str, thread_id: str) -> Dict[str, Any]:
             transcript = "\n\n".join(transcript_lines)
         
         # Step 4: Call LLM
-        logger.info(f"Calling OpenAI GPT-4o in {analysis_mode} mode")
+        logger.info(f"Calling Gemini 3 Flash in {analysis_mode} mode")
         
         # Create system prompt based on mode
         if analysis_mode == "incremental":
@@ -526,22 +527,24 @@ The "customer" is any participant who is NOT the "CSM"."""
 
         user_query = f"Email Thread:\n\n{transcript}\n\n"
         
-        completion = openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_query}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.3
+        # Combine system and user prompts since Gemini doesn't use role-based messages
+        full_prompt = f"{system_prompt}\n\n{user_query}"
+        
+        model = genai.GenerativeModel(
+            "gemini-3-flash",
+            generation_config={
+                "response_mime_type": "application/json",
+                "temperature": 0.3
+            }
         )
         
-        response_content = completion.choices[0].message.content
+        response = model.generate_content(full_prompt)
+        response_content = response.text
         if not response_content:
-            raise ValueError("Empty response from OpenAI")
+            raise ValueError("Empty response from Gemini")
         
         analysis = json.loads(response_content)
-        logger.info("Successfully received analysis from OpenAI")
+        logger.info("Successfully received analysis from Gemini")
         
         # Step 5: Save Results (Flat Schema - Split & Store)
         logger.info("Saving results to database")

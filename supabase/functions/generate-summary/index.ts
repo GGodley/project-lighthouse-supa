@@ -1,9 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { OpenAI } from "https://esm.sh/openai@4.16.1";
+import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai";
 
-const openai = new OpenAI({
-  apiKey: Deno.env.get("OPENAI_API_KEY"),
-});
+const genAI = new GoogleGenerativeAI(Deno.env.get("GEMINI_API_KEY")!);
 
 Deno.serve(async (req) => {
   try {
@@ -120,21 +118,18 @@ Deno.serve(async (req) => {
       If no feature requests are found, return an empty array [].
     `;
 
-    // --- Call OpenAI API ---
-    console.log("Sending prompt to OpenAI...");
-    const chatCompletion = await openai.chat.completions.create({
-      messages: [
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      model: "gpt-4o", // UPGRADED from gpt-3.5-turbo
-      response_format: { type: "json_object" }
+    // --- Call Gemini API ---
+    console.log("Sending prompt to Gemini...");
+    const model = genAI.getGenerativeModel({
+      model: "gemini-3-flash",
+      generationConfig: {
+        responseMimeType: "application/json",
+      },
     });
 
-    const responseContent = chatCompletion.choices[0].message.content;
-    console.log("Received response from OpenAI.");
+    const result = await model.generateContent(prompt);
+    const responseContent = result.response.text();
+    console.log("Received response from Gemini.");
 
     // --- Update the Database ---
     const supabaseClient = createClient(

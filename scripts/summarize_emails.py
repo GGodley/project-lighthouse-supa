@@ -5,14 +5,14 @@ from typing import Optional
 import requests
 
 try:
-    from openai import OpenAI
+    import google.generativeai as genai
 except Exception:  # pragma: no cover
-    OpenAI = None  # type: ignore
+    genai = None  # type: ignore
 
 
 SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 
 def require_env(var_name: str) -> str:
@@ -22,11 +22,12 @@ def require_env(var_name: str) -> str:
     return val
 
 
-def get_openai_client() -> OpenAI:
-    if OpenAI is None:
-        raise RuntimeError("openai python package not installed. pip install openai>=1.0.0")
-    require_env("OPENAI_API_KEY")
-    return OpenAI(api_key=OPENAI_API_KEY)
+def get_gemini_client():
+    if genai is None:
+        raise RuntimeError("google-generativeai python package not installed. pip install google-generativeai>=0.8.0")
+    require_env("GEMINI_API_KEY")
+    genai.configure(api_key=GEMINI_API_KEY)
+    return genai
 
 
 def supabase_headers() -> dict:
@@ -82,27 +83,27 @@ def build_prompt(subject: Optional[str], sender: Optional[str], snippet: Optiona
     )
 
 
-def generate_summary(client: OpenAI, prompt: str) -> str:
-    # Use a small, cost-effective model; change if needed
-    resp = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant that writes very concise summaries."},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.3,
-        max_tokens=150,
+def generate_summary(client, prompt: str) -> str:
+    # Use Gemini 3 Flash for cost-effective summaries
+    full_prompt = f"You are a helpful assistant that writes very concise summaries.\n\n{prompt}"
+    model = client.GenerativeModel(
+        "gemini-3-flash",
+        generation_config={
+            "temperature": 0.3,
+            "max_output_tokens": 150,
+        }
     )
-    return (resp.choices[0].message.content or "").strip()
+    response = model.generate_content(full_prompt)
+    return (response.text or "").strip()
 
 
 def main() -> None:
     # Validate required envs early
-    require_env("OPENAI_API_KEY")
+    require_env("GEMINI_API_KEY")
     require_env("SUPABASE_SERVICE_ROLE_KEY")
     require_env("SUPABASE_URL") if SUPABASE_URL is None else SUPABASE_URL
 
-    client = get_openai_client()
+    client = get_gemini_client()
 
     total_updated = 0
     while True:

@@ -1,24 +1,24 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const getOpenAIClient = () => {
-  const apiKey = process.env.OPENAI_API_KEY;
+const getGeminiClient = () => {
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is required for generate-meeting-summary");
+    throw new Error("GEMINI_API_KEY is required for generate-meeting-summary");
   }
-  return new OpenAI({ apiKey });
+  return new GoogleGenerativeAI(apiKey);
 };
 
 /**
  * Generate Meeting Summary Task - Analyzes meeting transcripts with LLM
  * 
- * Pattern: Follows analyzer.ts structure (fetch data, call OpenAI, save results)
+ * Pattern: Follows analyzer.ts structure (fetch data, call Gemini, save results)
  * 
  * Flow:
  * 1. Receive transcript and meeting details from process-transcript Edge Function
  * 2. Extract participant names from transcript
- * 3. Call OpenAI with generate-summary prompt
+ * 3. Call Gemini with generate-summary prompt
  * 4. Parse JSON response
  * 5. Save LLM summary to meetings.meeting_llm_summary
  * 6. Update related fields (customer_sentiment, sentiment_score, summary, next_steps)
@@ -67,7 +67,7 @@ export const generateMeetingSummaryTask = task({
       }
     );
 
-    const openai = getOpenAIClient();
+    const genAI = getGeminiClient();
 
     try {
       // Step 1: Fetch meeting details for context
@@ -184,26 +184,23 @@ CRITICAL: Only extract action items that are EXPLICITLY mentioned in the convers
   - "customer_impact": Who is affected and how (1 sentence)
 If no feature requests are found, return an empty array [].`;
 
-      // Step 4: Call OpenAI API
-      console.log("🤖 Sending prompt to OpenAI...");
-      const chatCompletion = await openai.chat.completions.create({
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-        model: "gpt-4o",
-        response_format: { type: "json_object" },
-        temperature: 0.3,
+      // Step 4: Call Gemini API
+      console.log("🤖 Sending prompt to Gemini...");
+      const model = genAI.getGenerativeModel({
+        model: "gemini-3-flash",
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.3,
+        },
       });
 
-      const responseContent = chatCompletion.choices[0]?.message?.content;
+      const result = await model.generateContent(prompt);
+      const responseContent = result.response.text();
       if (!responseContent) {
-        throw new Error("Empty response from OpenAI");
+        throw new Error("Empty response from Gemini");
       }
 
-      console.log("✅ Received response from OpenAI");
+      console.log("✅ Received response from Gemini");
 
       // Step 5: Parse JSON response
       let analysisResult: {
@@ -229,7 +226,7 @@ If no feature requests are found, return an empty array [].`;
         analysisResult = JSON.parse(responseContent);
       } catch (parseError) {
         throw new Error(
-          `Failed to parse OpenAI response as JSON: ${parseError}`
+          `Failed to parse Gemini response as JSON: ${parseError}`
         );
       }
 

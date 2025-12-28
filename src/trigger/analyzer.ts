@@ -1,6 +1,6 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { createClient as createSupabaseClient, SupabaseClient, PostgrestError } from "@supabase/supabase-js";
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { htmlToText } from "html-to-text";
 import type { LLMSummary, NextStep } from "../lib/types/threads";
 import type { Database } from "../types/database";
@@ -81,12 +81,12 @@ type NextStepInsert = {
   meeting_id: string | null;
 };
 
-const getOpenAIClient = () => {
-  const apiKey = process.env.OPENAI_API_KEY;
+const getGeminiClient = () => {
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is required for analyzer");
+    throw new Error("GEMINI_API_KEY is required for analyzer");
   }
-  return new OpenAI({ apiKey });
+  return new GoogleGenerativeAI(apiKey);
 };
 
 const parseDueDate = (raw: unknown): string | null => {
@@ -1041,7 +1041,7 @@ export const analyzeThreadTask = task({
       }
     );
 
-    const openai = getOpenAIClient();
+    const genAI = getGeminiClient();
 
     try {
       // Step 0: Check if thread is ignored
@@ -1547,21 +1547,20 @@ The "customer" is any participant who is NOT the "CSM".`;
       // User prompt is simple - just the transcript (matching Python)
       const userPrompt = `Email Thread:\n\n${transcript}\n\n`;
 
-      // Step 5: Call OpenAI in JSON mode
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4.1",
-        temperature: 0.3, // Match Python's temperature
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          { role: "user", content: userPrompt },
-        ],
+      // Step 5: Call Gemini in JSON mode
+      // Combine system and user prompts since Gemini doesn't use role-based messages
+      const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
+      
+      const model = genAI.getGenerativeModel({
+        model: "gemini-3-flash",
+        generationConfig: {
+          temperature: 0.3,
+          responseMimeType: "application/json",
+        },
       });
 
-      const content = completion.choices[0]?.message?.content;
+      const result = await model.generateContent(fullPrompt);
+      const content = result.response.text();
       const cleanSummary = sanitizeLLMResponse(content);
 
       const nowIso = new Date().toISOString();
