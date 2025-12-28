@@ -52,8 +52,8 @@ export default function UpcomingMeetings() {
       <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">
         Upcoming Meetings
       </h3>
-      {/* Meeting List - single column, fills 100% width */}
-      <div className="flex-1 overflow-y-auto space-y-2 w-full">
+      {/* Meeting List - single column, fills 100% width, scrollable with 5 items visible */}
+      <div className="flex-1 overflow-y-auto space-y-2 w-full" style={{ maxHeight: '28rem' }}>
         {loading ? (
           <p className="text-gray-500 dark:text-gray-400 text-sm text-center py-8">Loading meetings...</p>
         ) : meetings.length === 0 ? (
@@ -62,7 +62,7 @@ export default function UpcomingMeetings() {
           meetings.map((meeting, index) => (
             <div
               key={index}
-              className="p-3 rounded-lg bg-white/50 dark:bg-slate-700/50 border border-white/50 dark:border-white/10 w-full"
+              className="glass-bar-row p-3 w-full"
             >
               <div className="flex items-start gap-2">
                 <div className="w-1 h-full bg-blue-500 dark:bg-blue-400 rounded-full" />
