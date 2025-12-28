@@ -43,19 +43,23 @@ export default function CalendarPage() {
       const { meetings } = data;
       
       // Transform meetings to FullCalendar events
-      const calendarEvents: EventInput[] = meetings.map((meeting: MeetingResponse) => ({
-        id: String(meeting.id || `local-${Date.now()}`),
-        title: meeting.title || 'Untitled Meeting',
-        start: meeting.start_time,
-        end: meeting.end_time ?? undefined,
-        extendedProps: {
-          meetingId: meeting.id,
-          description: meeting.description,
-          attendees: meeting.attendees,
-          hangoutLink: meeting.hangout_link,
-          botEnabled: meeting.bot_enabled ?? true,
-        },
-      }))
+      // Filter out meetings without start_time (can't display on calendar)
+      // Convert null to undefined for FullCalendar EventInput type compatibility
+      const calendarEvents: EventInput[] = meetings
+        .filter((meeting: MeetingResponse) => meeting.start_time !== null)
+        .map((meeting: MeetingResponse) => ({
+          id: String(meeting.id || `local-${Date.now()}`),
+          title: meeting.title || 'Untitled Meeting',
+          start: meeting.start_time ?? undefined, // Convert null to undefined
+          end: meeting.end_time ?? undefined, // Convert null to undefined
+          extendedProps: {
+            meetingId: meeting.id,
+            description: meeting.description,
+            attendees: meeting.attendees,
+            hangoutLink: meeting.hangout_link,
+            botEnabled: meeting.bot_enabled ?? true,
+          },
+        }))
 
       setEvents(calendarEvents)
       
