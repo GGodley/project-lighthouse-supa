@@ -221,7 +221,7 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
             <div className="space-y-0">
               {meeting.transcript.split('\n\n').map((segment, index) => {
                 // Parse transcript segments: "Speaker Name: text"
-                const match = segment.match(/^([^:]+):\s*(.+)$/s);
+                const match = segment.match(/^([^:]+):\s*([\s\S]+)$/);
                 if (match) {
                   const speaker = match[1].trim();
                   const text = match[2].trim();

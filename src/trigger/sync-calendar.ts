@@ -397,6 +397,7 @@ export const syncCalendarTask = task({
             // Using primary key for conflict resolution
             // Remove _attendeeResolutions before upsert (it's not a DB column)
             const meetingsForUpsert = meetingsToUpsert.map((m) => {
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
               const { _attendeeResolutions, ...meetingData } = m;
               return meetingData;
             });
