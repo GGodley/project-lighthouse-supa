@@ -26,22 +26,22 @@ serve(async (req: Request) => {
   }
 
   try {
-    // Validate environment variables
+    // 1. Load Environment Variables
+    // Note: We now require SUPABASE_SERVICE_ROLE_KEY to bypass RLS
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!supabaseUrl || !supabaseAnonKey) {
+    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
       return new Response(
         JSON.stringify({ error: "Missing Supabase environment variables" }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Initialize Supabase client with user's authorization
-    const supabaseClient = createClient(
+    // 2. Initialize "User Client" (To verify WHO is calling)
+    // We stick with Anon Key + Auth Header here just to check the user's validity.
+    const supabaseUserClient = createClient(
       supabaseUrl,
       supabaseAnonKey,
       {
@@ -53,18 +53,22 @@ serve(async (req: Request) => {
       }
     );
 
-    // Verify user is authenticated
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    // 3. Verify User is Authenticated
+    const { data: { user }, error: authError } = await supabaseUserClient.auth.getUser();
     
     if (authError || !user) {
       return new Response(
         JSON.stringify({ error: "Unauthorized", message: "Authentication required" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // 4. Initialize "Admin Client" (To fetch data bypassing RLS)
+    // This client uses the Service Role Key, so it has full access.
+    const supabaseAdmin = createClient(
+      supabaseUrl,
+      supabaseServiceRoleKey
+    );
 
     // Parse request body
     let body: RequestBody;
@@ -73,10 +77,7 @@ serve(async (req: Request) => {
     } catch (parseError) {
       return new Response(
         JSON.stringify({ error: "Invalid request body", message: "JSON parsing failed" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -86,18 +87,16 @@ serve(async (req: Request) => {
     if (viewMode !== 'upcoming' && viewMode !== 'completed') {
       return new Response(
         JSON.stringify({ error: "Invalid viewMode", message: "viewMode must be 'upcoming' or 'completed'" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Build query based on viewMode
-    let query = supabaseClient
+    // 5. Build Query using Admin Client
+    // CRITICAL: We explicitly filter by 'user_id' here to ensure data safety since we bypassed RLS
+    let query = supabaseAdmin
       .from('meetings')
       .select('id, title, start_time, end_time, meeting_url')
-      .eq('user_id', user.id);
+      .eq('user_id', user.id); 
 
     if (viewMode === 'upcoming') {
       query = query.gte('start_time', new Date().toISOString())
@@ -113,14 +112,11 @@ serve(async (req: Request) => {
       console.error('Database query error:', queryError);
       return new Response(
         JSON.stringify({ error: "Failed to fetch meetings", details: queryError.message }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Transform meetings to include duration_minutes
+    // 6. Transform Data
     const transformedMeetings: Meeting[] = (meetings || []).map((meeting) => {
       let durationMinutes = 0;
       
@@ -141,24 +137,16 @@ serve(async (req: Request) => {
       };
     });
 
-    // Return the transformed data
     return new Response(
       JSON.stringify({ meetings: transformedMeetings }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error) {
     console.error('Unexpected error in fetch-meetings:', error);
     return new Response(
       JSON.stringify({ error: "Internal server error", details: error instanceof Error ? error.message : String(error) }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
-
