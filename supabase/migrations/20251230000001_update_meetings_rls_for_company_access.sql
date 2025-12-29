@@ -1,8 +1,11 @@
 -- Update meetings RLS policy to allow viewing meetings linked to user's companies
 -- This enables meetings to appear in interaction timeline even if they belong to different users
 -- but are linked to companies the current user owns
+--
+-- This updates the policy created in 20250131000002_add_meetings_rls_policies.sql
+-- Replaces the restrictive "Users can view their own meetings" policy with an expanded version
 
--- Drop the existing restrictive policy
+-- Drop the existing restrictive policy (from 20250131000002_add_meetings_rls_policies.sql)
 DROP POLICY IF EXISTS "Users can view their own meetings" ON public.meetings;
 
 -- Create new policy that allows:
