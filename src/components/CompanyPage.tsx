@@ -606,7 +606,13 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyId }) => {
                     console.error('Error fetching meeting:', meetingError);
                     setSelectedMeeting(null);
                   } else {
-                    setSelectedMeeting(meeting);
+                    // Handle both 'transcript' (singular) and 'transcripts' (plural) columns
+                    // Prefer 'transcript' but fall back to 'transcripts' if it exists
+                    const transcript = (meeting as any).transcript || (meeting as any).transcripts || null;
+                    setSelectedMeeting({
+                      ...meeting,
+                      transcript: transcript
+                    });
                   }
                 } catch (err) {
                   console.error('Error fetching meeting:', err);
