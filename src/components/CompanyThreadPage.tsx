@@ -763,11 +763,11 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                 setSelectedThreadSummary(null);
                 
                 try {
-                  // Fetch the meeting details - id is the numeric id from meetings table
+                  // Fetch the meeting details - id is the google_event_id (text) from timeline
                   const { data: meeting, error: meetingError } = await supabase
                     .from('meetings')
                     .select('*')
-                    .eq('id', parseInt(id, 10))
+                    .eq('google_event_id', id)
                     .single();
                   
                   if (meetingError || !meeting) {

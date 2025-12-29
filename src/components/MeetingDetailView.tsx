@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Phone, X, Calendar, Users, Clock, CheckCircle } from 'lucide-react';
+import { Phone, X, Calendar, Users, Clock, CheckCircle, User } from 'lucide-react';
 import { Json } from '@/types/database';
 import { useSupabase } from '@/components/SupabaseProvider';
 import { apiFetchJson } from '@/lib/api-client';
@@ -202,55 +202,83 @@ export default function MeetingDetailView({ meeting, companyId, onClose }: Meeti
   };
 
   return (
-    <div className="glass-card rounded-lg" style={{ color: '#1a1a1a' }}>
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="border-b border-white/20 dark:border-white/10 p-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-pink-50 border border-pink-200 flex items-center justify-center">
-            <Phone className="w-5 h-5 text-pink-600" />
-          </div>
-          <h3 className="text-lg font-semibold text-black">{meeting.title || 'Meeting'}</h3>
-        </div>
+      <div className="border-b border-gray-200 p-4 flex items-center justify-between bg-white flex-shrink-0">
+        <h3 className="text-lg font-semibold text-gray-900">{meeting.title || 'Meeting'}</h3>
         <button
           onClick={onClose}
-          className="text-black hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
         >
           <X className="h-5 w-5" />
         </button>
       </div>
 
-      <div className="flex flex-col lg:flex-row h-[600px]">
+      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
         {/* Left Panel - Transcript (primary content, like email body) */}
-        <div className="flex-1 overflow-y-auto p-6 border-r border-white/20 dark:border-white/10" style={{ color: '#1a1a1a', minWidth: '60%' }}>
-          <div className="glass-card rounded-xl p-4 h-full flex flex-col" style={{ color: '#1a1a1a' }}>
-            <h4 className="font-semibold text-black mb-3">Transcript</h4>
-            {meeting.transcript && meeting.transcript.trim().length > 0 ? (
-              <>
-                <p className="text-xs text-gray-500 mb-2 italic">
-                  This is the raw transcript of the meeting.
-                </p>
-                <div className="flex-1 min-h-0 overflow-y-auto">
-                  <p
-                    className="text-sm text-black dark:text-gray-300 whitespace-pre-wrap"
-                    style={{ color: '#1a1a1a' }}
-                  >
-                    {meeting.transcript}
-                  </p>
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 flex flex-col items-start justify-center text-sm text-gray-600">
-                <p className="mb-2 font-medium">No transcript available yet.</p>
-                <p className="text-xs text-gray-500">
-                  Once the transcription job finishes, the full call transcript will appear here.
-                </p>
-              </div>
-            )}
-          </div>
+        <div className="flex-1 overflow-y-auto p-6 border-r border-gray-200" style={{ minWidth: '60%' }}>
+          {meeting.transcript && meeting.transcript.trim().length > 0 ? (
+            <div className="space-y-0">
+              {meeting.transcript.split('\n\n').map((segment, index) => {
+                // Parse transcript segments: "Speaker Name: text"
+                const match = segment.match(/^([^:]+):\s*(.+)$/s);
+                if (match) {
+                  const speaker = match[1].trim();
+                  const text = match[2].trim();
+                  return (
+                    <div
+                      key={index}
+                      className={`border-b border-gray-200 pb-4 mb-4 last:border-b-0 last:mb-0 ${
+                        index === 0 ? 'glass-card -mx-6 px-6 pt-4 rounded-lg' : ''
+                      }`}
+                    >
+                      {/* Speaker Header */}
+                      <div className="mb-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <User className="h-4 w-4 text-gray-600" />
+                          <span className="text-sm font-semibold text-gray-900">{speaker}</span>
+                        </div>
+                      </div>
+
+                      {/* Transcript Text - Email Body Style */}
+                      <div className="ml-6">
+                        <div className="text-sm text-black dark:text-gray-100 whitespace-pre-wrap" style={{ color: '#000000' }}>
+                          {text}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                } else {
+                  // Fallback for segments that don't match the pattern
+                  return (
+                    <div
+                      key={index}
+                      className={`border-b border-gray-200 pb-4 mb-4 last:border-b-0 last:mb-0 ${
+                        index === 0 ? 'glass-card -mx-6 px-6 pt-4 rounded-lg' : ''
+                      }`}
+                    >
+                      <div className="ml-6">
+                        <div className="text-sm text-black dark:text-gray-100 whitespace-pre-wrap" style={{ color: '#000000' }}>
+                          {segment.trim()}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <p className="mb-2 font-medium">No transcript available yet.</p>
+              <p className="text-xs text-gray-500">
+                Once the transcription job finishes, the full call transcript will appear here.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Right Panel - Summary & Details Sidebar (mirrors thread summary sidebar) */}
-        <div className="w-full lg:w-96 p-6 bg-gray-50 overflow-y-auto border-l border-gray-200 glass-card">
+        <div className="w-full lg:w-96 p-6 bg-gray-50 overflow-y-auto border-l border-gray-200 glass-card thread-summary-sidebar">
           <div className="space-y-4">
             {/* Summary */}
             {meeting.summary && meeting.summary.trim().length > 0 && (
