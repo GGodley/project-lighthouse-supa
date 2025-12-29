@@ -132,7 +132,7 @@ serve(async (req: Request) => {
         lastSyncTime = new Date(lastSyncTime.getTime() - (24 * 60 * 60 * 1000)); // Subtract 1 day
       } else {
         lastSyncTime = new Date();
-        lastSyncTime.setUTCDate(lastSyncTime.getUTCDate() - 90);
+        lastSyncTime.setUTCDate(lastSyncTime.getUTCDate() - 30);
       }
 
       // Get blocklist

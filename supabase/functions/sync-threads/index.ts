@@ -869,10 +869,10 @@ serve(async (req: Request) => {
       lastSyncTime = new Date(lastSyncTime.getTime() - (24 * 60 * 60 * 1000)); // Subtract 1 day
       console.log(`📅 Last sync time (UTC): ${lastSyncTime.toISOString()}. Querying threads modified after this date.`);
     } else {
-      // If no last sync time, default to 90 days ago (in UTC)
+      // If no last sync time, default to 30 days ago (in UTC)
       lastSyncTime = new Date();
-      lastSyncTime.setUTCDate(lastSyncTime.getUTCDate() - 90);
-      console.log(`📅 No previous sync found. Starting from 90 days ago (UTC): ${lastSyncTime.toISOString()}`);
+      lastSyncTime.setUTCDate(lastSyncTime.getUTCDate() - 30);
+      console.log(`📅 No previous sync found. Starting from 30 days ago (UTC): ${lastSyncTime.toISOString()}`);
     }
     
     // --- MODIFIED ---
