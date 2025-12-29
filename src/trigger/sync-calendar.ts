@@ -4,6 +4,10 @@ import { processMeetingTask } from "./process-meeting";
 import type { GoogleCalendarEvent } from "./_shared/meeting-utils";
 import { getMeetingUrl } from "./_shared/meeting-utils";
 import { ensureUTCISO, isTimeChanged } from "./_shared/timezone-utils";
+import {
+  batchPreFetchCompaniesAndCustomers,
+  ensureCompanyAndCustomer,
+} from "./_shared/customer-company-utils";
 
 /**
  * Sync Calendar Task - Orchestrates Google Calendar sync
@@ -235,7 +239,41 @@ export const syncCalendarTask = task({
               }
             }
 
-            // Step 2: Process events: extract meeting data and resolve customers
+            // Step 2: Collect all external emails from all events for batch pre-fetch
+            const allExternalEmails: string[] = [];
+            for (const event of events) {
+              const attendees: Array<{ email: string }> = event.attendees || [];
+              const isGoogleCalendarResource = (email: string): boolean => {
+                return (
+                  email.startsWith("c_") &&
+                  (email.includes("@resource.calendar.google.com") ||
+                    email.includes("@group.calendar.google.com"))
+                );
+              };
+
+              const externalAttendees = attendees.filter((a) => {
+                if (!a.email) return false;
+                if (isGoogleCalendarResource(a.email)) return false;
+                const domain = a.email.split("@")[1];
+                return Boolean(domain) && domain !== userDomain;
+              });
+
+              const externalEmails = externalAttendees.map((a) => a.email);
+              allExternalEmails.push(...externalEmails);
+            }
+
+            // Pre-fetch all companies and customers to avoid race conditions
+            const uniqueExternalEmails = [...new Set(allExternalEmails)];
+            console.log(
+              `📦 Pre-fetching ${uniqueExternalEmails.length} unique external attendees for concurrency safety`
+            );
+            const preFetched = await batchPreFetchCompaniesAndCustomers(
+              supabaseAdmin,
+              uniqueExternalEmails,
+              userId
+            );
+
+            // Step 3: Process events: extract meeting data and resolve ALL customers
             const meetingsToUpsert = await Promise.all(
               events.map(async (event) => {
                 // Extract meeting details
@@ -275,67 +313,49 @@ export const syncCalendarTask = task({
                 });
 
                 const externalEmails = externalAttendees.map((a) => a.email);
-                const externalDomains = externalAttendees
-                  .map((a) => a.email?.split("@")[1])
-                  .filter((d): d is string => Boolean(d));
 
-                // Resolve customer/company (basic resolution during sync)
-                let customerId: string | null = null;
-                let companyId: string | null = null;
-
-                if (externalEmails.length > 0) {
-                  // Get user's companies first
-                  const { data: userCompanies, error: companiesErr } =
-                    await supabaseAdmin
-                      .from("companies")
-                      .select("company_id")
-                      .eq("user_id", userId);
-
-                  if (!companiesErr && userCompanies && userCompanies.length > 0) {
-                    const companyIds = userCompanies.map((c) => c.company_id);
-
-                    // Try exact email match first
-                    const { data: customer, error: findErr } = await supabaseAdmin
-                      .from("customers")
-                      .select("customer_id, company_id")
-                      .in("email", externalEmails)
-                      .in("company_id", companyIds)
-                      .limit(1)
-                      .maybeSingle();
-
-                    if (!findErr && customer) {
-                      customerId = customer.customer_id;
-                      companyId = customer.company_id;
-                    } else if (externalDomains.length > 0) {
-                      // Try domain-based matching
-                      const { data: domainCompany, error: domainErr } =
-                        await supabaseAdmin
-                          .from("companies")
-                          .select("company_id, domain_name")
-                          .in("domain_name", externalDomains)
-                          .eq("user_id", userId)
-                          .limit(1)
-                          .maybeSingle();
-
-                      if (!domainErr && domainCompany) {
-                        // Get first customer from that company
-                        const { data: companyCustomer, error: companyCustomerErr } =
-                          await supabaseAdmin
-                            .from("customers")
-                            .select("customer_id, company_id")
-                            .eq("company_id", domainCompany.company_id)
-                            .order("created_at", { ascending: true })
-                            .limit(1)
-                            .maybeSingle();
-
-                        if (!companyCustomerErr && companyCustomer) {
-                          customerId = companyCustomer.customer_id;
-                          companyId = companyCustomer.company_id;
-                        }
-                      }
+                // Process ALL external attendees in parallel
+                const attendeeResolutions = await Promise.all(
+                  externalEmails.map(async (email) => {
+                    try {
+                      const { customer_id, company_id } =
+                        await ensureCompanyAndCustomer(
+                          supabaseAdmin,
+                          email,
+                          userId,
+                          preFetched
+                        );
+                      return {
+                        email,
+                        customer_id,
+                        company_id,
+                        success: true,
+                      };
+                    } catch (error) {
+                      console.warn(
+                        `⚠️  Failed to create customer for ${email}:`,
+                        error
+                      );
+                      return {
+                        email,
+                        customer_id: null,
+                        company_id: null,
+                        success: false,
+                      };
                     }
-                  }
-                }
+                  })
+                );
+
+                // Filter successful resolutions
+                const successfulResolutions = attendeeResolutions.filter(
+                  (r) => r.success
+                );
+
+                // Get first attendee's customer/company for backward compatibility
+                const firstAttendee =
+                  successfulResolutions.length > 0
+                    ? successfulResolutions[0]
+                    : null;
 
                 // Determine status
                 const isPastEvent = new Date(endTimeUTC).getTime() < Date.now();
@@ -361,11 +381,13 @@ export const syncCalendarTask = task({
                   attendees: externalEmails.length > 0 ? externalEmails : null,
                   meeting_customer:
                     externalEmails.length > 0 ? externalEmails[0] : null,
-                  customer_id: customerId,
-                  company_id: companyId,
+                  customer_id: firstAttendee?.customer_id || null,
+                  company_id: firstAttendee?.company_id || null,
                   status: status,
                   bot_enabled: true, // Default enabled
                   dispatch_status: "pending",
+                  // Store attendee resolutions for later use in meeting_attendees population
+                  _attendeeResolutions: successfulResolutions,
                 };
               })
             );
@@ -373,9 +395,15 @@ export const syncCalendarTask = task({
             // Upsert meetings directly to meetings table
             // Note: Primary key is google_event_id, but we also have unique constraint on (user_id, google_event_id)
             // Using primary key for conflict resolution
+            // Remove _attendeeResolutions before upsert (it's not a DB column)
+            const meetingsForUpsert = meetingsToUpsert.map((m) => {
+              const { _attendeeResolutions, ...meetingData } = m;
+              return meetingData;
+            });
+
             const { error: upsertError } = await supabaseAdmin
               .from("meetings")
-              .upsert(meetingsToUpsert, {
+              .upsert(meetingsForUpsert, {
                 onConflict: "google_event_id",
                 ignoreDuplicates: false,
               });
@@ -387,8 +415,48 @@ export const syncCalendarTask = task({
             }
 
             console.log(
-              `✅ Upserted ${meetingsToUpsert.length} meetings to database`
+              `✅ Upserted ${meetingsForUpsert.length} meetings to database`
             );
+
+            // Step 4: Populate meeting_attendees junction table
+            const meetingAttendeesToInsert: Array<{
+              meeting_event_id: string;
+              customer_id: string;
+            }> = [];
+
+            for (let i = 0; i < meetingsToUpsert.length; i++) {
+              const meeting = meetingsToUpsert[i];
+              const attendeeResolutions = meeting._attendeeResolutions || [];
+
+              for (const resolution of attendeeResolutions) {
+                if (resolution.success && resolution.customer_id) {
+                  meetingAttendeesToInsert.push({
+                    meeting_event_id: meeting.google_event_id,
+                    customer_id: resolution.customer_id,
+                  });
+                }
+              }
+            }
+
+            if (meetingAttendeesToInsert.length > 0) {
+              const { error: attendeesError } = await supabaseAdmin
+                .from("meeting_attendees")
+                .upsert(meetingAttendeesToInsert, {
+                  onConflict: "meeting_event_id,customer_id",
+                  ignoreDuplicates: false,
+                });
+
+              if (attendeesError) {
+                console.warn(
+                  `⚠️  Failed to upsert meeting_attendees: ${attendeesError.message}`
+                );
+                // Don't throw - this is not critical for the sync to succeed
+              } else {
+                console.log(
+                  `✅ Upserted ${meetingAttendeesToInsert.length} meeting_attendees relationships`
+                );
+              }
+            }
 
             // Step 3: Detect time changes and trigger process-meeting tasks only when needed
             // Only trigger if: time changed OR meeting is new (doesn't exist in database)

@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
         .from('meetings')
         .update({
           transcripts: formattedTranscript,
-          status: 'recording_scheduled', // Status remains recording_scheduled (used for completed meetings with transcript)
+          status: 'completed', // Update status to completed when transcript is saved
           updated_at: new Date().toISOString(),
         })
         .eq('id', meeting.id);
