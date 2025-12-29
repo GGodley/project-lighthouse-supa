@@ -5,45 +5,28 @@
 -- This updates the policy created in 20250131000002_add_meetings_rls_policies.sql
 -- Replaces the restrictive "Users can view their own meetings" policy with an expanded version
 --
--- NOTE: Uses a SECURITY DEFINER function to avoid infinite recursion in RLS policy
-
--- Create helper function to check if meeting has attendees linked to user's companies
--- This function ONLY queries meeting_attendees (not meetings table) to avoid infinite recursion
-CREATE OR REPLACE FUNCTION public.meeting_has_attendees_from_user_companies(
-  meeting_google_event_id text,
-  user_uuid uuid
-)
-RETURNS boolean
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-STABLE
-AS $$
-BEGIN
-  -- Check if meeting has attendees linked to companies the user owns
-  -- This ONLY queries meeting_attendees table, NOT meetings table, so no recursion
-  RETURN EXISTS (
-    SELECT 1 
-    FROM public.meeting_attendees ma
-    JOIN public.companies c ON ma.company_id = c.company_id
-    WHERE ma.meeting_event_id = meeting_google_event_id
-      AND c.user_id = user_uuid
-  );
-END;
-$$;
-
--- Grant execute permission to authenticated users
-GRANT EXECUTE ON FUNCTION public.meeting_has_attendees_from_user_companies(text, uuid) TO authenticated;
+-- NOTE: All checks are done inline in the policy to avoid function call recursion
+-- The policy only references the current row's columns and queries other tables (companies, meeting_attendees)
+-- which don't have circular dependencies with meetings table
 
 -- Drop the existing restrictive policy
 DROP POLICY IF EXISTS "Users can view their own meetings" ON public.meetings;
 DROP POLICY IF EXISTS "Users can view their own meetings or company meetings" ON public.meetings;
 
+-- Drop the helper function if it exists (no longer needed)
+DROP FUNCTION IF EXISTS public.meeting_has_attendees_from_user_companies(text, uuid);
+DROP FUNCTION IF EXISTS public.user_can_access_meeting_via_company(text, uuid);
+
 -- Create new policy that allows:
 -- 1. Users to view their own meetings (user_id = auth.uid())
--- 2. Users to view meetings linked to their companies (via company_id - checked directly in policy)
--- 3. Users to view meetings with attendees from their companies (via helper function)
--- NOTE: We check company_id directly in the policy (no recursion) and use function only for meeting_attendees
+-- 2. Users to view meetings linked to their companies (via company_id)
+-- 3. Users to view meetings with attendees from their companies (via meeting_attendees)
+-- 
+-- IMPORTANT: To avoid recursion, we:
+-- - Reference row columns directly (user_id, company_id, google_event_id) - these are safe
+-- - Query companies table (no circular dependency)
+-- - Query meeting_attendees table (no circular dependency)
+-- - Use column references, not table references in subqueries
 CREATE POLICY "Users can view their own meetings or company meetings"
 ON public.meetings
 FOR SELECT
@@ -52,7 +35,7 @@ USING (
   auth.uid() = user_id
   OR
   -- Method 2: Meeting is linked to a company the user owns (via company_id)
-  -- We check this directly in the policy - no recursion because we're not querying meetings table
+  -- Safe: Reference row's company_id column directly
   (
     company_id IS NOT NULL 
     AND company_id IN (
@@ -62,13 +45,16 @@ USING (
     )
   )
   OR
-  -- Method 3: Meeting has attendees from user's companies (via helper function - no recursion)
-  public.meeting_has_attendees_from_user_companies(google_event_id, auth.uid())
+  -- Method 3: Meeting has attendees from user's companies (via meeting_attendees)
+  -- Safe: Reference row's google_event_id column directly, only query meeting_attendees and companies
+  google_event_id IN (
+    SELECT ma.meeting_event_id
+    FROM public.meeting_attendees ma
+    INNER JOIN public.companies c ON ma.company_id = c.company_id
+    WHERE c.user_id = auth.uid()
+  )
 );
 
 -- Update the comment
 COMMENT ON POLICY "Users can view their own meetings or company meetings" ON public.meetings IS 
-  'Allows users to view meetings they own OR meetings linked to their companies (via company_id or meeting_attendees)';
-
-COMMENT ON FUNCTION public.meeting_has_attendees_from_user_companies(text, uuid) IS 
-  'Helper function to check if a meeting has attendees from user''s companies. Only queries meeting_attendees table to avoid RLS recursion.';
+  'Allows users to view meetings they own OR meetings linked to their companies (via company_id or meeting_attendees). All checks are inline to avoid function call recursion.';
