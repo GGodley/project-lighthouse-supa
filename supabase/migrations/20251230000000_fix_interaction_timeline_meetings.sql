@@ -30,8 +30,8 @@ BEGIN
   UNION ALL
   
   -- Meetings
-  -- Use DISTINCT to avoid duplicates if a meeting matches multiple conditions
-  SELECT DISTINCT
+  -- Simplified: Only check company_id directly (skip meeting_attendees for now)
+  SELECT 
     m.google_event_id as id,  -- Use google_event_id (PRIMARY KEY) to match old behavior
     COALESCE(m.title, 'Meeting') as title,
     -- Handle JSONB summary extraction like old function
@@ -57,14 +57,6 @@ BEGIN
         WHERE c.customer_id = m.customer_id 
           AND c.company_id = company_id_param
       ))
-      OR
-      -- Method 3: Through meeting_attendees table (any attendee belongs to company)
-      EXISTS (
-        SELECT 1 
-        FROM meeting_attendees ma
-        WHERE ma.meeting_event_id = m.google_event_id
-          AND ma.company_id = company_id_param
-      )
     )
   
   ORDER BY interaction_timestamp DESC;
