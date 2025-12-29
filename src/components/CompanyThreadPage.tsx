@@ -776,7 +776,12 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                   } else {
                     // Handle both 'transcripts' (plural - actual column) and 'transcript' (singular - fallback)
                     // Prefer 'transcripts' (plural) as that's the actual column name in the database
-                    const transcript = (meeting as any).transcripts || (meeting as any).transcript || null;
+                    type MeetingWithTranscripts = Meeting & {
+                      transcripts?: string | null;
+                      transcript?: string | null;
+                    };
+                    const meetingWithTranscripts = meeting as MeetingWithTranscripts;
+                    const transcript = meetingWithTranscripts.transcripts || meetingWithTranscripts.transcript || null;
                     setSelectedMeeting({
                       ...meeting,
                       transcript: transcript

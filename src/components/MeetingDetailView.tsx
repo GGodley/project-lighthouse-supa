@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Phone, X, Calendar, Users, Clock, CheckCircle, User } from 'lucide-react';
+import { X, Calendar, Users, Clock, CheckCircle, User } from 'lucide-react';
 import { Json } from '@/types/database';
 import { useSupabase } from '@/components/SupabaseProvider';
 import { apiFetchJson } from '@/lib/api-client';
