@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import MeetingCard from './MeetingCard'
 
@@ -64,13 +64,41 @@ export default function UpcomingMeetings() {
         <h3 className="text-lg font-semibold text-slate-800 dark:text-white">
           Meetings
         </h3>
-        <button
-          onClick={toggleViewMode}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-        >
-          <span>{viewMode === 'upcoming' ? 'Upcoming' : 'Past'}</span>
-          <ChevronDown className="w-4 h-4" />
-        </button>
+        {/* Navigation Controls - Segmented Control Group */}
+        <div className="flex items-center gap-2">
+          {/* Previous Button */}
+          <button
+            onClick={() => {
+              // Placeholder for previous navigation
+              console.log('Previous clicked')
+            }}
+            className="bg-white border border-gray-200 rounded-lg flex items-center justify-center w-8 h-8 text-gray-700 dark:text-gray-300 hover:border-gray-400 transition-colors"
+            aria-label="Previous"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          
+          {/* View Mode Dropdown */}
+          <button
+            onClick={toggleViewMode}
+            className="bg-white border border-gray-200 rounded-lg flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:border-gray-400 transition-colors"
+          >
+            <span>{viewMode === 'upcoming' ? 'Upcoming' : 'Past'}</span>
+            <ChevronDown className="w-4 h-4" />
+          </button>
+          
+          {/* Next Button */}
+          <button
+            onClick={() => {
+              // Placeholder for next navigation
+              console.log('Next clicked')
+            }}
+            className="bg-white border border-gray-200 rounded-lg flex items-center justify-center w-8 h-8 text-gray-700 dark:text-gray-300 hover:border-gray-400 transition-colors"
+            aria-label="Next"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Content Section */}

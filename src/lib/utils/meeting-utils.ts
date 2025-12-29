@@ -10,7 +10,7 @@ export function formatMeetingDateTime(
   startTime: string | null,
   durationMinutes: number
 ): {
-  date: string; // "Mon, Dec 12"
+  date: string; // "Dec 30, 2025"
   time: string; // "9:30 AM"
   duration: string; // "30 Min"
 } {
@@ -24,11 +24,11 @@ export function formatMeetingDateTime(
 
   const date = new Date(startTime);
 
-  // Format date as "Mon, Dec 12"
+  // Format date as "Dec 30, 2025" (no weekday)
   const formattedDate = date.toLocaleDateString('en-US', {
-    weekday: 'short',
     month: 'short',
     day: 'numeric',
+    year: 'numeric',
   });
 
   // Format time as "9:30 AM"
