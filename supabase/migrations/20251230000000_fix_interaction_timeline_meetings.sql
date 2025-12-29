@@ -1,6 +1,10 @@
 -- Fix get_interaction_timeline function to include meetings via meeting_attendees
 -- This ensures meetings appear in the interaction timeline even if they don't have
 -- a direct company_id link, as long as any attendee belongs to the company
+--
+-- LONG-TERM SOLUTION: Uses meeting_attendees table to find meetings with attendees
+-- from the company. Queries meeting_attendees by company_id (not meeting_event_id)
+-- to avoid FK validation recursion.
 
 CREATE OR REPLACE FUNCTION get_interaction_timeline(company_id_param uuid)
 RETURNS TABLE (
@@ -30,8 +34,8 @@ BEGIN
   UNION ALL
   
   -- Meetings
-  -- Simplified: Only check company_id directly (skip meeting_attendees for now)
-  SELECT 
+  -- Use DISTINCT to avoid duplicates if a meeting matches multiple conditions
+  SELECT DISTINCT
     m.google_event_id as id,  -- Use google_event_id (PRIMARY KEY) to match old behavior
     COALESCE(m.title, 'Meeting') as title,
     -- Handle JSONB summary extraction like old function
@@ -57,6 +61,16 @@ BEGIN
         WHERE c.customer_id = m.customer_id 
           AND c.company_id = company_id_param
       ))
+      OR
+      -- Method 3: Through meeting_attendees table (any attendee belongs to company)
+      -- CRITICAL: Query meeting_attendees by company_id (not meeting_event_id) to avoid FK recursion
+      -- We get meeting_event_ids first, then check if current meeting's google_event_id matches
+      m.google_event_id IN (
+        SELECT ma.meeting_event_id
+        FROM public.meeting_attendees ma
+        WHERE ma.company_id = company_id_param
+          AND ma.meeting_event_id IS NOT NULL
+      )
     )
   
   ORDER BY interaction_timestamp DESC;
