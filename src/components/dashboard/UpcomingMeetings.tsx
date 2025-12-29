@@ -1,93 +1,99 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Clock } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
+import { useSupabase } from '@/components/SupabaseProvider'
+import MeetingCard from './MeetingCard'
 
 interface Meeting {
+  id: string | number
   title: string | null
   start_time: string | null
   end_time: string | null
-  customer_name: string | null
+  meeting_url: string | null
+  duration_minutes: number
 }
 
 export default function UpcomingMeetings() {
+  const [viewMode, setViewMode] = useState<'upcoming' | 'completed'>('upcoming')
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const supabase = useSupabase()
 
   useEffect(() => {
     const fetchMeetings = async () => {
+      setLoading(true)
+      setError(null)
+      
       try {
-        setLoading(true)
-        const today = new Date()
-        const nextWeek = new Date(today)
-        nextWeek.setDate(today.getDate() + 7)
+        const { data, error: invokeError } = await supabase.functions.invoke('fetch-meetings', {
+          method: 'POST',
+          body: { viewMode }
+        })
 
-        const response = await fetch(
-          `/api/meetings?start=${today.toISOString()}&end=${nextWeek.toISOString()}`,
-          { cache: 'no-store' }
-        )
-
-        if (response.ok) {
-          const data = await response.json()
-          setMeetings(data.meetings || [])
+        if (invokeError) {
+          throw invokeError
         }
-      } catch (error) {
-        console.error('Error fetching meetings:', error)
+
+        if (data && data.meetings) {
+          setMeetings(data.meetings)
+        } else {
+          setMeetings([])
+        }
+      } catch (err) {
+        console.error('Error fetching meetings:', err)
+        setError(err instanceof Error ? err.message : 'Failed to fetch meetings')
+        setMeetings([])
       } finally {
         setLoading(false)
       }
     }
 
     fetchMeetings()
-  }, [])
+  }, [viewMode, supabase])
 
-  const formatTime = (dateString: string | null) => {
-    if (!dateString) return ''
-    const date = new Date(dateString)
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+  const toggleViewMode = () => {
+    setViewMode(prev => prev === 'upcoming' ? 'completed' : 'upcoming')
   }
 
   return (
     <div className="glass-card p-6 h-full flex flex-col">
-      <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">
-        Upcoming Meetings
-      </h3>
-      {/* Meeting List - single column, fills 100% width, scrollable with 4 items visible */}
-      <div className="flex-1 overflow-y-auto space-y-2 w-full" style={{ maxHeight: '22rem' }}>
+      {/* Header Section */}
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-slate-800 dark:text-white">
+          Meetings
+        </h3>
+        <button
+          onClick={toggleViewMode}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+        >
+          <span>{viewMode === 'upcoming' ? 'Upcoming' : 'Past'}</span>
+          <ChevronDown className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Content Section */}
+      <div className="flex-1 overflow-y-auto space-y-4 w-full" style={{ maxHeight: '22rem' }}>
         {loading ? (
-          <p className="text-gray-500 dark:text-gray-400 text-sm text-center py-8">Loading meetings...</p>
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 dark:border-white"></div>
+            <p className="ml-3 text-gray-500 dark:text-gray-400 text-sm">Loading meetings...</p>
+          </div>
+        ) : error ? (
+          <p className="text-red-500 dark:text-red-400 text-sm text-center py-8">{error}</p>
         ) : meetings.length === 0 ? (
-          <p className="text-gray-500 dark:text-gray-400 text-sm text-center py-8">No meetings scheduled this week</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm text-center py-8">
+            {viewMode === 'upcoming' 
+              ? 'No upcoming meetings scheduled' 
+              : 'No completed meetings'}
+          </p>
         ) : (
-          meetings.map((meeting, index) => (
-            <div
-              key={index}
-              className="glass-bar-row p-3 w-full"
-            >
-              <div className="flex items-start gap-2">
-                <div className="w-1 h-full bg-blue-500 dark:bg-blue-400 rounded-full" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-800 dark:text-white">
-                    {meeting.title || 'Scheduled call'}
-                  </p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Clock className="w-3 h-3 text-gray-500 dark:text-gray-400" />
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {formatTime(meeting.start_time)} - {formatTime(meeting.end_time)}
-                    </span>
-                  </div>
-                  {meeting.customer_name && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      {meeting.customer_name}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
+          meetings.map((meeting) => (
+            <MeetingCard key={meeting.id} meeting={meeting} />
           ))
         )}
       </div>
     </div>
   )
 }
-
