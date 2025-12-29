@@ -774,9 +774,9 @@ const CompanyThreadPage: React.FC<CompanyThreadPageProps> = ({ companyId }) => {
                     console.error('Error fetching meeting:', meetingError);
                     setSelectedMeeting(null);
                   } else {
-                    // Handle both 'transcript' (singular) and 'transcripts' (plural) columns
-                    // Prefer 'transcript' but fall back to 'transcripts' if it exists
-                    const transcript = (meeting as any).transcript || (meeting as any).transcripts || null;
+                    // Handle both 'transcripts' (plural - actual column) and 'transcript' (singular - fallback)
+                    // Prefer 'transcripts' (plural) as that's the actual column name in the database
+                    const transcript = (meeting as any).transcripts || (meeting as any).transcript || null;
                     setSelectedMeeting({
                       ...meeting,
                       transcript: transcript

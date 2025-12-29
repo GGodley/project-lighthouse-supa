@@ -158,7 +158,7 @@ Deno.serve(async (req) => {
       const { error: transcriptUpdateError } = await supabaseClient
         .from('meetings')
         .update({
-          transcript: formattedTranscript, // Fixed: use 'transcript' (singular) not 'transcripts' (plural)
+          transcripts: formattedTranscript, // Column name is 'transcripts' (plural) in the database
           status: 'completed', // Update status to completed when transcript is saved
           updated_at: new Date().toISOString(),
         })
