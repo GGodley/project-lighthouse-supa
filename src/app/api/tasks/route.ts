@@ -2,16 +2,11 @@ import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 
-// Type for nested company data from Supabase join
-type CompanyNested = {
-  company_id: string;
-  company_name: string | null;
-};
-
-type ThreadCompanyLinkNested = {
-  company_id: string;
-  companies: CompanyNested | CompanyNested[] | null;
-};
+// Type for nested company data from Supabase join (kept for potential future use)
+// type CompanyNested = {
+//   company_id: string;
+//   company_name: string | null;
+// };
 
 // Type for transformed task data
 type TaskResponse = {

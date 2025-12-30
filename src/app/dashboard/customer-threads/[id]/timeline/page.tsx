@@ -88,7 +88,7 @@ export default function TimelinePage() {
 
       {/* Timeline items */}
       <div className="space-y-0">
-        {interaction_timeline.map((item, index) => {
+        {interaction_timeline.map((item) => {
           const isEmail = item.interaction_type === 'email';
           const Icon = isEmail ? Mail : Video;
 

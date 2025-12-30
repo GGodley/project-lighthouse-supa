@@ -25,7 +25,7 @@ export default function CompanyContactsList({ companyId }: CompanyContactsListPr
         // Query customers table for top 3 contacts
         const { data: customers, error } = await supabase
           .from('customers')
-          .select('customer_id, name, email, last_interaction_at')
+          .select('customer_id, full_name, email, last_interaction_at')
           .eq('company_id', companyId)
           .order('last_interaction_at', { ascending: false, nullsFirst: false })
           .limit(3);
@@ -39,10 +39,10 @@ export default function CompanyContactsList({ companyId }: CompanyContactsListPr
 
         if (customers && customers.length > 0) {
           const formattedContacts: Contact[] = customers.map((customer) => ({
-            name: customer.name || customer.email || 'Unknown',
+            name: customer.full_name || customer.email || 'Unknown',
             email: customer.email || '',
             lastInteraction: customer.last_interaction_at,
-            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(customer.name || customer.email || 'U')}&background=random`,
+            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(customer.full_name || customer.email || 'U')}&background=random`,
           }));
           setContacts(formattedContacts);
         } else {

@@ -17,6 +17,14 @@ interface CompanyInsights {
   linkedin_url: string;
 }
 
+interface CompanyWithInsights {
+  ai_insights: CompanyInsights | null;
+  company_name: string | null;
+  health_score: number | null;
+  overall_sentiment: string | null;
+  domain_name: string;
+}
+
 /**
  * Generate Company Insights Task - Analyzes company with AI
  * 
@@ -84,7 +92,7 @@ export const generateCompanyInsightsTask = task({
         .select("ai_insights, company_name, health_score, overall_sentiment, domain_name")
         .eq("company_id", companyId)
         .eq("user_id", userId)
-        .maybeSingle();
+        .maybeSingle<CompanyWithInsights>();
 
       if (companyError) {
         throw new Error(`Failed to fetch company: ${companyError.message}`);
@@ -96,7 +104,7 @@ export const generateCompanyInsightsTask = task({
 
       // Step 2: Check if insights already exist (idempotency)
       if (company.ai_insights && typeof company.ai_insights === 'object') {
-        const insights = company.ai_insights as any;
+        const insights = company.ai_insights as CompanyInsights;
         if (insights.one_liner) {
           console.log(`✅ Insights already exist for company ${companyId}, skipping generation`);
           return {
@@ -105,7 +113,7 @@ export const generateCompanyInsightsTask = task({
             insights: {
               one_liner: insights.one_liner || '',
               summary: insights.summary || '',
-              tags: insights.tags || [],
+              tags: Array.isArray(insights.tags) ? insights.tags : [],
               linkedin_url: insights.linkedin_url || `https://linkedin.com/company/${domainName}`,
             },
           };

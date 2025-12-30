@@ -19,6 +19,14 @@ interface CompanyInsights {
   linkedin_url: string;
 }
 
+interface CompanyWithInsights {
+  ai_insights: CompanyInsights | null;
+  company_name: string | null;
+  health_score: number | null;
+  overall_sentiment: string | null;
+  domain_name: string;
+}
+
 /**
  * Server Action to generate AI insights for a company
  * 
@@ -48,7 +56,7 @@ export async function generateCompanyInsights(
       .select('ai_insights, company_name, health_score, overall_sentiment, domain_name')
       .eq('company_id', companyId)
       .eq('user_id', user.id)
-      .single();
+      .single<CompanyWithInsights>();
 
     if (companyError || !company) {
       console.error('Error fetching company:', companyError);
@@ -57,13 +65,13 @@ export async function generateCompanyInsights(
 
     // If ai_insights exists and has one_liner, return cached data
     if (company.ai_insights && typeof company.ai_insights === 'object') {
-      const insights = company.ai_insights as any;
+      const insights = company.ai_insights as CompanyInsights;
       if (insights.one_liner) {
         console.log('Returning cached AI insights for company:', companyId);
         return {
           one_liner: insights.one_liner || '',
           summary: insights.summary || '',
-          tags: insights.tags || [],
+          tags: Array.isArray(insights.tags) ? insights.tags : [],
           linkedin_url: insights.linkedin_url || `https://linkedin.com/company/${domainName}`,
         };
       }
