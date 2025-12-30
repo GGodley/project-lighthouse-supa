@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Sparkles, Linkedin, Calendar, CheckSquare } from 'lucide-react';
+import { Sparkles, Linkedin, Calendar, CheckSquare, MessageSquare } from 'lucide-react';
 import { useSupabase } from '@/components/SupabaseProvider';
 import { useParams } from 'next/navigation';
 import type { CompanyData } from '@/lib/companies/getCompanyDetails';
@@ -82,12 +82,15 @@ export default function HighlightsPage() {
     }
   };
 
+  // Get product feedback count for placeholder
+  const productFeedbackCount = companyData.product_feedback?.length || 0;
+
   return (
     <div className="space-y-6">
       {/* Intelligence Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Card 1: Summary */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Card 1: Summary - Spans 2 columns */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-2">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="w-5 h-5 text-yellow-500" />
             <h3 className="text-lg font-semibold text-gray-900">Summary</h3>
@@ -97,8 +100,8 @@ export default function HighlightsPage() {
           </p>
         </div>
 
-        {/* Card 2: LinkedIn */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        {/* Card 2: LinkedIn - Spans 1 column */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-1">
           <div className="flex items-center gap-2 mb-3">
             <Linkedin className="w-5 h-5 text-blue-600" />
             <h3 className="text-lg font-semibold text-gray-900">LinkedIn</h3>
@@ -113,8 +116,8 @@ export default function HighlightsPage() {
           </a>
         </div>
 
-        {/* Card 3: Stats / Upcoming Tasks */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        {/* Card 3: Next Step - Spans 1 column */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-1">
           <div className="flex items-center gap-2 mb-3">
             <CheckSquare className="w-5 h-5 text-gray-600" />
             <h3 className="text-lg font-semibold text-gray-900">Next Step</h3>
@@ -132,10 +135,31 @@ export default function HighlightsPage() {
             <p className="text-sm text-gray-500">No upcoming tasks</p>
           )}
         </div>
+
+        {/* Card 4: Tasks/Requests Placeholder - Spans 1 column */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-1">
+          <div className="flex items-center gap-2 mb-3">
+            <MessageSquare className="w-5 h-5 text-gray-600" />
+            <h3 className="text-lg font-semibold text-gray-900">Requests</h3>
+          </div>
+          {productFeedbackCount > 0 ? (
+            <div>
+              <p className="text-sm text-gray-700 mb-2">{productFeedbackCount} active request{productFeedbackCount !== 1 ? 's' : ''}</p>
+              <Link
+                href={`/dashboard/customer-threads/${companyId}/requests`}
+                className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+              >
+                View all →
+              </Link>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">No requests</p>
+          )}
+        </div>
       </div>
 
       {/* Recent Activity */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+      <div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
           <Link
@@ -149,8 +173,8 @@ export default function HighlightsPage() {
           <p className="text-sm text-gray-500">No recent activity</p>
         ) : (
           <div className="space-y-3">
-            {recentActivity.map((activity, index) => (
-              <div key={index} className="flex items-start gap-3 pb-3 border-b border-gray-100 last:border-0">
+            {recentActivity.map((activity) => (
+              <div key={`${activity.interaction_type}-${activity.id}`} className="flex items-start gap-3 pb-3 border-b border-gray-100 last:border-0">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
                   <Calendar className="w-4 h-4 text-blue-600" />
                 </div>

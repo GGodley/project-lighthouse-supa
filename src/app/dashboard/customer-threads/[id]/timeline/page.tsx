@@ -82,46 +82,52 @@ export default function TimelinePage() {
   }
 
   return (
-    <div className="relative">
-      {/* Vertical line */}
-      <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200"></div>
+    <div>
+      {/* Header */}
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
 
-      {/* Timeline items */}
-      <div className="space-y-0">
-        {interaction_timeline.map((item) => {
-          const isEmail = item.interaction_type === 'email';
-          const Icon = isEmail ? Mail : Video;
+      {/* Timeline Container */}
+      <div className="relative pl-8">
+        {/* Vertical line - clearly visible connector running through all items */}
+        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gray-300"></div>
 
-          return (
-            <div key={`${item.interaction_type}-${item.id}`} className="relative flex gap-4 pb-6">
-              {/* Icon on timeline */}
-              <div className="relative z-10 flex-shrink-0">
-                <div className="w-8 h-8 rounded-full bg-white border-2 border-gray-300 flex items-center justify-center">
-                  <Icon className={`w-4 h-4 ${isEmail ? 'text-blue-600' : 'text-purple-600'}`} />
+        {/* Timeline items */}
+        <div className="space-y-0">
+          {interaction_timeline.map((item, index) => {
+            const isEmail = item.interaction_type === 'email';
+            const Icon = isEmail ? Mail : Video;
+
+            return (
+              <div key={`${item.interaction_type}-${item.id}`} className="relative flex gap-4 pb-6">
+                {/* Icon on timeline - positioned on the vertical line */}
+                <div className="absolute left-0 top-1 -translate-x-1/2 z-10 flex-shrink-0">
+                  <div className="w-6 h-6 rounded-full bg-white border-2 border-gray-400 flex items-center justify-center shadow-sm">
+                    <Icon className={`w-3.5 h-3.5 ${isEmail ? 'text-blue-600' : 'text-purple-600'}`} />
+                  </div>
                 </div>
-              </div>
 
-              {/* Content */}
-              <div className="flex-1 min-w-0 pt-1">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">
-                      {item.title || (isEmail ? 'Email thread' : 'Meeting')}
-                    </p>
-                    {item.summary && (
-                      <p className="text-xs text-gray-600 mt-1 line-clamp-2">
-                        {item.summary}
+                {/* Content */}
+                <div className="flex-1 min-w-0 pt-0.5 ml-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">
+                        {item.title || (isEmail ? 'Email thread' : 'Meeting')}
                       </p>
-                    )}
-                  </div>
-                  <div className="flex-shrink-0 text-xs text-gray-500">
-                    {formatRelativeTime(item.interaction_date)}
+                      {item.summary && (
+                        <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                          {item.summary}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex-shrink-0 text-xs text-gray-500">
+                      {formatRelativeTime(item.interaction_date)}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );

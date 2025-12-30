@@ -35,8 +35,8 @@ export default function CompanySidebar({ company }: CompanySidebarProps) {
     <div className="space-y-6">
       {/* Company Profile Card */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        {/* Avatar */}
-        <div className="flex justify-center mb-4">
+        {/* Avatar - Top Left */}
+        <div className="flex items-start mb-4">
           <img
             src={avatarUrl}
             alt={company.company_name || company.domain_name}
@@ -49,20 +49,20 @@ export default function CompanySidebar({ company }: CompanySidebarProps) {
           />
         </div>
 
-        {/* Name */}
-        <h1 className="text-xl font-bold text-gray-900 text-center mb-2">
+        {/* Name - Left Aligned */}
+        <h1 className="text-xl font-bold text-gray-900 text-left mb-2">
           {company.company_name || company.domain_name}
         </h1>
 
-        {/* Subtext (AI One-Liner) */}
+        {/* Subtext (AI One-Liner) - Left Aligned */}
         <div className="mb-4">
           {oneLiner ? (
-            <p className="text-sm text-gray-500 text-center">{oneLiner}</p>
+            <p className="text-sm text-gray-500 text-left">{oneLiner}</p>
           ) : (
             <button
               onClick={handleGenerateProfile}
               disabled={isGenerating}
-              className="w-full flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors disabled:opacity-50"
             >
               <Sparkles className="w-4 h-4" />
               {isGenerating ? 'Generating...' : 'Generate Profile'}
@@ -70,10 +70,10 @@ export default function CompanySidebar({ company }: CompanySidebarProps) {
           )}
         </div>
 
-        {/* Action Bar */}
-        <div className="flex items-center gap-2 mb-4">
+        {/* Action Bar - Left Aligned */}
+        <div className="flex items-center justify-start gap-2 mb-4">
           {/* Primary: Compose Email */}
-          <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
             <Mail className="w-4 h-4" />
             Compose email
           </button>
