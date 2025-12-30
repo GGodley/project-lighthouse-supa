@@ -20,6 +20,48 @@ const genAI = new GoogleGenerativeAI(Deno.env.get("GEMINI_API_KEY")!);
 // Sleep helper for retry delays
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Triggers AI insights generation asynchronously via Trigger.dev
+ * Only called when a new company is created (not for existing companies)
+ * This is a fire-and-forget operation - failures are non-critical
+ */
+async function triggerCompanyInsightsGeneration(
+  companyId: string,
+  domainName: string,
+  userId: string
+): Promise<void> {
+  const triggerApiKey = Deno.env.get('TRIGGER_API_KEY');
+  if (!triggerApiKey) {
+    console.warn('TRIGGER_API_KEY not set, skipping AI insights generation');
+    return;
+  }
+
+  try {
+    const triggerUrl = 'https://api.trigger.dev/api/v1/tasks/generate-company-insights/trigger';
+    const response = await fetch(triggerUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${triggerApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        payload: { companyId, domainName, userId },
+        concurrencyKey: companyId, // Prevent duplicate runs for same company
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to trigger AI insights generation:', errorText);
+    } else {
+      console.log(`✅ Triggered AI insights generation for company ${companyId}`);
+    }
+  } catch (err) {
+    // Non-critical error - don't fail company creation if this fails
+    console.error('Failed to trigger AI insights generation (non-critical):', err);
+  }
+}
+
 // Gemini API call wrapper with retry and backoff for rate limits
 async function geminiCallWithBackoff<T>(
   apiCallFunction: () => Promise<T>,
@@ -1082,6 +1124,14 @@ serve(async (req: Request) => {
                 
                 // This is your exact, proven company/customer creation logic
                 try {
+                  // Check if company already exists before creating
+                  const { data: existingCompany } = await supabaseAdmin
+                    .from('companies')
+                    .select('company_id, ai_insights')
+                    .eq('domain_name', domain)
+                    .eq('user_id', userId)
+                    .maybeSingle();
+
                   const companyName = domain.split('.')[0].split('-').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
                   
                   const { data: company, error: companyError } = await supabaseAdmin.from('companies').upsert({
@@ -1091,10 +1141,20 @@ serve(async (req: Request) => {
                   }, {
                     onConflict: 'user_id, domain_name', // Your existing schema
                     ignoreDuplicates: false
-                  }).select('company_id').single();
+                  }).select('company_id, domain_name').single();
 
                   if (companyError) throw companyError;
                   const companyId = company?.company_id; // This is UUID
+
+                  // Trigger AI insights generation for newly created company (fire-and-forget)
+                  // Only trigger if company was just created (not updated)
+                  if (companyId && company && !existingCompany) {
+                    triggerCompanyInsightsGeneration(companyId, company.domain_name, userId)
+                      .catch(err => {
+                        // Non-critical - don't fail company creation if this fails
+                        console.error('Failed to trigger AI insights generation (non-critical):', err);
+                      });
+                  }
 
                   if (companyId) {
                     // Don't add to discoveredCompanyIds yet - wait until customer is confirmed

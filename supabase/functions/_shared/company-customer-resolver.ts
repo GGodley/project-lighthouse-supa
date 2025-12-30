@@ -269,7 +269,7 @@ export async function getOrCreateCompanyWithLock(
   // Try to fetch existing company
   const { data: existingCompany, error: fetchError } = await supabaseClient
     .from('companies')
-    .select('company_id')
+    .select('company_id, ai_insights')
     .eq('domain_name', domain)
     .eq('user_id', userId)
     .single();
@@ -295,7 +295,7 @@ export async function getOrCreateCompanyWithLock(
       onConflict: 'user_id, domain_name',
       ignoreDuplicates: false
     })
-    .select('company_id')
+    .select('company_id, domain_name')
     .single();
   
   if (companyError || !company?.company_id) {
@@ -313,6 +313,16 @@ export async function getOrCreateCompanyWithLock(
       }
     }
     throw new Error(`Failed to create/find company for domain ${domain}: ${companyError?.message || 'No data returned'}`);
+  }
+  
+  // Trigger AI insights generation for newly created company (fire-and-forget)
+  // Only trigger if company was just created (not updated)
+  if (company && !existingCompany) {
+    triggerCompanyInsightsGeneration(company.company_id, company.domain_name, userId)
+      .catch(err => {
+        // Non-critical - don't fail company creation if this fails
+        console.error('Failed to trigger AI insights generation (non-critical):', err);
+      });
   }
   
   return company.company_id;

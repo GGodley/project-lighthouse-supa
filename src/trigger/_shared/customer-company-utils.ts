@@ -4,6 +4,48 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+/**
+ * Triggers AI insights generation asynchronously via Trigger.dev
+ * Only called when a new company is created (not for existing companies)
+ * This is a fire-and-forget operation - failures are non-critical
+ */
+async function triggerCompanyInsightsGeneration(
+  companyId: string,
+  domainName: string,
+  userId: string
+): Promise<void> {
+  const triggerApiKey = process.env.TRIGGER_API_KEY;
+  if (!triggerApiKey) {
+    console.warn('TRIGGER_API_KEY not set, skipping AI insights generation');
+    return;
+  }
+
+  try {
+    const triggerUrl = 'https://api.trigger.dev/api/v1/tasks/generate-company-insights/trigger';
+    const response = await fetch(triggerUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${triggerApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        payload: { companyId, domainName, userId },
+        concurrencyKey: companyId, // Prevent duplicate runs for same company
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to trigger AI insights generation:', errorText);
+    } else {
+      console.log(`✅ Triggered AI insights generation for company ${companyId}`);
+    }
+  } catch (err) {
+    // Non-critical error - don't fail company creation if this fails
+    console.error('Failed to trigger AI insights generation (non-critical):', err);
+  }
+}
+
 export interface CompanyCustomerResult {
   company_id: string | null; // null for public email domains
   customer_id: string;
@@ -141,7 +183,7 @@ export async function getOrCreateCompany(
   // Try to fetch existing company
   const { data: existingCompany, error: fetchError } = await supabaseClient
     .from("companies")
-    .select("company_id")
+    .select("company_id, ai_insights")
     .eq("domain_name", domain)
     .eq("user_id", userId)
     .maybeSingle();
@@ -171,7 +213,7 @@ export async function getOrCreateCompany(
         ignoreDuplicates: false,
       }
     )
-    .select("company_id")
+    .select("company_id, domain_name")
     .maybeSingle();
 
   if (companyError || !company?.company_id) {
@@ -194,6 +236,16 @@ export async function getOrCreateCompany(
     throw new Error(
       `Failed to create/find company for domain ${domain}: ${companyError?.message || "No data returned"}`
     );
+  }
+
+  // Trigger AI insights generation for newly created company (fire-and-forget)
+  // Only trigger if company was just created (not updated)
+  if (company && !existingCompany) {
+    triggerCompanyInsightsGeneration(company.company_id, company.domain_name, userId)
+      .catch(err => {
+        // Non-critical - don't fail company creation if this fails
+        console.error('Failed to trigger AI insights generation (non-critical):', err);
+      });
   }
 
   return company.company_id;
