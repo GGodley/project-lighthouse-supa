@@ -426,7 +426,7 @@ verify_jwt = false
 entrypoint = "./functions/process-transcript/index.ts"
 
 [functions.confirm-cleanup]
-enabled = true
+enabled = false
 verify_jwt = false
 entrypoint = "./functions/confirm-cleanup/index.ts"
 
