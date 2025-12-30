@@ -1,16 +1,6 @@
 'use server';
 
 import { createClient } from '@/utils/supabase/server';
-import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-const getGeminiClient = () => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is required for generateCompanyInsights');
-  }
-  return new GoogleGenerativeAI(apiKey);
-};
 
 interface CompanyInsights {
   one_liner: string;
@@ -28,29 +18,29 @@ interface CompanyWithInsights {
 }
 
 /**
- * Server Action to generate AI insights for a company
+ * Server Action to trigger AI insights generation for a company via Trigger.dev
  * 
- * Checks cache first, then calls Gemini API if needed.
- * Saves results to companies.ai_insights JSONB column.
+ * This action triggers the Trigger.dev task which handles the AI generation asynchronously.
+ * The task will check cache, call Gemini API, and save results to companies.ai_insights.
  * 
  * @param companyId - UUID of the company
  * @param domainName - Domain name of the company
- * @returns CompanyInsights object or null if error
+ * @returns Object with success status and optional error message
  */
 export async function generateCompanyInsights(
   companyId: string,
   domainName: string
-): Promise<CompanyInsights | null> {
+): Promise<{ success: boolean; error?: string; runId?: string }> {
   try {
     // Initialize Supabase client
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      throw new Error('Unauthorized');
+      return { success: false, error: 'Unauthorized' };
     }
 
-    // Step 1: Check cache - query companies.ai_insights
+    // Step 1: Check cache - if insights already exist, return them
     const { data: company, error: companyError } = await supabase
       .from('companies')
       .select('ai_insights, company_name, health_score, overall_sentiment, domain_name')
@@ -60,120 +50,73 @@ export async function generateCompanyInsights(
 
     if (companyError || !company) {
       console.error('Error fetching company:', companyError);
-      return null;
+      return { success: false, error: 'Company not found' };
     }
 
-    // If ai_insights exists and has one_liner, return cached data
+    // If ai_insights exists and has one_liner, return success (already cached)
     if (company.ai_insights && typeof company.ai_insights === 'object') {
       const insights = company.ai_insights as CompanyInsights;
       if (insights.one_liner) {
-        console.log('Returning cached AI insights for company:', companyId);
-        return {
-          one_liner: insights.one_liner || '',
-          summary: insights.summary || '',
-          tags: Array.isArray(insights.tags) ? insights.tags : [],
-          linkedin_url: insights.linkedin_url || `https://linkedin.com/company/${domainName}`,
-        };
+        console.log('AI insights already exist for company:', companyId);
+        return { success: true };
       }
     }
 
-    // Step 2: Fetch company context for prompt
-    // Get interaction timeline count
-    const { data: timelineData } = await supabase
-      .rpc('get_company_page_details', { company_id_param: companyId });
+    // Step 2: Trigger Trigger.dev task
+    const triggerApiKey = process.env.TRIGGER_API_KEY;
+    if (!triggerApiKey) {
+      console.error('TRIGGER_API_KEY not configured');
+      return { success: false, error: 'TRIGGER_API_KEY not configured' };
+    }
 
-    const interactionCount = timelineData?.interaction_timeline?.length || 0;
-
-    // Step 3: Call Gemini API
-    const genAI = getGeminiClient();
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-3-flash-preview',
-      generationConfig: {
-        responseMimeType: 'application/json',
-        temperature: 0.3,
+    const triggerUrl = 'https://api.trigger.dev/api/v1/tasks/generate-company-insights/trigger';
+    const triggerPayload = {
+      payload: {
+        companyId,
+        domainName,
+        userId: user.id,
       },
+      concurrencyKey: companyId, // Prevent duplicate runs for same company
+    };
+
+    console.log('📡 Triggering AI insights generation via Trigger.dev:', {
+      companyId,
+      domainName,
+      userId: user.id,
     });
 
-    const prompt = `Analyze the company with domain ${domainName}.
-Company Name: ${company.company_name || domainName}
-Health Score: ${company.health_score || 'Not set'}
-Sentiment: ${company.overall_sentiment || 'Not set'}
-Recent Interactions: ${interactionCount}
+    const response = await fetch(triggerUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${triggerApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(triggerPayload),
+    });
 
-Return ONLY a raw JSON object (no markdown) with this structure: 
-{ 
-  "one_liner": "A concise 10-word description of their core business.", 
-  "summary": "A 3-sentence executive summary of their market position and products.", 
-  "tags": ["Industry", "Sector", "Specialty"],
-  "linkedin_url": "https://linkedin.com/company/${domainName} or actual URL if found"
-}
-
-Focus on: industry, role, key relationship context, and business characteristics.`;
-
-    console.log('🤖 Calling Gemini API for company insights:', companyId);
-    const result = await model.generateContent(prompt);
-    const responseContent = result.response.text();
-
-    if (!responseContent) {
-      throw new Error('Empty response from Gemini');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to trigger AI insights generation:', errorText);
+      return { 
+        success: false, 
+        error: `Failed to trigger task: ${response.status} - ${errorText}` 
+      };
     }
 
-    // Parse JSON response
-    let insights: CompanyInsights;
-    try {
-      insights = JSON.parse(responseContent);
-    } catch (parseError) {
-      console.error('Failed to parse Gemini response:', parseError);
-      throw new Error('Invalid JSON response from Gemini');
-    }
+    const result = await response.json();
+    console.log('✅ Successfully triggered AI insights generation:', {
+      runId: result.id,
+      companyId,
+    });
 
-    // Validate required fields
-    if (!insights.one_liner || !insights.summary || !Array.isArray(insights.tags)) {
-      throw new Error('Invalid insights structure from Gemini');
-    }
-
-    // Ensure linkedin_url has a fallback
-    if (!insights.linkedin_url) {
-      insights.linkedin_url = `https://linkedin.com/company/${domainName}`;
-    }
-
-    // Step 4: Save to database using service role client (to bypass RLS for updates)
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('Missing Supabase configuration');
-    }
-
-    const supabaseAdmin = createSupabaseAdminClient(
-      supabaseUrl,
-      supabaseServiceKey,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-          detectSessionInUrl: false,
-        },
-      }
-    );
-
-    const { error: updateError } = await supabaseAdmin
-      .from('companies')
-      .update({ ai_insights: insights })
-      .eq('company_id', companyId)
-      .eq('user_id', user.id);
-
-    if (updateError) {
-      console.error('Error updating ai_insights:', updateError);
-      // Still return the insights even if update fails
-    } else {
-      console.log('✅ Successfully saved AI insights to database');
-    }
-
-    return insights;
+    return { 
+      success: true, 
+      runId: result.id || undefined 
+    };
   } catch (error) {
-    console.error('Error generating company insights:', error);
-    return null;
+    console.error('Error triggering company insights generation:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { success: false, error: errorMessage };
   }
 }
 
