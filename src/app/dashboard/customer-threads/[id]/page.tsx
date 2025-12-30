@@ -86,11 +86,11 @@ export default function HighlightsPage() {
   const productFeedbackCount = companyData.product_feedback?.length || 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 mt-6">
       {/* Intelligence Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Card 1: Summary - Spans 2 columns */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-2">
+        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6 md:col-span-2">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="w-5 h-5 text-yellow-500" />
             <h3 className="text-lg font-semibold text-gray-900">Summary</h3>
@@ -101,7 +101,7 @@ export default function HighlightsPage() {
         </div>
 
         {/* Card 2: LinkedIn - Spans 1 column */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-1">
+        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6 md:col-span-1">
           <div className="flex items-center gap-2 mb-3">
             <Linkedin className="w-5 h-5 text-blue-600" />
             <h3 className="text-lg font-semibold text-gray-900">LinkedIn</h3>
@@ -117,7 +117,7 @@ export default function HighlightsPage() {
         </div>
 
         {/* Card 3: Next Step - Spans 1 column */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-1">
+        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6 md:col-span-1">
           <div className="flex items-center gap-2 mb-3">
             <CheckSquare className="w-5 h-5 text-gray-600" />
             <h3 className="text-lg font-semibold text-gray-900">Next Step</h3>
@@ -137,7 +137,7 @@ export default function HighlightsPage() {
         </div>
 
         {/* Card 4: Tasks/Requests Placeholder - Spans 1 column */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-1">
+        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6 md:col-span-1">
           <div className="flex items-center gap-2 mb-3">
             <MessageSquare className="w-5 h-5 text-gray-600" />
             <h3 className="text-lg font-semibold text-gray-900">Requests</h3>

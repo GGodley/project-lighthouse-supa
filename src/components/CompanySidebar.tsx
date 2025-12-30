@@ -42,9 +42,9 @@ export default function CompanySidebar({ company }: CompanySidebarProps) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Company Profile Card */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
+    <div className="h-full p-8 border-r border-gray-100">
+      {/* Company Profile Content */}
+      <div className="space-y-6">
         {/* Avatar - Top Left */}
         <div className="flex items-start mb-4">
           <img
