@@ -84,12 +84,12 @@ export default function TimelinePage() {
   return (
     <div>
       {/* Header */}
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-4 tracking-tight antialiased">Recent Activity</h3>
 
       {/* Timeline Container */}
       <div className="relative pl-8">
         {/* Vertical line - clearly visible connector running through all items */}
-        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gray-300"></div>
+        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200"></div>
 
         {/* Timeline items */}
         <div className="space-y-0">
@@ -100,9 +100,9 @@ export default function TimelinePage() {
             return (
               <div key={`${item.interaction_type}-${item.id}`} className="relative flex gap-4 pb-6">
                 {/* Icon on timeline - positioned on the vertical line */}
-                <div className="absolute left-0 top-1 -translate-x-1/2 z-10 flex-shrink-0">
-                  <div className="w-6 h-6 rounded-full bg-white border-2 border-gray-400 flex items-center justify-center shadow-sm">
-                    <Icon className={`w-3.5 h-3.5 ${isEmail ? 'text-blue-600' : 'text-purple-600'}`} />
+                <div className="absolute left-4 top-1 -translate-x-1/2 z-10 flex-shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center">
+                    <Icon className={`w-4 h-4 ${isEmail ? 'text-blue-600' : 'text-purple-600'}`} />
                   </div>
                 </div>
 

@@ -90,21 +90,21 @@ export default function HighlightsPage() {
       {/* Intelligence Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Card 1: Summary - Spans 2 columns */}
-        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6 md:col-span-2">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-2">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="w-5 h-5 text-yellow-500" />
-            <h3 className="text-lg font-semibold text-gray-900">Summary</h3>
+            <h3 className="text-lg font-semibold text-gray-900 tracking-tight antialiased">Summary</h3>
           </div>
-          <p className="text-sm text-gray-700 leading-relaxed">
+          <p className="text-sm text-gray-600 leading-relaxed">
             {aiInsights?.summary || 'No summary available. Click "Generate Profile" in the sidebar to create an AI-generated summary.'}
           </p>
         </div>
 
         {/* Card 2: LinkedIn - Spans 1 column */}
-        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6 md:col-span-1">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-1">
           <div className="flex items-center gap-2 mb-3">
             <Linkedin className="w-5 h-5 text-blue-600" />
-            <h3 className="text-lg font-semibold text-gray-900">LinkedIn</h3>
+            <h3 className="text-lg font-semibold text-gray-900 tracking-tight antialiased">LinkedIn</h3>
           </div>
           <a
             href={linkedinUrl}
@@ -117,14 +117,14 @@ export default function HighlightsPage() {
         </div>
 
         {/* Card 3: Next Step - Spans 1 column */}
-        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6 md:col-span-1">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-1">
           <div className="flex items-center gap-2 mb-3">
             <CheckSquare className="w-5 h-5 text-gray-600" />
-            <h3 className="text-lg font-semibold text-gray-900">Next Step</h3>
+            <h3 className="text-lg font-semibold text-gray-900 tracking-tight antialiased">Next Step</h3>
           </div>
           {upcomingTask ? (
             <div>
-              <p className="text-sm text-gray-700 mb-2">{upcomingTask.text}</p>
+              <p className="text-sm text-gray-900 mb-2">{upcomingTask.text}</p>
               {upcomingTask.due_date && (
                 <p className="text-xs text-gray-500">
                   Due: {new Date(upcomingTask.due_date).toLocaleDateString()}
@@ -137,14 +137,14 @@ export default function HighlightsPage() {
         </div>
 
         {/* Card 4: Tasks/Requests Placeholder - Spans 1 column */}
-        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6 md:col-span-1">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-1">
           <div className="flex items-center gap-2 mb-3">
             <MessageSquare className="w-5 h-5 text-gray-600" />
-            <h3 className="text-lg font-semibold text-gray-900">Requests</h3>
+            <h3 className="text-lg font-semibold text-gray-900 tracking-tight antialiased">Requests</h3>
           </div>
           {productFeedbackCount > 0 ? (
             <div>
-              <p className="text-sm text-gray-700 mb-2">{productFeedbackCount} active request{productFeedbackCount !== 1 ? 's' : ''}</p>
+              <p className="text-sm text-gray-900 mb-2">{productFeedbackCount} active request{productFeedbackCount !== 1 ? 's' : ''}</p>
               <Link
                 href={`/dashboard/customer-threads/${companyId}/requests`}
                 className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
@@ -161,7 +161,7 @@ export default function HighlightsPage() {
       {/* Recent Activity */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
+          <h3 className="text-lg font-semibold text-gray-900 tracking-tight antialiased">Recent Activity</h3>
           <Link
             href={`/dashboard/customer-threads/${companyId}/timeline`}
             className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
