@@ -90,71 +90,79 @@ export default function HighlightsPage() {
       {/* Intelligence Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Card 1: Summary - Spans 2 columns */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-2">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-2 h-48 flex flex-col">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="w-5 h-5 text-yellow-500" />
             <h3 className="text-lg font-semibold text-gray-900 tracking-tight antialiased">Summary</h3>
           </div>
-          <p className="text-sm text-gray-600 leading-relaxed">
-            {aiInsights?.summary || 'No summary available. Click "Generate Profile" in the sidebar to create an AI-generated summary.'}
-          </p>
+          <div className="overflow-hidden flex-1">
+            <p className="text-sm text-gray-600 leading-relaxed line-clamp-4">
+              {aiInsights?.summary || 'No summary available. Click "Generate Profile" in the sidebar to create an AI-generated summary.'}
+            </p>
+          </div>
         </div>
 
         {/* Card 2: LinkedIn - Spans 1 column */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-1">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-1 h-48 flex flex-col">
           <div className="flex items-center gap-2 mb-3">
             <Linkedin className="w-5 h-5 text-blue-600" />
             <h3 className="text-lg font-semibold text-gray-900 tracking-tight antialiased">LinkedIn</h3>
           </div>
-          <a
-            href={linkedinUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
-          >
-            View Company Profile →
-          </a>
+          <div className="flex-1 flex items-start">
+            <a
+              href={linkedinUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+            >
+              View Company Profile →
+            </a>
+          </div>
         </div>
 
         {/* Card 3: Next Step - Spans 1 column */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-1">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-1 h-48 flex flex-col">
           <div className="flex items-center gap-2 mb-3">
             <CheckSquare className="w-5 h-5 text-gray-600" />
             <h3 className="text-lg font-semibold text-gray-900 tracking-tight antialiased">Next Step</h3>
           </div>
-          {upcomingTask ? (
-            <div>
-              <p className="text-sm text-gray-900 mb-2">{upcomingTask.text}</p>
-              {upcomingTask.due_date && (
-                <p className="text-xs text-gray-500">
-                  Due: {new Date(upcomingTask.due_date).toLocaleDateString()}
-                </p>
-              )}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500">No upcoming tasks</p>
-          )}
+          <div className="flex-1">
+            {upcomingTask ? (
+              <div>
+                <p className="text-sm text-gray-900 mb-2">{upcomingTask.text}</p>
+                {upcomingTask.due_date && (
+                  <p className="text-xs text-gray-500">
+                    Due: {new Date(upcomingTask.due_date).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No upcoming tasks</p>
+            )}
+          </div>
         </div>
 
         {/* Card 4: Tasks/Requests Placeholder - Spans 1 column */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-1">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:col-span-1 h-48 flex flex-col">
           <div className="flex items-center gap-2 mb-3">
             <MessageSquare className="w-5 h-5 text-gray-600" />
             <h3 className="text-lg font-semibold text-gray-900 tracking-tight antialiased">Requests</h3>
           </div>
-          {productFeedbackCount > 0 ? (
-            <div>
-              <p className="text-sm text-gray-900 mb-2">{productFeedbackCount} active request{productFeedbackCount !== 1 ? 's' : ''}</p>
-              <Link
-                href={`/dashboard/customer-threads/${companyId}/requests`}
-                className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
-              >
-                View all →
-              </Link>
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500">No requests</p>
-          )}
+          <div className="flex-1">
+            {productFeedbackCount > 0 ? (
+              <div>
+                <p className="text-sm text-gray-900 mb-2">{productFeedbackCount} active request{productFeedbackCount !== 1 ? 's' : ''}</p>
+                <Link
+                  href={`/dashboard/customer-threads/${companyId}/requests`}
+                  className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  View all →
+                </Link>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No requests</p>
+            )}
+          </div>
         </div>
       </div>
 
