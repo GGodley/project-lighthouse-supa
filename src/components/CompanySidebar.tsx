@@ -15,9 +15,7 @@ export default function CompanySidebar({ company }: CompanySidebarProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  // Construct avatar URL with Unavatar and UI Avatars fallback
-  const avatarUrl = `https://unavatar.io/${company.domain_name}?fallback=https://ui-avatars.com/api/?name=${encodeURIComponent(company.company_name || company.domain_name)}&background=random`;
+  const [logoError, setLogoError] = useState(false);
 
   const oneLiner = company.ai_insights?.one_liner || null;
 
@@ -48,16 +46,18 @@ export default function CompanySidebar({ company }: CompanySidebarProps) {
       <div className="space-y-4">
         {/* Avatar - Top Left */}
         <div className="flex items-start mb-2">
-          <img
-            src={avatarUrl}
-            alt={company.company_name || company.domain_name}
-            className="w-14 h-14 rounded-full border border-gray-200 bg-white object-contain p-1"
-            onError={(e) => {
-              // Fallback to UI Avatars if Unavatar fails
-              const target = e.target as HTMLImageElement;
-              target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(company.company_name || company.domain_name)}&background=random`;
-            }}
-          />
+          {company.domain_name && !logoError ? (
+            <img
+              src={`https://logo.clearbit.com/${company.domain_name}`}
+              alt={`${company.company_name || company.domain_name} logo`}
+              className="w-14 h-14 rounded-lg object-contain border border-gray-100 shadow-sm"
+              onError={() => setLogoError(true)}
+            />
+          ) : (
+            <div className="w-14 h-14 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xl font-bold shadow-sm">
+              {company.company_name?.charAt(0) || company.domain_name?.charAt(0) || "A"}
+            </div>
+          )}
         </div>
 
         {/* Name - Left Aligned */}
