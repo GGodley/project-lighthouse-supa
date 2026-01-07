@@ -4,13 +4,13 @@ import React from "react";
 import { Mail, Video } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-export type TimelineItemType = 'thread' | 'meeting';
+export type TimelineItemType = "thread" | "meeting";
 
 interface TimelineCardProps {
   type: TimelineItemType;
   title: string;
   summary: string;
-  date: string; // Passed for context, though displayed in spine usually
+  date: string;
   onClick?: () => void;
 }
 
@@ -61,9 +61,12 @@ export function TimelineCard({ type, title, summary, date, onClick }: TimelineCa
       <div className="border-t border-gray-100" />
 
       {/* Body */}
-      <div className="p-4">
+      <div className="p-4 space-y-2">
         <p className="text-sm text-gray-600 leading-relaxed line-clamp-3">
           {summary}
+        </p>
+        <p className="text-xs text-gray-400 font-medium">
+          {date}
         </p>
       </div>
     </div>
