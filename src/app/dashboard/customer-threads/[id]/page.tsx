@@ -53,6 +53,30 @@ interface AIInsights {
   linkedin_url?: string;
 }
 
+interface TimelineEvent {
+  id: string;
+  type: "thread" | "meeting";
+  date: string; // ISO string
+  title: string;
+  summary: string;
+}
+
+interface ThreadLinkResponse {
+  company_id: string;
+  threads: {
+    thread_id: string;
+    subject: string | null;
+    snippet: string | null;
+    llm_summary: { timeline_summary?: string } | null;
+    last_message_date: string | null;
+    created_at: string | null;
+  };
+}
+
+interface MeetingWithAttendees extends Meeting {
+  meeting_attendees: { customer_id: string }[];
+}
+
 // Extend Meeting type to include location field (exists in DB but not in generated types)
 type Meeting = Database["public"]["Tables"]["meetings"]["Row"] & {
   location?: string | null;
@@ -75,6 +99,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null);
   const [nextStep, setNextStep] = useState<NextStep | null>(null);
   const [allTasks, setAllTasks] = useState<NextStep[]>([]);
+  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
   const supabase = useSupabase();
 
   useEffect(() => {
@@ -187,6 +212,83 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               } else {
                 setAllTasks(tasksData || []);
               }
+
+              // Fetch timeline events (threads and meetings)
+              // Query 1: Fetch threads via thread_company_link
+              const { data: threadLinkData, error: threadLinkError } = await supabase
+                .from("thread_company_link")
+                .select(
+                  `
+                  company_id,
+                  threads!inner (
+                    thread_id,
+                    subject,
+                    snippet,
+                    llm_summary,
+                    last_message_date,
+                    created_at
+                  )
+                `
+                )
+                .eq("company_id", companyId);
+
+              // Query 2: Fetch meetings via meeting_attendees
+              const { data: allMeetings, error: meetingsError } = await supabase
+                .from("meetings")
+                .select(
+                  `
+                  id,
+                  title,
+                  start_time,
+                  meeting_attendees!inner(customer_id)
+                `
+                )
+                .in("meeting_attendees.customer_id", customerIds)
+                .order("start_time", { ascending: false });
+
+              if (threadLinkError) {
+                console.error("Error fetching threads:", threadLinkError);
+              }
+              if (meetingsError) {
+                console.error("Error fetching meetings:", meetingsError);
+              }
+
+              // Transform threads to TimelineEvent
+              const threadEvents: TimelineEvent[] =
+                (threadLinkData as ThreadLinkResponse[] | null)?.map((link) => {
+                  const thread = link.threads;
+                  const llmSummary =
+                    thread.llm_summary && typeof thread.llm_summary === "object"
+                      ? (thread.llm_summary as { timeline_summary?: string })
+                      : null;
+                  return {
+                    id: `thread-${thread.thread_id}`,
+                    type: "thread" as const,
+                    date: thread.last_message_date || thread.created_at || new Date().toISOString(),
+                    title: thread.subject || "No subject",
+                    summary:
+                      llmSummary?.timeline_summary ||
+                      thread.snippet ||
+                      "No summary available",
+                  };
+                }) || [];
+
+              // Transform meetings to TimelineEvent
+              const meetingEvents: TimelineEvent[] =
+                (allMeetings as MeetingWithAttendees[] | null)?.map((meeting) => ({
+                  id: `meeting-${meeting.id}`,
+                  type: "meeting" as const,
+                  date: meeting.start_time || new Date().toISOString(),
+                  title: meeting.title || "Meeting",
+                  summary: `Meeting with ${companyData?.company_name || "company"}`,
+                })) || [];
+
+              // Combine and sort by date (descending - newest first)
+              const combinedEvents = [...threadEvents, ...meetingEvents].sort(
+                (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+              );
+
+              setTimelineEvents(combinedEvents);
             }
           }
         }
@@ -500,16 +602,43 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
       </div>
 
       <div className="relative pl-4 space-y-10 border-l border-gray-200 ml-3">
-        <div className="relative pl-8">
-          <div className="absolute -left-[21px] top-6 w-3 h-3 rounded-full bg-blue-500 border-2 border-white ring-1 ring-gray-100" />
-          <span className="block text-sm font-bold text-gray-900 mb-3">Today, 2:00 PM</span>
-          <TimelineCard
-            type="thread"
-            title="Re: Fuse Order AIRev"
-            date="2h ago"
-            summary="Attached is the revised PO for the EV fuses. Please confirm the lead time for the Israel shipment."
-          />
-        </div>
+        {timelineEvents.length > 0 ? (
+          timelineEvents.map((event) => {
+            const eventDate = new Date(event.date);
+            const formattedDate = eventDate.toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: eventDate.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+            });
+            const formattedTime = eventDate.toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+
+            return (
+              <div key={event.id} className="relative pl-8">
+                <div
+                  className={`absolute -left-[21px] top-6 w-3 h-3 rounded-full border-2 border-white ring-1 ring-gray-100 ${
+                    event.type === "meeting" ? "bg-purple-500" : "bg-blue-500"
+                  }`}
+                />
+                <span className="block text-sm font-bold text-gray-900 mb-3">
+                  {formattedDate}, {formattedTime}
+                </span>
+                <TimelineCard
+                  type={event.type}
+                  title={event.title}
+                  date={formattedTime}
+                  summary={event.summary}
+                />
+              </div>
+            );
+          })
+        ) : (
+          <div className="text-center py-12 text-gray-500 bg-white rounded-xl border border-dashed border-gray-300">
+            No interaction history found
+          </div>
+        )}
       </div>
     </div>
   );
