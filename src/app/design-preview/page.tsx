@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Heart, Calendar, Phone, Mail, CheckCircle } from "lucide-react";
+import { Heart, Calendar, Phone, Mail } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/badge";
@@ -148,7 +148,7 @@ export default function DesignPreviewPage() {
       <section className="space-y-8 border-t border-gray-200 pt-8">
         <div>
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">7. Compact Dashboard Views</h2>
-          <p className="text-sm text-gray-500 mb-6">These are the specialized "Widget" variants designed for the dashboard grid.</p>
+          <p className="text-sm text-gray-500 mb-6">These are the specialized &ldquo;Widget&rdquo; variants designed for the dashboard grid.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

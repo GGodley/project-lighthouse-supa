@@ -33,11 +33,9 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const [activeTab, setActiveTab] = useState<"highlights" | "timeline" | "tasks" | "requests">(
     "highlights",
   );
-  const [companyId, setCompanyId] = useState<string>("");
 
   useEffect(() => {
     params.then((resolvedParams) => {
-      setCompanyId(resolvedParams.id);
       console.log("Viewing Company ID:", resolvedParams.id);
     });
   }, [params]);
@@ -52,7 +50,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               <h3 className="font-bold text-gray-900 text-base">Summary</h3>
             </div>
             <p className="text-gray-700 text-[15px] leading-7 font-medium">
-              Adlerelectric is prioritizing the "Fuse Order AIRev" project. 
+              Adlerelectric is prioritizing the &ldquo;Fuse Order AIRev&rdquo; project. 
               Recent signals indicate they are waiting for the finalized PDF order before confirming the Israel shipment. 
               Engagement is high, with 3 meetings in the last month. The engineering team is currently reviewing the new voltage specs.
             </p>
