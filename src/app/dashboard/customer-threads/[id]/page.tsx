@@ -112,7 +112,6 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
     requests: unknown[];
     attendees: string[];
   }>({ steps: [], requests: [], attendees: [] });
-  const [logoError, setLogoError] = useState(false);
   const supabase = useSupabase();
 
   useEffect(() => {
@@ -481,11 +480,6 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
 
     fetchDetails();
   }, [selectedEvent, supabase]);
-
-  // Reset logo error when company changes
-  useEffect(() => {
-    setLogoError(false);
-  }, [company?.domain_name]);
 
   // Helper function to get initials from name
   const getInitials = (name: string | null): string => {
@@ -1136,7 +1130,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
     <div className="flex h-full font-sans text-gray-900 bg-gray-50">
       <div className="flex-1 flex w-full">
         <div className="hidden lg:block w-[360px] shrink-0 p-8 border-r border-transparent overflow-hidden">
-          <div className="pt-[85px]">
+          <div className="pt-[60px]">
             {loading ? (
               <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm mb-6">
                 <div className="animate-pulse">
@@ -1149,25 +1143,19 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               <>
                 <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm mb-6">
                   <div className="mb-4">
-                    {/* LOGO LOGIC */}
-                    {company.domain_name && !logoError ? (
+                    <div className="w-14 h-14 rounded-lg overflow-hidden mb-3 shadow-sm border border-gray-100 bg-white flex items-center justify-center">
                       <img
-                        src={`https://logo.clearbit.com/${company.domain_name}`}
-                        alt={`${company.company_name || "Company"} logo`}
-                        className="w-14 h-14 rounded-lg object-contain mb-3 border border-gray-100 shadow-sm"
-                        onError={() => setLogoError(true)}
+                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(company?.company_name || 'C')}&background=random&color=fff&size=128`}
+                        alt={`${company?.company_name} logo`}
+                        className="w-full h-full object-cover"
                       />
-                    ) : (
-                      <div className="w-14 h-14 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xl font-bold mb-3 shadow-sm">
-                        {company.company_name?.charAt(0) || "A"}
-                      </div>
-                    )}
-                    {/* Name & Title */}
+                    </div>
+
                     <h1 className="text-2xl font-bold text-gray-900 leading-tight">
-                      {company.company_name || "Company"}
+                      {company?.company_name || "Company"}
                     </h1>
                     <p className="text-sm text-gray-500 font-medium">
-                      {insights.one_liner || "Global EV Fuse Manufacturer"}
+                      {insights?.one_liner || "No description available"}
                     </p>
                   </div>
                   <div className="space-y-3 mb-5">
