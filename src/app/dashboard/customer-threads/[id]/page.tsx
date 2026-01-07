@@ -52,7 +52,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               <h3 className="font-bold text-gray-900 text-base">Summary</h3>
             </div>
             <p className="text-gray-700 text-[15px] leading-7 font-medium">
-              Adlerelectric is prioritizing the "Fuse Order AIRev" project. Recent signals indicate
+              Adlerelectric is prioritizing the “Fuse Order AIRev” project. Recent signals indicate
               they are waiting for the finalized PDF order before confirming the Israel shipment.
               Engagement is high, with 3 meetings in the last month. The engineering team is
               currently reviewing the new voltage specs to ensure compliance.
