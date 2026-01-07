@@ -112,6 +112,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
     requests: unknown[];
     attendees: string[];
   }>({ steps: [], requests: [], attendees: [] });
+  const [logoError, setLogoError] = useState(false);
   const supabase = useSupabase();
 
   useEffect(() => {
@@ -480,6 +481,11 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
 
     fetchDetails();
   }, [selectedEvent, supabase]);
+
+  // Reset logo error when company changes
+  useEffect(() => {
+    setLogoError(false);
+  }, [company?.domain_name]);
 
   // Helper function to get initials from name
   const getInitials = (name: string | null): string => {
@@ -1130,7 +1136,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
     <div className="flex h-full font-sans text-gray-900 bg-gray-50">
       <div className="flex-1 flex w-full">
         <div className="hidden lg:block w-[360px] shrink-0 p-8 border-r border-transparent overflow-hidden">
-          <div className="pt-[0px]">
+          <div className="pt-[85px]">
             {loading ? (
               <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm mb-6">
                 <div className="animate-pulse">
@@ -1143,41 +1149,26 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               <>
                 <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm mb-6">
                   <div className="mb-4">
-                    <div className="relative w-14 h-14 mb-3">
-                      {company.domain_name ? (
-                        <>
-                          <img
-                            src={`https://logo.clearbit.com/${company.domain_name}`}
-                            alt={company.company_name || "Company logo"}
-                            className="w-14 h-14 rounded-lg object-contain"
-                            onError={(e) => {
-                              // Hide image and show fallback
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = "none";
-                              const fallback = target.nextElementSibling as HTMLElement;
-                              if (fallback) fallback.style.display = "flex";
-                            }}
-                          />
-                          <div
-                            className="w-14 h-14 bg-blue-600 rounded-lg hidden items-center justify-center text-white text-xl font-bold shadow-sm absolute top-0 left-0"
-                          >
-                            {getInitials(company.company_name)}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="w-14 h-14 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xl font-bold shadow-sm">
-                          {getInitials(company.company_name)}
-                        </div>
-                      )}
-                    </div>
+                    {/* LOGO LOGIC */}
+                    {company.domain_name && !logoError ? (
+                      <img
+                        src={`https://logo.clearbit.com/${company.domain_name}`}
+                        alt={`${company.company_name || "Company"} logo`}
+                        className="w-14 h-14 rounded-lg object-contain mb-3 border border-gray-100 shadow-sm"
+                        onError={() => setLogoError(true)}
+                      />
+                    ) : (
+                      <div className="w-14 h-14 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xl font-bold mb-3 shadow-sm">
+                        {company.company_name?.charAt(0) || "A"}
+                      </div>
+                    )}
+                    {/* Name & Title */}
                     <h1 className="text-2xl font-bold text-gray-900 leading-tight">
-                      {company.company_name || "Unnamed Company"}
+                      {company.company_name || "Company"}
                     </h1>
-                    {insights.one_liner ? (
-                      <p className="text-sm text-gray-500 font-medium mt-1">
-                        {insights.one_liner}
-                      </p>
-                    ) : null}
+                    <p className="text-sm text-gray-500 font-medium">
+                      {insights.one_liner || "Global EV Fuse Manufacturer"}
+                    </p>
                   </div>
                   <div className="space-y-3 mb-5">
                     {company.domain_name && (
