@@ -31,19 +31,20 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-interface Company {
-  company_id: string;
-  company_name: string | null;
-  domain_name: string;
-  ai_insights: string | null;
-  last_interaction_at: string | null;
-}
+// Use the Database type for accurate typing
+import type { Database } from "@/types/database";
+
+// Extend the base Company type to include ai_insights (jsonb column)
+// ai_insights is stored as JSONB in the database, so it can be an object, string (if stored incorrectly), or null
+// The Database type doesn't include ai_insights, so we add it explicitly
+type Company = Omit<Database["public"]["Tables"]["companies"]["Row"], "ai_insights"> & {
+  ai_insights: string | object | null;
+};
 
 interface Customer {
   customer_id: string;
   full_name: string | null;
   email: string | null;
-  job_title: string | null;
 }
 
 interface AIInsights {
@@ -68,7 +69,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         const resolvedParams = await params;
         const companyId = resolvedParams.id;
 
-        // Fetch company data
+        // Fetch company data - select all columns (ai_insights is JSONB in DB)
         const { data: companyData, error: companyError } = await supabase
           .from("companies")
           .select("*")
@@ -82,16 +83,18 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         }
 
         if (companyData) {
-          setCompany(companyData);
+          // Type assertion: ai_insights exists in DB (jsonb) but not in generated types
+          const companyWithInsights = companyData as unknown as Company;
+          setCompany(companyWithInsights);
 
           // Parse AI insights
           let parsedInsights: AIInsights = {};
-          if (companyData.ai_insights) {
+          if (companyWithInsights.ai_insights) {
             try {
               parsedInsights =
-                typeof companyData.ai_insights === "string"
-                  ? JSON.parse(companyData.ai_insights)
-                  : companyData.ai_insights;
+                typeof companyWithInsights.ai_insights === "string"
+                  ? JSON.parse(companyWithInsights.ai_insights)
+                  : (companyWithInsights.ai_insights as AIInsights);
             } catch (e) {
               console.error("Error parsing AI insights:", e);
             }
@@ -101,7 +104,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
           // Fetch customers
           const { data: customerData, error: customerError } = await supabase
             .from("customers")
-            .select("customer_id, full_name, email, job_title")
+            .select("customer_id, full_name, email")
             .eq("company_id", companyId);
 
           if (customerError) {
@@ -258,7 +261,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
           </div>
         </div>
       </div>
-    </div>
+            </div>
   );
 
   const renderTimeline = () => (
@@ -280,7 +283,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
           <Button variant="outline" size="icon" className="border-gray-200">
             <ArrowDownWideNarrow className="w-4 h-4 text-gray-500" />
           </Button>
-        </div>
+            </div>
       </div>
 
       <div className="relative pl-4 space-y-10 border-l border-gray-200 ml-3">
@@ -485,11 +488,6 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                               <div className="text-sm font-semibold text-gray-900 truncate">
                                 {customer.full_name || customer.email || "Unknown"}
                               </div>
-                              {customer.job_title && (
-                                <div className="text-xs text-gray-500 truncate">
-                                  {customer.job_title}
-                                </div>
-                              )}
                             </div>
                           </div>
                         );
