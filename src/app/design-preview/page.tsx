@@ -4,7 +4,7 @@ import React from "react";
 import { Heart, Calendar, Phone, Mail, CheckCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 import { Banner } from "@/components/ui/Banner";
 import { NextStepCard } from "@/components/ui/NextStepCard";
 import { TimelineCard } from "@/components/ui/TimelineCard";
