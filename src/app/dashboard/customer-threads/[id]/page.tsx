@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Copy,
@@ -31,17 +31,21 @@ import { UpcomingMeetingCard } from "@/components/ui/UpcomingMeetingCard";
 import { CompactActivityRow } from "@/components/ui/CompactActivityRow";
 
 interface PageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export default function CompanyDetailDashboard({ params }: PageProps) {
   const [activeTab, setActiveTab] = useState<"highlights" | "timeline" | "tasks" | "requests">(
     "highlights",
   );
+  const [companyId, setCompanyId] = useState<string>("");
 
-  // Temporary: just to verify param wiring
-  const companyId = params.id;
-  console.log("Viewing Company ID:", companyId);
+  useEffect(() => {
+    params.then((resolvedParams) => {
+      setCompanyId(resolvedParams.id);
+      console.log("Viewing Company ID:", resolvedParams.id);
+    });
+  }, [params]);
 
   const renderDashboard = () => (
     <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
