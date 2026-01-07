@@ -3,7 +3,7 @@
 import React from "react";
 import { CheckSquare, Calendar, ThumbsUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 
 interface FeedbackRequestCardProps {
   title: string;
