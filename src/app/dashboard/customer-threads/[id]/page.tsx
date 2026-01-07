@@ -26,6 +26,7 @@ import { UpcomingMeetingCard } from "@/components/ui/UpcomingMeetingCard";
 import { CompactActivityRow } from "@/components/ui/CompactActivityRow";
 import { useSupabase } from "@/components/SupabaseProvider";
 import { generateCompanyInsights } from "@/app/actions/generateCompanyInsights";
+import type { ThreadMessage } from "@/lib/types/threads";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -100,6 +101,15 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const [nextStep, setNextStep] = useState<NextStep | null>(null);
   const [allTasks, setAllTasks] = useState<NextStep[]>([]);
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<{
+    id: string;
+    type: "thread" | "meeting";
+  } | null>(null);
+  const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
+  const [threadContext, setThreadContext] = useState<{
+    steps: NextStep[];
+    requests: unknown[];
+  }>({ steps: [], requests: [] });
   const supabase = useSupabase();
 
   useEffect(() => {
@@ -314,6 +324,68 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
 
     fetchData();
   }, [params, supabase]);
+
+  // Fetch thread details when an event is selected
+  useEffect(() => {
+    if (!selectedEvent || selectedEvent.type !== "thread") {
+      setThreadMessages([]);
+      setThreadContext({ steps: [], requests: [] });
+      return;
+    }
+
+    const fetchThreadDetails = async () => {
+      // Extract thread_id from selectedEvent.id (format: "thread-{thread_id}")
+      const threadId = selectedEvent.id.replace("thread-", "");
+
+      // 1. Fetch Messages
+      // Note: thread_messages is not in generated types, so we use type assertion
+      type UntypedSupabaseMessages = {
+        from: (table: string) => {
+          select: (columns: string) => {
+            eq: (column: string, value: string) => {
+              order: (
+                column: string,
+                options: { ascending: boolean }
+              ) => Promise<{
+                data: ThreadMessage[] | null;
+                error: { message: string } | null;
+              }>;
+            };
+          };
+        };
+      };
+      const untypedSupabaseMessages = supabase as unknown as UntypedSupabaseMessages;
+
+      const { data: msgs, error: msgsError } = await untypedSupabaseMessages
+        .from("thread_messages")
+        .select("*")
+        .eq("thread_id", threadId)
+        .order("sent_date", { ascending: true });
+
+      if (msgsError) {
+        console.error("Error fetching thread messages:", msgsError);
+      } else {
+        setThreadMessages(msgs || []);
+      }
+
+      // 2. Fetch Linked Context (Next Steps)
+      const { data: steps, error: stepsError } = await supabase
+        .from("next_steps")
+        .select("*")
+        .eq("thread_id", threadId);
+
+      if (stepsError) {
+        console.error("Error fetching thread next steps:", stepsError);
+      } else {
+        setThreadContext((prev) => ({
+          ...prev,
+          steps: (steps as NextStep[]) || [],
+        }));
+      }
+    };
+
+    fetchThreadDetails();
+  }, [selectedEvent, supabase]);
 
   // Helper function to get initials from name
   const getInitials = (name: string | null): string => {
@@ -638,12 +710,24 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                 <span className="block text-sm font-bold text-gray-900 mb-3">
                   {formattedDate}, {formattedTime}
                 </span>
-                <TimelineCard
-                  type={event.type}
-                  title={event.title}
-                  date={formattedTime}
-                  summary={event.summary}
-                />
+                <div
+                  onClick={() =>
+                    event.type === "thread" &&
+                    setSelectedEvent({ id: event.id, type: event.type })
+                  }
+                  className={`${
+                    event.type === "thread"
+                      ? "cursor-pointer hover:bg-gray-50 rounded-lg transition-colors p-2 -ml-2"
+                      : ""
+                  }`}
+                >
+                  <TimelineCard
+                    type={event.type}
+                    title={event.title}
+                    date={formattedTime}
+                    summary={event.summary}
+                  />
+                </div>
               </div>
             );
           })
@@ -726,6 +810,175 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
       </div>
     </div>
   );
+
+  // Render Event Detail Modal
+  const renderEventModal = () => {
+    if (!selectedEvent || selectedEvent.type !== "thread") return null;
+
+    const event = timelineEvents.find((e) => e.id === selectedEvent.id);
+    if (!event) return null;
+
+    // Get unique attendees from messages
+    const uniqueAttendees = Array.from(
+      new Set(
+        threadMessages
+          .flatMap((msg) => [
+            msg.from_address,
+            ...(msg.to_addresses || []),
+            ...(msg.cc_addresses || []),
+          ])
+          .filter((email): email is string => email !== null && email !== undefined)
+      )
+    );
+
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+        onClick={() => setSelectedEvent(null)}
+      >
+        <div
+          className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[85vh] flex overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* LEFT: Conversation */}
+          <div className="flex-1 flex flex-col min-w-0 border-r border-gray-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-start">
+              <h2 className="text-xl font-bold text-gray-900 truncate pr-4">
+                {event.title || "Conversation"}
+              </h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedEvent(null)}
+                className="shrink-0"
+              >
+                <span className="sr-only">Close</span>
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50/50">
+              {threadMessages.length > 0 ? (
+                threadMessages.map((msg) => {
+                  const senderInitial = msg.from_address
+                    ? msg.from_address.charAt(0).toUpperCase()
+                    : "?";
+                  return (
+                    <div key={msg.message_id} className="flex gap-4 group">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold shrink-0 text-sm">
+                        {senderInitial}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline justify-between mb-1">
+                          <span className="font-semibold text-gray-900">
+                            {msg.from_address || "Unknown"}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {msg.sent_date
+                              ? new Date(msg.sent_date).toLocaleString()
+                              : "Date unknown"}
+                          </span>
+                        </div>
+                        <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-sm text-gray-800 prose max-w-none">
+                          {msg.body_html ? (
+                            <div
+                              dangerouslySetInnerHTML={{ __html: msg.body_html }}
+                              className="prose prose-sm max-w-none"
+                            />
+                          ) : (
+                            <div className="whitespace-pre-wrap">{msg.body_text || "No content"}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  Loading messages...
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT: Context Sidebar */}
+          <div className="w-[320px] bg-gray-50 p-6 overflow-y-auto shrink-0 space-y-8">
+            {/* Summary */}
+            <div>
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+                Summary
+              </h3>
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {event.summary || "No summary available."}
+              </p>
+            </div>
+
+            {/* Next Steps */}
+            <div>
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+                Extracted Steps
+              </h3>
+              {threadContext.steps.length > 0 ? (
+                <div className="space-y-2">
+                  {threadContext.steps.map((step) => (
+                    <div
+                      key={step.step_id}
+                      className="flex gap-2 items-start p-2 bg-white rounded border border-gray-200"
+                    >
+                      <div
+                        className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                          step.status === "done" ? "bg-green-500" : "bg-blue-500"
+                        }`}
+                      />
+                      <span className="text-xs text-gray-700 font-medium">
+                        {step.description}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-gray-400 italic">No steps detected.</div>
+              )}
+            </div>
+
+            {/* Attendees (Derived) */}
+            <div>
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+                Attendees
+              </h3>
+              {uniqueAttendees.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {uniqueAttendees.map((email) => (
+                    <span
+                      key={email}
+                      className="px-2 py-1 bg-white border border-gray-200 rounded-md text-xs text-gray-600 truncate max-w-[140px]"
+                      title={email}
+                    >
+                      {email}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-gray-400 italic">No attendees found.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex h-full font-sans text-gray-900 bg-gray-50">
@@ -963,6 +1216,9 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
           </div>
           </div>
         )}
+
+      {/* Event Detail Modal */}
+      {renderEventModal()}
     </div>
   );
 }
