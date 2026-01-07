@@ -30,7 +30,11 @@ import { FeedbackRequestCard } from "@/components/ui/FeedbackRequestCard";
 import { UpcomingMeetingCard } from "@/components/ui/UpcomingMeetingCard";
 import { CompactActivityRow } from "@/components/ui/CompactActivityRow";
 
-export default function CompanyDetailDashboard({ params }: any) {
+interface PageProps {
+  params: { id: string };
+}
+
+export default function CompanyDetailDashboard({ params }: PageProps) {
   const [activeTab, setActiveTab] = useState<"highlights" | "timeline" | "tasks" | "requests">(
     "highlights",
   );
