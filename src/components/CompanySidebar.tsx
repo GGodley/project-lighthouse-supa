@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Mail, Copy, RefreshCw, MoreVertical, Sparkles } from 'lucide-react';
 import { generateCompanyInsights } from '@/app/actions/generateCompanyInsights';
 import CompanyContactsList from './CompanyContactsList';
@@ -15,12 +15,6 @@ export default function CompanySidebar({ company }: CompanySidebarProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [logoError, setLogoError] = useState(false);
-
-  // Reset logo error when company changes
-  useEffect(() => {
-    setLogoError(false);
-  }, [company.domain_name]);
 
   const oneLiner = company.ai_insights?.one_liner || null;
 
@@ -51,18 +45,13 @@ export default function CompanySidebar({ company }: CompanySidebarProps) {
       <div className="space-y-4">
         {/* Avatar - Top Left */}
         <div className="flex items-start mb-2">
-          {company.domain_name && !logoError ? (
+          <div className="w-14 h-14 rounded-lg overflow-hidden shadow-sm border border-gray-100 bg-white flex items-center justify-center">
             <img
-              src={`https://logo.clearbit.com/${company.domain_name}`}
+              src={`https://ui-avatars.com/api/?name=${encodeURIComponent(company.company_name || company.domain_name || 'C')}&background=random&color=fff&size=128`}
               alt={`${company.company_name || company.domain_name} logo`}
-              className="w-14 h-14 rounded-lg object-contain border border-gray-100 shadow-sm"
-              onError={() => setLogoError(true)}
+              className="w-full h-full object-cover"
             />
-          ) : (
-            <div className="w-14 h-14 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xl font-bold shadow-sm">
-              {company.company_name?.charAt(0) || company.domain_name?.charAt(0) || "A"}
-            </div>
-          )}
+          </div>
         </div>
 
         {/* Name - Left Aligned */}
