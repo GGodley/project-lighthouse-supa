@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Mail, Copy, RefreshCw, MoreVertical, Sparkles } from 'lucide-react';
 import { generateCompanyInsights } from '@/app/actions/generateCompanyInsights';
 import CompanyContactsList from './CompanyContactsList';
@@ -16,6 +16,11 @@ export default function CompanySidebar({ company }: CompanySidebarProps) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
+
+  // Reset logo error when company changes
+  useEffect(() => {
+    setLogoError(false);
+  }, [company.domain_name]);
 
   const oneLiner = company.ai_insights?.one_liner || null;
 
