@@ -58,6 +58,8 @@ type Meeting = Database["public"]["Tables"]["meetings"]["Row"] & {
   location?: string | null;
 };
 
+type NextStep = Database["public"]["Tables"]["next_steps"]["Row"];
+
 export default function CompanyDetailDashboard({ params }: PageProps) {
   const [activeTab, setActiveTab] = useState<"highlights" | "timeline" | "tasks" | "requests">(
     "highlights",
@@ -71,6 +73,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const [error, setError] = useState<string | null>(null);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null);
+  const [nextStep, setNextStep] = useState<NextStep | null>(null);
   const supabase = useSupabase();
 
   useEffect(() => {
@@ -145,6 +148,26 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               } else if (meetingData) {
                 setNextMeeting(meetingData);
               }
+
+              // Fetch most recent next step for these customers
+              const { data: stepData, error: stepError } = await supabase
+                .from("next_steps")
+                .select(
+                  `
+                  *,
+                  next_step_assignments!inner(customer_id)
+                `
+                )
+                .in("next_step_assignments.customer_id", customerIds)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (stepError) {
+                console.error("Error fetching next step:", stepError);
+              } else if (stepData) {
+                setNextStep(stepData);
+              }
             }
           }
         }
@@ -204,6 +227,21 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
       return meeting.location;
     }
     return "Google Meet"; // Default fallback
+  };
+
+  // Helper function to map next step status to NextStepCard status
+  const mapStepStatus = (status: string | null | undefined): "todo" | "in_progress" | "done" => {
+    if (!status) return "todo";
+    const statusLower = status.toLowerCase();
+    if (statusLower === "in_progress" || statusLower === "in-progress") return "in_progress";
+    if (statusLower === "done" || statusLower === "completed") return "done";
+    return "todo";
+  };
+
+  // Helper function to format priority for contact name
+  const formatPriority = (priority: string | null | undefined): string => {
+    if (!priority) return "Priority: Medium";
+    return `Priority: ${priority.charAt(0).toUpperCase() + priority.slice(1)}`;
   };
 
   // Helper function to get color for customer avatar
@@ -301,15 +339,29 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
             platform={getMeetingPlatform(nextMeeting)}
           />
         </div>
-        <div className="h-full">
-          <NextStepCard
-            variant="compact"
-            status="todo"
-            companyName={company?.company_name || "Company"}
-            contactName={customers[0]?.full_name || "Contact"}
-            description="Release PDF order for finalized quantities."
-            className="h-full"
-          />
+        <div
+          className="h-full cursor-pointer"
+          onClick={() => setActiveTab("tasks")}
+        >
+          {nextStep ? (
+            <NextStepCard
+              variant="compact"
+              status={mapStepStatus(nextStep.status)}
+              companyName={nextStep.owner || company?.company_name || "Company"}
+              contactName={formatPriority(nextStep.priority)}
+              description={nextStep.description}
+              className="h-full"
+            />
+          ) : (
+            <NextStepCard
+              variant="compact"
+              status="todo"
+              companyName={company?.company_name || "Company"}
+              contactName="No active next steps"
+              description="No next steps have been created yet."
+              className="h-full"
+            />
+          )}
         </div>
         <div className="h-full">
           <FeedbackRequestCard
