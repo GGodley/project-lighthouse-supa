@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -24,21 +25,123 @@ import { TimelineCard } from "@/components/ui/TimelineCard";
 import { FeedbackRequestCard } from "@/components/ui/FeedbackRequestCard";
 import { UpcomingMeetingCard } from "@/components/ui/UpcomingMeetingCard";
 import { CompactActivityRow } from "@/components/ui/CompactActivityRow";
+import { useSupabase } from "@/components/SupabaseProvider";
 
 interface PageProps {
   params: Promise<{ id: string }>;
+}
+
+interface Company {
+  company_id: string;
+  company_name: string | null;
+  domain_name: string;
+  ai_insights: string | null;
+  last_interaction_at: string | null;
+}
+
+interface Customer {
+  customer_id: string;
+  full_name: string | null;
+  email: string | null;
+  job_title: string | null;
+}
+
+interface AIInsights {
+  one_liner?: string;
+  summary?: string;
+  linkedin_url?: string;
 }
 
 export default function CompanyDetailDashboard({ params }: PageProps) {
   const [activeTab, setActiveTab] = useState<"highlights" | "timeline" | "tasks" | "requests">(
     "highlights",
   );
+  const [company, setCompany] = useState<Company | null>(null);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [insights, setInsights] = useState<AIInsights>({});
+  const [loading, setLoading] = useState(true);
+  const supabase = useSupabase();
 
   useEffect(() => {
-    params.then((resolvedParams) => {
-      console.log("Viewing Company ID:", resolvedParams.id);
-    });
-  }, [params]);
+    const fetchData = async () => {
+      try {
+        const resolvedParams = await params;
+        const companyId = resolvedParams.id;
+
+        // Fetch company data
+        const { data: companyData, error: companyError } = await supabase
+          .from("companies")
+          .select("*")
+          .eq("company_id", companyId)
+          .single();
+
+        if (companyError) {
+          console.error("Error fetching company:", companyError);
+          setLoading(false);
+          return;
+        }
+
+        if (companyData) {
+          setCompany(companyData);
+
+          // Parse AI insights
+          let parsedInsights: AIInsights = {};
+          if (companyData.ai_insights) {
+            try {
+              parsedInsights =
+                typeof companyData.ai_insights === "string"
+                  ? JSON.parse(companyData.ai_insights)
+                  : companyData.ai_insights;
+            } catch (e) {
+              console.error("Error parsing AI insights:", e);
+            }
+          }
+          setInsights(parsedInsights);
+
+          // Fetch customers
+          const { data: customerData, error: customerError } = await supabase
+            .from("customers")
+            .select("customer_id, full_name, email, job_title")
+            .eq("company_id", companyId);
+
+          if (customerError) {
+            console.error("Error fetching customers:", customerError);
+          } else {
+            setCustomers(customerData || []);
+          }
+        }
+      } catch (err) {
+        console.error("Error in fetchData:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [params, supabase]);
+
+  // Helper function to get initials from name
+  const getInitials = (name: string | null): string => {
+    if (!name) return "?";
+    const parts = name.trim().split(" ");
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  // Helper function to get color for customer avatar
+  const getCustomerColor = (index: number): string => {
+    const colors = [
+      "bg-indigo-600",
+      "bg-orange-400",
+      "bg-blue-500",
+      "bg-gray-500",
+      "bg-purple-500",
+      "bg-green-500",
+    ];
+    return colors[index % colors.length];
+  };
 
   const renderDashboard = () => (
     <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
@@ -50,9 +153,8 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               <h3 className="font-bold text-gray-900 text-base">Summary</h3>
             </div>
             <p className="text-gray-700 text-[15px] leading-7 font-medium">
-              Adlerelectric is prioritizing the &ldquo;Fuse Order AIRev&rdquo; project. 
-              Recent signals indicate they are waiting for the finalized PDF order before confirming the Israel shipment. 
-              Engagement is high, with 3 meetings in the last month. The engineering team is currently reviewing the new voltage specs.
+              {insights.summary ||
+                "No summary available. AI insights are being generated."}
             </p>
           </div>
         </Card>
@@ -64,11 +166,24 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               <Linkedin className="w-6 h-6 text-[#0A66C2]" />
             </div>
             <div className="mt-auto mb-2">
-              <div className="text-lg font-bold text-gray-900 mb-1">Adlerelectric Inc.</div>
-              <button className="group flex items-center text-sm font-semibold text-gray-500 hover:text-[#0A66C2] transition-colors">
-                View Company Profile{" "}
-                <span className="ml-1 group-hover:translate-x-0.5 transition-transform">→</span>
-              </button>
+              <div className="text-lg font-bold text-gray-900 mb-1">
+                {company?.company_name || "Company"}
+              </div>
+              {insights.linkedin_url ? (
+                <a
+                  href={insights.linkedin_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-center text-sm font-semibold text-gray-500 hover:text-[#0A66C2] transition-colors"
+                >
+                  View Company Profile{" "}
+                  <span className="ml-1 group-hover:translate-x-0.5 transition-transform">
+                    →
+                  </span>
+                </a>
+              ) : (
+                <span className="text-sm text-gray-400">No LinkedIn profile</span>
+              )}
             </div>
           </div>
         </Card>
@@ -82,8 +197,8 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
           <NextStepCard
             variant="compact"
             status="todo"
-            companyName="Adlerelectric"
-            contactName="Steven Zhong"
+            companyName={company?.company_name || "Company"}
+            contactName={customers[0]?.full_name || "Contact"}
             description="Release PDF order for finalized quantities."
             className="h-full"
           />
@@ -200,15 +315,15 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <NextStepCard
           status="todo"
-          companyName="Adlerelectric"
-          contactName="Steven Zhong"
+          companyName={company?.company_name || "Company"}
+          contactName={customers[0]?.full_name || "Contact"}
           description="Release PDF order for the finalized fuse quantities."
           className="h-full"
         />
         <NextStepCard
           status="in_progress"
-          companyName="Adlerelectric"
-          contactName="Sarah Connor"
+          companyName={company?.company_name || "Company"}
+          contactName={customers[1]?.full_name || customers[0]?.full_name || "Contact"}
           description="Review contract."
           className="h-full"
         />
@@ -256,90 +371,142 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
       <div className="flex-1 flex w-full">
         <div className="hidden lg:block w-[360px] shrink-0 p-8 border-r border-transparent overflow-hidden">
           <div className="pt-[0px]">
-            <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm mb-6">
-              <div className="mb-4">
-                <div className="w-14 h-14 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xl font-bold mb-3 shadow-sm">
-                  A
-                </div>
-                <h1 className="text-2xl font-bold text-gray-900 leading-tight">
-                  Adlerelectric
-                </h1>
-                <p className="text-sm text-gray-500 font-medium">
-                  Global EV Fuse Manufacturer
-                </p>
-              </div>
-              <div className="space-y-3 mb-5">
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <MapPin className="w-4 h-4 text-gray-400" />
-                  <span>San Francisco, CA</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Globe className="w-4 h-4 text-gray-400" />
-                  <a href="#" className="hover:text-blue-600 hover:underline">
-                    adlerelectric.com
-                  </a>
+            {loading ? (
+              <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm mb-6">
+                <div className="animate-pulse">
+                  <div className="w-14 h-14 bg-gray-200 rounded-lg mb-3" />
+                  <div className="h-6 bg-gray-200 rounded w-3/4 mb-2" />
+                  <div className="h-4 bg-gray-200 rounded w-1/2" />
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  className="flex-1 bg-gray-50 border-gray-200 hover:bg-gray-100 text-gray-700 font-medium"
-                >
-                  <Copy className="w-4 h-4 mr-2" />
-                  Copy Info
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="bg-gray-50 border-gray-200 hover:bg-gray-100"
-                >
-                  <RefreshCw className="w-4 h-4 text-gray-600" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="bg-gray-50 border-gray-200 hover:bg-gray-100"
-                >
-                  <MoreHorizontal className="w-4 h-4 text-gray-600" />
-                </Button>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-3 px-1">
-                <h3 className="text-sm font-bold text-gray-900">Customers</h3>
-                <span className="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-0.5 rounded-full">
-                  3 Active
-                </span>
-              </div>
-              <div className="space-y-2">
-                {[
-                  { name: "Eric Sin", role: "Procurement Lead", initials: "ES", color: "bg-indigo-600" },
-                  { name: "Steven Zhong", role: "Engineering Head", initials: "SZ", color: "bg-orange-400" },
-                  { name: "Sarah Connor", role: "Operations", initials: "SC", color: "bg-blue-500" },
-                  { name: "Mike Ross", role: "Legal", initials: "MR", color: "bg-gray-500" },
-                ].map((contact) => (
-                  <div
-                    key={contact.initials}
-                    className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:shadow-sm transition-shadow cursor-pointer"
-                  >
-                    <div
-                      className={`w-8 h-8 rounded-full ${contact.color} flex items-center justify-center text-white text-xs font-bold shrink-0`}
-                    >
-                      {contact.initials}
+            ) : company ? (
+              <>
+                <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm mb-6">
+                  <div className="mb-4">
+                    <div className="relative w-14 h-14 mb-3">
+                      {company.domain_name ? (
+                        <>
+                          <img
+                            src={`https://logo.clearbit.com/${company.domain_name}`}
+                            alt={company.company_name || "Company logo"}
+                            className="w-14 h-14 rounded-lg object-contain"
+                            onError={(e) => {
+                              // Hide image and show fallback
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = "none";
+                              const fallback = target.nextElementSibling as HTMLElement;
+                              if (fallback) fallback.style.display = "flex";
+                            }}
+                          />
+                          <div
+                            className="w-14 h-14 bg-blue-600 rounded-lg hidden items-center justify-center text-white text-xl font-bold shadow-sm absolute top-0 left-0"
+                          >
+                            {getInitials(company.company_name)}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="w-14 h-14 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xl font-bold shadow-sm">
+                          {getInitials(company.company_name)}
+                        </div>
+                      )}
                     </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-gray-900 truncate">
-                        {contact.name}
-                      </div>
-                      <div className="text-xs text-gray-500 truncate">
-                        {contact.role}
-                      </div>
-                    </div>
+                    <h1 className="text-2xl font-bold text-gray-900 leading-tight">
+                      {company.company_name || "Unnamed Company"}
+                    </h1>
+                    {insights.one_liner ? (
+                      <p className="text-sm text-gray-500 font-medium mt-1">
+                        {insights.one_liner}
+                      </p>
+                    ) : null}
                   </div>
-                ))}
+                  <div className="space-y-3 mb-5">
+                    {company.domain_name && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Globe className="w-4 h-4 text-gray-400" />
+                        <a
+                          href={`https://${company.domain_name}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:text-blue-600 hover:underline"
+                        >
+                          {company.domain_name}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1 bg-gray-50 border-gray-200 hover:bg-gray-100 text-gray-700 font-medium"
+                    >
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copy Info
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="bg-gray-50 border-gray-200 hover:bg-gray-100"
+                    >
+                      <RefreshCw className="w-4 h-4 text-gray-600" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="bg-gray-50 border-gray-200 hover:bg-gray-100"
+                    >
+                      <MoreHorizontal className="w-4 h-4 text-gray-600" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-3 px-1">
+                    <h3 className="text-sm font-bold text-gray-900">Customers</h3>
+                    <span className="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-0.5 rounded-full">
+                      {customers.length} Active
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {customers.length > 0 ? (
+                      customers.map((customer, index) => {
+                        const initials = getInitials(customer.full_name);
+                        const color = getCustomerColor(index);
+                        return (
+                          <div
+                            key={customer.customer_id}
+                            className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:shadow-sm transition-shadow cursor-pointer"
+                          >
+                            <div
+                              className={`w-8 h-8 rounded-full ${color} flex items-center justify-center text-white text-xs font-bold shrink-0`}
+                            >
+                              {initials}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-gray-900 truncate">
+                                {customer.full_name || customer.email || "Unknown"}
+                              </div>
+                              {customer.job_title && (
+                                <div className="text-xs text-gray-500 truncate">
+                                  {customer.job_title}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="text-sm text-gray-500 text-center py-4">
+                        No customers found
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm mb-6">
+                <p className="text-sm text-gray-500">Company not found</p>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
