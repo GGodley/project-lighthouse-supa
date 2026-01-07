@@ -8,7 +8,6 @@ import {
   MoreHorizontal,
   Sparkles,
   Linkedin,
-  MapPin,
   Globe,
   Search,
   Filter,
@@ -54,6 +53,8 @@ interface AIInsights {
   linkedin_url?: string;
 }
 
+type Meeting = Database["public"]["Tables"]["meetings"]["Row"];
+
 export default function CompanyDetailDashboard({ params }: PageProps) {
   const [activeTab, setActiveTab] = useState<"highlights" | "timeline" | "tasks" | "requests">(
     "highlights",
@@ -66,7 +67,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
-  const [nextMeeting, setNextMeeting] = useState<any>(null);
+  const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null);
   const supabase = useSupabase();
 
   useEffect(() => {
@@ -119,7 +120,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
             setCustomers(customerData || []);
 
             // Fetch next upcoming meeting for these customers
-            const customerIds = (customerData || []).map((c: any) => c.customer_id);
+            const customerIds = (customerData || []).map((c: Customer) => c.customer_id);
 
             if (customerIds.length > 0) {
               const { data: meetingData, error: meetingError } = await supabase
@@ -176,13 +177,14 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         minute: "2-digit",
         hour12: true,
       });
-    } catch (e) {
+    } catch {
       return "Date TBD";
     }
   };
 
   // Helper function to get platform from meeting
-  const getMeetingPlatform = (meeting: any): string => {
+  const getMeetingPlatform = (meeting: Meeting | null): string => {
+    if (!meeting) return "Google Meet";
     if (meeting?.meeting_url) {
       const url = meeting.meeting_url.toLowerCase();
       if (url.includes("zoom")) return "Zoom";
@@ -227,7 +229,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
       
       if (!result.success) {
         setError(result.error || "Failed to generate insights");
-      } else {
+    } else {
         setSuccessMessage("Profile generation started! Please refresh the page in a few moments to see the results.");
       }
     } catch (err) {
