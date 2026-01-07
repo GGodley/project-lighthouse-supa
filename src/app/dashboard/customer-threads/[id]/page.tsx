@@ -26,6 +26,7 @@ import { FeedbackRequestCard } from "@/components/ui/FeedbackRequestCard";
 import { UpcomingMeetingCard } from "@/components/ui/UpcomingMeetingCard";
 import { CompactActivityRow } from "@/components/ui/CompactActivityRow";
 import { useSupabase } from "@/components/SupabaseProvider";
+import { generateCompanyInsights } from "@/app/actions/generateCompanyInsights";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -61,6 +62,9 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [insights, setInsights] = useState<AIInsights>({});
   const [loading, setLoading] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const supabase = useSupabase();
 
   useEffect(() => {
@@ -144,6 +148,30 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
       "bg-green-500",
     ];
     return colors[index % colors.length];
+  };
+
+  // Handle AI summary generation
+  const handleGenerateProfile = async () => {
+    if (!company) return;
+    
+    setIsGenerating(true);
+    setError(null);
+    setSuccessMessage(null);
+    
+    try {
+      const result = await generateCompanyInsights(company.company_id, company.domain_name);
+      
+      if (!result.success) {
+        setError(result.error || "Failed to generate insights");
+      } else {
+        setSuccessMessage("Profile generation started! Please refresh the page in a few moments to see the results.");
+      }
+    } catch (err) {
+      console.error("Error generating insights:", err);
+      setError("An unexpected error occurred");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const renderDashboard = () => (
@@ -437,28 +465,48 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      className="flex-1 bg-gray-50 border-gray-200 hover:bg-gray-100 text-gray-700 font-medium"
-                    >
-                      <Copy className="w-4 h-4 mr-2" />
-                      Copy Info
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="bg-gray-50 border-gray-200 hover:bg-gray-100"
-                    >
-                      <RefreshCw className="w-4 h-4 text-gray-600" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="bg-gray-50 border-gray-200 hover:bg-gray-100"
-                    >
-                      <MoreHorizontal className="w-4 h-4 text-gray-600" />
-                    </Button>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      {!insights.one_liner ? (
+                        <Button
+                          variant="outline"
+                          onClick={handleGenerateProfile}
+                          disabled={isGenerating}
+                          className="flex-1 bg-gray-50 border-gray-200 hover:bg-gray-100 text-gray-700 font-medium disabled:opacity-50"
+                        >
+                          <Sparkles className="w-4 h-4 mr-2" />
+                          {isGenerating ? "Generating..." : "Generate Profile"}
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          className="flex-1 bg-gray-50 border-gray-200 hover:bg-gray-100 text-gray-700 font-medium"
+                        >
+                          <Copy className="w-4 h-4 mr-2" />
+                          Copy Info
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="bg-gray-50 border-gray-200 hover:bg-gray-100"
+                      >
+                        <RefreshCw className="w-4 h-4 text-gray-600" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="bg-gray-50 border-gray-200 hover:bg-gray-100"
+                      >
+                        <MoreHorizontal className="w-4 h-4 text-gray-600" />
+                      </Button>
+                    </div>
+                    {successMessage && (
+                      <p className="text-xs text-green-600 text-left">{successMessage}</p>
+                    )}
+                    {error && (
+                      <p className="text-xs text-red-500 text-left">{error}</p>
+                    )}
                   </div>
                 </div>
 
