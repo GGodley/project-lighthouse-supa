@@ -215,7 +215,20 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
 
               // Fetch timeline events (threads and meetings)
               // Query 1: Fetch threads via thread_company_link
-              const { data: threadLinkData, error: threadLinkError } = await supabase
+              // Note: thread_company_link is not in generated types, so we use type assertion
+              type UntypedSupabase = {
+                from: (table: string) => {
+                  select: (columns: string) => {
+                    eq: (column: string, value: string) => Promise<{
+                      data: ThreadLinkResponse[] | null;
+                      error: { message: string } | null;
+                    }>;
+                  };
+                };
+              };
+              const untypedSupabase = supabase as unknown as UntypedSupabase;
+              
+              const { data: threadLinkData, error: threadLinkError } = await untypedSupabase
                 .from("thread_company_link")
                 .select(
                   `
