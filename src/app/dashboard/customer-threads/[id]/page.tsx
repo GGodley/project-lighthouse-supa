@@ -297,7 +297,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         <div className="h-full">
           <UpcomingMeetingCard
             title={nextMeeting?.title || "No upcoming meetings"}
-            date={formatMeetingDate(nextMeeting?.start_time)}
+            date={formatMeetingDate(nextMeeting?.start_time ?? null)}
             platform={getMeetingPlatform(nextMeeting)}
           />
         </div>
