@@ -37,7 +37,7 @@ interface PageProps {
 export default function CompanyDetailDashboard({ params }: PageProps) {
   const [activeTab, setActiveTab] = useState("highlights");
 
-  // For now, we just log the ID to prove we have it
+  // Temporary: prove we have the dynamic route param
   console.log("Viewing Company ID:", params.companyId);
 
   // --- VIEW: DASHBOARD (HIGHLIGHTS) ---
@@ -393,53 +393,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                     className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:shadow-sm transition-shadow cursor-pointer"
                   >
                     <div
-                      className={`w-8 h-8 rounded-full ${contact.color} flex items-center justify-center text-white text-xs font-bold shrink-0`}
-                    >
-                      {contact.initials}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-gray-900 truncate">
-                        {contact.name}
-                      </div>
-                      <div className="text-xs text-gray-500 truncate">
-                        {contact.role}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <main className="flex-1 overflow-y-auto p-8 h-full">
-          <div className="space-y-6 max-w-5xl">
-            <div className="flex gap-8 border-b border-gray-200 mb-6">
-              {["Highlights", "Timeline", "Tasks", "Requests"].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab.toLowerCase())}
-                  className={`pb-3 text-sm font-bold transition-colors border-b-2 ${
-                    activeTab === tab.toLowerCase()
-                      ? "border-gray-900 text-gray-900"
-                      : "border-transparent text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-
-            {activeTab === "highlights" ? renderDashboard() : null}
-            {activeTab === "timeline" ? renderTimeline() : null}
-            {activeTab === "tasks" ? renderTasks() : null}
-            {activeTab === "requests" ? renderRequests() : null}
-          </div>
-        </main>
-      </div>
-    </div>
-  );
-}
+                      className={`w-8 h-8 rounded-full ${contact.color} flex items
 <<<<<<< HEAD
 'use client';
 
