@@ -66,6 +66,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
+  const [nextMeeting, setNextMeeting] = useState<any>(null);
   const supabase = useSupabase();
 
   useEffect(() => {
@@ -116,6 +117,31 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
             console.error("Error fetching customers:", customerError);
           } else {
             setCustomers(customerData || []);
+
+            // Fetch next upcoming meeting for these customers
+            const customerIds = (customerData || []).map((c: any) => c.customer_id);
+
+            if (customerIds.length > 0) {
+              const { data: meetingData, error: meetingError } = await supabase
+                .from("meetings")
+                .select(
+                  `
+                  *,
+                  meeting_attendees!inner(customer_id)
+                `
+                )
+                .in("meeting_attendees.customer_id", customerIds)
+                .gt("start_time", new Date().toISOString())
+                .order("start_time", { ascending: true })
+                .limit(1)
+                .maybeSingle();
+
+              if (meetingError) {
+                console.error("Error fetching next meeting:", meetingError);
+              } else if (meetingData) {
+                setNextMeeting(meetingData);
+              }
+            }
           }
         }
       } catch (err) {
@@ -136,6 +162,43 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
       return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
     }
     return name.substring(0, 2).toUpperCase();
+  };
+
+  // Helper function to format meeting date
+  const formatMeetingDate = (dateString: string | null): string => {
+    if (!dateString) return "Date TBD";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch (e) {
+      return "Date TBD";
+    }
+  };
+
+  // Helper function to get platform from meeting
+  const getMeetingPlatform = (meeting: any): string => {
+    if (meeting?.meeting_url) {
+      const url = meeting.meeting_url.toLowerCase();
+      if (url.includes("zoom")) return "Zoom";
+      if (url.includes("teams") || url.includes("microsoft")) return "Microsoft Teams";
+      if (url.includes("meet") || url.includes("google")) return "Google Meet";
+      return "Video Call";
+    }
+    if (meeting?.hangout_link) return "Google Meet";
+    if (meeting?.location) {
+      const location = meeting.location.toLowerCase();
+      if (location.includes("zoom")) return "Zoom";
+      if (location.includes("teams")) return "Microsoft Teams";
+      if (location.includes("meet")) return "Google Meet";
+      return meeting.location;
+    }
+    return "Google Meet"; // Default fallback
   };
 
   // Helper function to get color for customer avatar
@@ -227,7 +290,11 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-fr">
         <div className="h-full">
-          <UpcomingMeetingCard title="Demo Call" date="Nov 29, 10:40 AM" platform="Google Meet" />
+          <UpcomingMeetingCard
+            title={nextMeeting?.title || "No upcoming meetings"}
+            date={formatMeetingDate(nextMeeting?.start_time)}
+            platform={getMeetingPlatform(nextMeeting)}
+          />
         </div>
         <div className="h-full">
           <NextStepCard
