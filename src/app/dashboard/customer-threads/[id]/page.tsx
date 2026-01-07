@@ -53,7 +53,10 @@ interface AIInsights {
   linkedin_url?: string;
 }
 
-type Meeting = Database["public"]["Tables"]["meetings"]["Row"];
+// Extend Meeting type to include location field (exists in DB but not in generated types)
+type Meeting = Database["public"]["Tables"]["meetings"]["Row"] & {
+  location?: string | null;
+};
 
 export default function CompanyDetailDashboard({ params }: PageProps) {
   const [activeTab, setActiveTab] = useState<"highlights" | "timeline" | "tasks" | "requests">(
