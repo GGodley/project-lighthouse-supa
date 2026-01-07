@@ -74,6 +74,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null);
   const [nextStep, setNextStep] = useState<NextStep | null>(null);
+  const [allTasks, setAllTasks] = useState<NextStep[]>([]);
   const supabase = useSupabase();
 
   useEffect(() => {
@@ -149,7 +150,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                 setNextMeeting(meetingData);
               }
 
-              // Fetch most recent next step for these customers
+              // Fetch most recent next step for these customers (for widget)
               const { data: stepData, error: stepError } = await supabase
                 .from("next_steps")
                 .select(
@@ -167,6 +168,24 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                 console.error("Error fetching next step:", stepError);
               } else if (stepData) {
                 setNextStep(stepData);
+              }
+
+              // Fetch ALL tasks for the Tasks Tab
+              const { data: tasksData, error: tasksError } = await supabase
+                .from("next_steps")
+                .select(
+                  `
+                  *,
+                  next_step_assignments!inner(customer_id)
+                `
+                )
+                .in("next_step_assignments.customer_id", customerIds)
+                .order("created_at", { ascending: false });
+
+              if (tasksError) {
+                console.error("Error fetching tasks:", tasksError);
+              } else {
+                setAllTasks(tasksData || []);
               }
             }
           }
@@ -473,20 +492,22 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         </Button>
       </div>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <NextStepCard
-          status="todo"
-          companyName={company?.company_name || "Company"}
-          contactName={customers[0]?.full_name || "Contact"}
-          description="Release PDF order for the finalized fuse quantities."
-          className="h-full"
-        />
-        <NextStepCard
-          status="in_progress"
-          companyName={company?.company_name || "Company"}
-          contactName={customers[1]?.full_name || customers[0]?.full_name || "Contact"}
-          description="Review contract."
-          className="h-full"
-        />
+        {allTasks.length > 0 ? (
+          allTasks.map((task) => (
+            <NextStepCard
+              key={task.step_id}
+              status={mapStepStatus(task.status)}
+              companyName={task.owner || company?.company_name || "Unknown Owner"}
+              contactName={formatPriority(task.priority)}
+              description={task.description}
+              className="h-full"
+            />
+          ))
+        ) : (
+          <div className="col-span-full text-center py-12 text-gray-500 bg-white rounded-xl border border-dashed border-gray-300">
+            No tasks found for this company.
+          </div>
+        )}
       </div>
     </div>
   );
