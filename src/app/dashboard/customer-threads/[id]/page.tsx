@@ -30,17 +30,18 @@ import { FeedbackRequestCard } from "@/components/ui/FeedbackRequestCard";
 import { UpcomingMeetingCard } from "@/components/ui/UpcomingMeetingCard";
 import { CompactActivityRow } from "@/components/ui/CompactActivityRow";
 
-interface PageProps {
-  params: { companyId: string };
-}
-
-export default function CompanyDetailDashboard({ params }: PageProps) {
+export default function CompanyDetailDashboard({
+  params,
+}: {
+  params: { id: string };
+}) {
   const [activeTab, setActiveTab] = useState<"highlights" | "timeline" | "tasks" | "requests">(
     "highlights",
   );
 
   // Temporary: just to verify param wiring
-  console.log("Viewing Company ID:", params.companyId);
+  const companyId = params.id;
+  console.log("Viewing Company ID:", companyId);
 
   const renderDashboard = () => (
     <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
