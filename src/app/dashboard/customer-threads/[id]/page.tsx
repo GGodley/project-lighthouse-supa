@@ -106,10 +106,12 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
     type: "thread" | "meeting";
   } | null>(null);
   const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
+  const [meetingDetails, setMeetingDetails] = useState<Meeting | null>(null);
   const [threadContext, setThreadContext] = useState<{
     steps: NextStep[];
     requests: unknown[];
-  }>({ steps: [], requests: [] });
+    attendees: string[];
+  }>({ steps: [], requests: [], attendees: [] });
   const supabase = useSupabase();
 
   useEffect(() => {
@@ -325,66 +327,135 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
     fetchData();
   }, [params, supabase]);
 
-  // Fetch thread details when an event is selected
+  // Fetch event details when an event is selected
   useEffect(() => {
-    if (!selectedEvent || selectedEvent.type !== "thread") {
+    if (!selectedEvent) {
       setThreadMessages([]);
-      setThreadContext({ steps: [], requests: [] });
+      setMeetingDetails(null);
+      setThreadContext({ steps: [], requests: [], attendees: [] });
       return;
     }
 
-    const fetchThreadDetails = async () => {
-      // Extract thread_id from selectedEvent.id (format: "thread-{thread_id}")
-      const threadId = selectedEvent.id.replace("thread-", "");
+    const fetchDetails = async () => {
+      // Reset state
+      setThreadMessages([]);
+      setMeetingDetails(null);
+      setThreadContext({ steps: [], requests: [], attendees: [] });
 
-      // 1. Fetch Messages
-      // Note: thread_messages is not in generated types, so we use type assertion
-      type UntypedSupabaseMessages = {
-        from: (table: string) => {
-          select: (columns: string) => {
-            eq: (column: string, value: string) => {
-              order: (
-                column: string,
-                options: { ascending: boolean }
-              ) => Promise<{
-                data: ThreadMessage[] | null;
-                error: { message: string } | null;
-              }>;
+      // === SCENARIO A: THREAD ===
+      if (selectedEvent.type === "thread") {
+        // Extract thread_id from selectedEvent.id (format: "thread-{thread_id}")
+        const threadId = selectedEvent.id.replace("thread-", "");
+
+        // 1. Fetch Messages
+        // Note: thread_messages is not in generated types, so we use type assertion
+        type UntypedSupabaseMessages = {
+          from: (table: string) => {
+            select: (columns: string) => {
+              eq: (column: string, value: string) => {
+                order: (
+                  column: string,
+                  options: { ascending: boolean }
+                ) => Promise<{
+                  data: ThreadMessage[] | null;
+                  error: { message: string } | null;
+                }>;
+              };
             };
           };
         };
-      };
-      const untypedSupabaseMessages = supabase as unknown as UntypedSupabaseMessages;
+        const untypedSupabaseMessages = supabase as unknown as UntypedSupabaseMessages;
 
-      const { data: msgs, error: msgsError } = await untypedSupabaseMessages
-        .from("thread_messages")
-        .select("*")
-        .eq("thread_id", threadId)
-        .order("sent_date", { ascending: true });
+        const { data: msgs, error: msgsError } = await untypedSupabaseMessages
+          .from("thread_messages")
+          .select("*")
+          .eq("thread_id", threadId)
+          .order("sent_date", { ascending: true });
 
-      if (msgsError) {
-        console.error("Error fetching thread messages:", msgsError);
-      } else {
-        setThreadMessages(msgs || []);
+        if (msgsError) {
+          console.error("Error fetching thread messages:", msgsError);
+        } else {
+          setThreadMessages(msgs || []);
+        }
+
+        // 2. Fetch Linked Context (Next Steps)
+        const { data: steps, error: stepsError } = await supabase
+          .from("next_steps")
+          .select("*")
+          .eq("thread_id", threadId);
+
+        if (stepsError) {
+          console.error("Error fetching thread next steps:", stepsError);
+        } else {
+          setThreadContext((prev) => ({
+            ...prev,
+            steps: (steps as NextStep[]) || [],
+          }));
+        }
       }
+      // === SCENARIO B: MEETING ===
+      else if (selectedEvent.type === "meeting") {
+        // Extract meeting_id from selectedEvent.id (format: "meeting-{meeting_id}")
+        const meetingId = selectedEvent.id.replace("meeting-", "");
 
-      // 2. Fetch Linked Context (Next Steps)
-      const { data: steps, error: stepsError } = await supabase
-        .from("next_steps")
-        .select("*")
-        .eq("thread_id", threadId);
+        // 1. Fetch Meeting Details
+        const { data: meeting, error: meetingError } = await supabase
+          .from("meetings")
+          .select("*")
+          .eq("id", parseInt(meetingId, 10))
+          .single();
 
-      if (stepsError) {
-        console.error("Error fetching thread next steps:", stepsError);
-      } else {
-        setThreadContext((prev) => ({
-          ...prev,
-          steps: (steps as NextStep[]) || [],
-        }));
+        if (meetingError) {
+          console.error("Error fetching meeting details:", meetingError);
+        } else {
+          setMeetingDetails(meeting as Meeting);
+        }
+
+        // 2. Fetch Attendees (via meeting_attendees -> customers)
+        const { data: attendeesData, error: attendeesError } = await supabase
+          .from("meeting_attendees")
+          .select(
+            `
+            customer:customers!inner (
+              first_name,
+              last_name,
+              email
+            )
+          `
+          )
+          .eq("meeting_id", parseInt(meetingId, 10));
+
+        if (attendeesError) {
+          console.error("Error fetching meeting attendees:", attendeesError);
+        } else {
+          const attendeeList =
+            attendeesData
+              ?.map((a: { customer: { email: string | null } | null }) => a.customer?.email)
+              .filter((email): email is string => email !== null && email !== undefined) || [];
+          setThreadContext((prev) => ({
+            ...prev,
+            attendees: attendeeList,
+          }));
+        }
+
+        // 3. Fetch Context (Steps linked to Meeting)
+        const { data: steps, error: stepsError } = await supabase
+          .from("next_steps")
+          .select("*")
+          .eq("meeting_id", parseInt(meetingId, 10));
+
+        if (stepsError) {
+          console.error("Error fetching meeting next steps:", stepsError);
+        } else {
+          setThreadContext((prev) => ({
+            ...prev,
+            steps: (steps as NextStep[]) || [],
+          }));
+        }
       }
     };
 
-    fetchThreadDetails();
+    fetchDetails();
   }, [selectedEvent, supabase]);
 
   // Helper function to get initials from name
@@ -401,7 +472,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const formatMeetingDate = (dateString: string | null): string => {
     if (!dateString) return "Date TBD";
     try {
-      const date = new Date(dateString);
+    const date = new Date(dateString);
       return date.toLocaleString("en-US", {
         month: "short",
         day: "numeric",
@@ -712,14 +783,9 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                 </span>
                 <div
                   onClick={() =>
-                    event.type === "thread" &&
                     setSelectedEvent({ id: event.id, type: event.type })
                   }
-                  className={`${
-                    event.type === "thread"
-                      ? "cursor-pointer hover:bg-gray-50 rounded-lg transition-colors p-2 -ml-2"
-                      : ""
-                  }`}
+                  className="cursor-pointer hover:bg-gray-50 rounded-lg transition-colors p-2 -ml-2"
                 >
                   <TimelineCard
                     type={event.type}
@@ -734,7 +800,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         ) : (
           <div className="text-center py-12 text-gray-500 bg-white rounded-xl border border-dashed border-gray-300">
             No interaction history found
-          </div>
+            </div>
         )}
       </div>
     </div>
@@ -779,7 +845,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const renderRequests = () => (
     <div className="space-y-6 pb-12 animate-in slide-in-from-right-8 fade-in duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
-        <div>
+            <div>
           <h2 className="text-xl font-bold text-gray-900">Requests & Feedback</h2>
           <p className="text-sm text-gray-500 mt-1">Track feature requests.</p>
         </div>
@@ -813,23 +879,26 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
 
   // Render Event Detail Modal
   const renderEventModal = () => {
-    if (!selectedEvent || selectedEvent.type !== "thread") return null;
+    if (!selectedEvent) return null;
 
     const event = timelineEvents.find((e) => e.id === selectedEvent.id);
     if (!event) return null;
 
-    // Get unique attendees from messages
-    const uniqueAttendees = Array.from(
-      new Set(
-        threadMessages
-          .flatMap((msg) => [
-            msg.from_address,
-            ...(msg.to_addresses || []),
-            ...(msg.cc_addresses || []),
-          ])
-          .filter((email): email is string => email !== null && email !== undefined)
-      )
-    );
+    // Get unique attendees - for threads from messages, for meetings from context
+    const uniqueAttendees =
+      selectedEvent.type === "thread"
+        ? Array.from(
+            new Set(
+              threadMessages
+                .flatMap((msg) => [
+                  msg.from_address,
+                  ...(msg.to_addresses || []),
+                  ...(msg.cc_addresses || []),
+                ])
+                .filter((email): email is string => email !== null && email !== undefined)
+            )
+          )
+        : threadContext.attendees;
 
     return (
       <div
@@ -840,11 +909,11 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
           className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[85vh] flex overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* LEFT: Conversation */}
+          {/* LEFT: Content (Thread Messages or Meeting Details) */}
           <div className="flex-1 flex flex-col min-w-0 border-r border-gray-200">
             <div className="p-6 border-b border-gray-100 flex justify-between items-start">
               <h2 className="text-xl font-bold text-gray-900 truncate pr-4">
-                {event.title || "Conversation"}
+                {event.title || (selectedEvent.type === "thread" ? "Conversation" : "Meeting")}
               </h2>
               <Button
                 variant="ghost"
@@ -870,45 +939,95 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50/50">
-              {threadMessages.length > 0 ? (
-                threadMessages.map((msg) => {
-                  const senderInitial = msg.from_address
-                    ? msg.from_address.charAt(0).toUpperCase()
-                    : "?";
-                  return (
-                    <div key={msg.message_id} className="flex gap-4 group">
-                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold shrink-0 text-sm">
-                        {senderInitial}
+              {selectedEvent.type === "thread" ? (
+                // Thread: Show Message History
+                threadMessages.length > 0 ? (
+                  threadMessages.map((msg) => {
+                    const senderInitial = msg.from_address
+                      ? msg.from_address.charAt(0).toUpperCase()
+                      : "?";
+                    return (
+                      <div key={msg.message_id} className="flex gap-4 group">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold shrink-0 text-sm">
+                          {senderInitial}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-baseline justify-between mb-1">
+                            <span className="font-semibold text-gray-900">
+                              {msg.from_address || "Unknown"}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {msg.sent_date
+                                ? new Date(msg.sent_date).toLocaleString()
+                                : "Date unknown"}
+                            </span>
+                          </div>
+                          <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-sm text-gray-800 prose max-w-none">
+                            {msg.body_html ? (
+                              <div
+                                dangerouslySetInnerHTML={{ __html: msg.body_html }}
+                                className="prose prose-sm max-w-none"
+                              />
+                            ) : (
+                              <div className="whitespace-pre-wrap">{msg.body_text || "No content"}</div>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-baseline justify-between mb-1">
-                          <span className="font-semibold text-gray-900">
-                            {msg.from_address || "Unknown"}
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-12 text-gray-500">Loading messages...</div>
+                )
+              ) : (
+                // Meeting: Show Meeting Details
+                meetingDetails ? (
+                  <div className="space-y-6">
+                    <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                      <h3 className="text-lg font-bold text-gray-900 mb-4">Meeting Details</h3>
+                      <div className="space-y-4">
+                        <div>
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Date & Time
                           </span>
-                          <span className="text-xs text-gray-500">
-                            {msg.sent_date
-                              ? new Date(msg.sent_date).toLocaleString()
-                              : "Date unknown"}
+                          <p className="text-base text-gray-900 mt-1">
+                            {meetingDetails.start_time
+                              ? formatMeetingDate(meetingDetails.start_time)
+                              : "Not specified"}
+                          </p>
+                        </div>
+                        {meetingDetails.location && (
+                          <div>
+                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                              Location
+                            </span>
+                            <p className="text-base text-gray-900 mt-1">{meetingDetails.location}</p>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Platform
                           </span>
+                          <p className="text-base text-gray-900 mt-1">
+                            {getMeetingPlatform(meetingDetails)}
+                          </p>
                         </div>
-                        <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-sm text-gray-800 prose max-w-none">
-                          {msg.body_html ? (
-                            <div
-                              dangerouslySetInnerHTML={{ __html: msg.body_html }}
-                              className="prose prose-sm max-w-none"
-                            />
-                          ) : (
-                            <div className="whitespace-pre-wrap">{msg.body_text || "No content"}</div>
-                          )}
-                        </div>
+                        {meetingDetails.description && (
+                          <div>
+                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                              Description
+                            </span>
+                            <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">
+                              {meetingDetails.description}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  );
-                })
-              ) : (
-                <div className="text-center py-12 text-gray-500">
-                  Loading messages...
-                </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-gray-500">Loading meeting details...</div>
+                )
               )}
             </div>
           </div>
@@ -925,26 +1044,30 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               </p>
             </div>
 
-            {/* Next Steps */}
+            {/* Next Steps - Using NextStepCard Components */}
             <div>
               <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
                 Extracted Steps
               </h3>
               {threadContext.steps.length > 0 ? (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {threadContext.steps.map((step) => (
                     <div
                       key={step.step_id}
-                      className="flex gap-2 items-start p-2 bg-white rounded border border-gray-200"
+                      onClick={() => {
+                        setSelectedEvent(null); // Close Modal
+                        setActiveTab("tasks"); // Switch Tab
+                      }}
+                      className="cursor-pointer"
                     >
-                      <div
-                        className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                          step.status === "done" ? "bg-green-500" : "bg-blue-500"
-                        }`}
+                      <NextStepCard
+                        variant="compact"
+                        status={mapStepStatus(step.status)}
+                        companyName={step.owner || company?.company_name || "Owner"}
+                        contactName="Linked Task"
+                        description={step.description}
+                        className="mb-0 hover:ring-2 hover:ring-blue-500 transition-all"
                       />
-                      <span className="text-xs text-gray-700 font-medium">
-                        {step.description}
-                      </span>
                     </div>
                   ))}
                 </div>
@@ -953,7 +1076,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               )}
             </div>
 
-            {/* Attendees (Derived) */}
+            {/* Attendees */}
             <div>
               <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
                 Attendees
