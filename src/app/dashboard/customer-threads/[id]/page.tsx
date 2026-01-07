@@ -263,6 +263,43 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
     return `Priority: ${priority.charAt(0).toUpperCase() + priority.slice(1)}`;
   };
 
+  // Handler to update task status in database
+  const handleStatusUpdate = async (
+    stepId: string,
+    newStatus: "todo" | "in_progress" | "done"
+  ) => {
+    // Store previous state for potential revert
+    const previousTasks = [...allTasks];
+    const previousNextStep = nextStep;
+
+    // 1. Optimistic Update (Update UI immediately)
+    setAllTasks((prevTasks) =>
+      prevTasks.map((task) =>
+        task.step_id === stepId ? { ...task, status: newStatus } : task
+      )
+    );
+
+    // Also update the widget if it's the same step
+    setNextStep((prevStep) =>
+      prevStep && prevStep.step_id === stepId
+        ? { ...prevStep, status: newStatus }
+        : prevStep
+    );
+
+    // 2. Database Update
+    const { error } = await supabase
+      .from("next_steps")
+      .update({ status: newStatus })
+      .eq("step_id", stepId);
+
+    if (error) {
+      console.error("Error updating status:", error);
+      // Revert optimistic update on error
+      setAllTasks(previousTasks);
+      setNextStep(previousNextStep);
+    }
+  };
+
   // Helper function to get color for customer avatar
   const getCustomerColor = (index: number): string => {
     const colors = [
@@ -372,7 +409,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               className="h-full"
             />
           ) : (
-            <NextStepCard
+          <NextStepCard
               variant="compact"
               status="todo"
               companyName={company?.company_name || "Company"}
@@ -501,6 +538,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               contactName={formatPriority(task.priority)}
               description={task.description}
               className="h-full"
+              onStatusChange={(newStatus) => handleStatusUpdate(task.step_id, newStatus)}
             />
           ))
         ) : (
