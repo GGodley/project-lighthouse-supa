@@ -439,10 +439,11 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         }
 
         // 3. Fetch Context (Steps linked to Meeting)
+        // Note: meeting_id in next_steps is a string, but meetings.id is a number
         const { data: steps, error: stepsError } = await supabase
           .from("next_steps")
           .select("*")
-          .eq("meeting_id", parseInt(meetingId, 10));
+          .eq("meeting_id", meetingId);
 
         if (stepsError) {
           console.error("Error fetching meeting next steps:", stepsError);
