@@ -2,7 +2,7 @@
 import React from "react";
 import { Calendar } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 
 interface UpcomingMeetingCardProps {
   title: string;

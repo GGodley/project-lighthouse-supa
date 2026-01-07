@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Mail, Video } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 
 export type TimelineItemType = 'thread' | 'meeting';
 
