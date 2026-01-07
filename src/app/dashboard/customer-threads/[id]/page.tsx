@@ -1,17 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Link from "next/link";
 import {
   Copy,
   RefreshCw,
   MoreHorizontal,
   Sparkles,
   Linkedin,
-  LayoutDashboard,
-  Users,
-  Calendar as CalendarIcon,
-  Settings,
   MapPin,
   Globe,
   Search,
@@ -57,10 +52,9 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               <h3 className="font-bold text-gray-900 text-base">Summary</h3>
             </div>
             <p className="text-gray-700 text-[15px] leading-7 font-medium">
-              Adlerelectric is prioritizing the “Fuse Order AIRev” project. Recent signals indicate
-              they are waiting for the finalized PDF order before confirming the Israel shipment.
-              Engagement is high, with 3 meetings in the last month. The engineering team is
-              currently reviewing the new voltage specs to ensure compliance.
+              Adlerelectric is prioritizing the "Fuse Order AIRev" project. 
+              Recent signals indicate they are waiting for the finalized PDF order before confirming the Israel shipment. 
+              Engagement is high, with 3 meetings in the last month. The engineering team is currently reviewing the new voltage specs.
             </p>
           </div>
         </Card>
@@ -260,34 +254,10 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   );
 
   return (
-    <div className="h-screen bg-gray-50 font-sans text-gray-900 flex overflow-hidden">
-      <aside className="w-64 bg-white border-r border-gray-200 hidden xl:flex flex-col z-20 shrink-0">
-        <div className="p-6 flex items-center gap-2">
-          <div className="w-6 h-6 bg-blue-600 rounded-lg" />
-          <span className="font-bold text-lg tracking-tight">Lighthouse</span>
-        </div>
-        <nav className="flex-1 px-4 space-y-1">
-          {[
-            { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-            { name: "Customers", href: "/dashboard/customer-threads", icon: Users },
-            { name: "Calendar", href: "/dashboard/calendar", icon: CalendarIcon },
-            { name: "Settings", href: "/settings", icon: Settings },
-          ].map((item) => (
-            <Link
-              key={item.name}
-              href={item.href}
-              className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-            >
-              <item.icon className="w-4 h-4" />
-              {item.name}
-            </Link>
-          ))}
-        </nav>
-      </aside>
-
-      <div className="flex-1 flex max-w-7xl mx-auto w-full">
+    <div className="flex h-full font-sans text-gray-900 bg-gray-50">
+      <div className="flex-1 flex w-full">
         <div className="hidden lg:block w-[360px] shrink-0 p-8 border-r border-transparent overflow-hidden">
-          <div className="pt-[52px]">
+          <div className="pt-[0px]">
             <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm mb-6">
               <div className="mb-4">
                 <div className="w-14 h-14 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xl font-bold mb-3 shadow-sm">
