@@ -65,6 +65,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const supabase = useSupabase();
 
   useEffect(() => {
@@ -177,13 +178,17 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const renderDashboard = () => (
     <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-fr">
-        <Card noPadding className="md:col-span-2 relative flex flex-col">
+        <Card
+          noPadding
+          className="md:col-span-2 relative flex flex-col cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => setIsSummaryOpen(true)}
+        >
           <div className="p-5 h-full flex flex-col">
             <div className="flex items-center gap-2.5 mb-3">
               <Sparkles className="w-5 h-5 text-yellow-500 fill-yellow-500/20" />
               <h3 className="font-bold text-gray-900 text-base">Summary</h3>
             </div>
-            <p className="text-gray-700 text-[15px] leading-7 font-medium">
+            <p className="text-gray-700 text-[15px] leading-7 font-medium line-clamp-4">
               {insights.summary ||
                 "No summary available. AI insights are being generated."}
             </p>
@@ -584,6 +589,55 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
           </div>
         </main>
       </div>
+
+      {/* Summary Modal */}
+      {isSummaryOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => setIsSummaryOpen(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white z-10">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-yellow-500" />
+                <h3 className="text-lg font-bold text-gray-900">AI Summary</h3>
+              </div>
+              <button
+                onClick={() => setIsSummaryOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <span className="sr-only">Close</span>
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-gray-700 text-base leading-relaxed whitespace-pre-wrap">
+                {insights?.summary || "No summary available."}
+              </p>
+            </div>
+            <div className="p-6 border-t border-gray-100 bg-gray-50 rounded-b-xl flex justify-end">
+              <Button variant="outline" onClick={() => setIsSummaryOpen(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
+          </div>
+        )}
     </div>
   );
 }
