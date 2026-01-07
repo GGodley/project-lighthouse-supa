@@ -412,7 +412,29 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         }
 
         // 2. Fetch Attendees (via meeting_attendees -> customers)
-        const { data: attendeesData, error: attendeesError } = await supabase
+        // Note: meeting_attendees is not in generated types, so we use type assertion
+        type UntypedSupabaseAttendees = {
+          from: (table: string) => {
+            select: (columns: string) => {
+              eq: (
+                column: string,
+                value: number
+              ) => Promise<{
+                data: Array<{
+                  customer: {
+                    first_name: string | null;
+                    last_name: string | null;
+                    email: string | null;
+                  } | null;
+                }> | null;
+                error: { message: string } | null;
+              }>;
+            };
+          };
+        };
+        const untypedSupabaseAttendees = supabase as unknown as UntypedSupabaseAttendees;
+
+        const { data: attendeesData, error: attendeesError } = await untypedSupabaseAttendees
           .from("meeting_attendees")
           .select(
             `
@@ -1071,11 +1093,11 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                       />
                     </div>
                   ))}
-                </div>
-              ) : (
-                <div className="text-xs text-gray-400 italic">No steps detected.</div>
-              )}
             </div>
+          ) : (
+                <div className="text-xs text-gray-400 italic">No steps detected.</div>
+          )}
+      </div>
 
             {/* Attendees */}
             <div>
