@@ -1144,11 +1144,23 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                 <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm mb-6">
                   <div className="mb-4">
                     <div className="w-14 h-14 rounded-lg overflow-hidden mb-3 shadow-sm border border-gray-100 bg-white flex items-center justify-center">
-                      <img
-                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(company?.company_name || 'C')}&background=random&color=fff&size=128`}
-                        alt={`${company?.company_name} logo`}
-                        className="w-full h-full object-cover"
-                      />
+                      {company?.domain_name ? (
+                        <img
+                          src={`https://unavatar.io/${company.domain_name}`}
+                          alt={`${company?.company_name} logo`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            // Fallback to initials if Unavatar fails
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const fallback = target.parentElement?.querySelector('.logo-fallback') as HTMLElement;
+                            if (fallback) fallback.style.display = 'flex';
+                          }}
+                        />
+                      ) : null}
+                      <div className="logo-fallback w-full h-full bg-blue-600 flex items-center justify-center text-white text-xl font-bold" style={{ display: company?.domain_name ? 'none' : 'flex' }}>
+                        {company?.company_name?.charAt(0) || 'C'}
+                      </div>
                     </div>
 
                     <h1 className="text-2xl font-bold text-gray-900 leading-tight">

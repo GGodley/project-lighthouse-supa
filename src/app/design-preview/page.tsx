@@ -65,7 +65,7 @@ export default function DesignPreviewPage() {
             companyName="Amphenol"
             contactName="Eran Gdalyahu"
             description="Check lead time and price for 5 units of connector p/n: 62GB14F1405SN."
-            logoUrl="https://ui-avatars.com/api/?name=Amphenol&background=random&color=fff&size=128"
+            logoUrl="https://unavatar.io/amphenol.com"
           />
           {/* State: In Progress (Blue) */}
           <NextStepCard
@@ -73,7 +73,7 @@ export default function DesignPreviewPage() {
             companyName="GreenLeaf Inc."
             contactName="Sarah Johnson"
             description="Waiting on feedback regarding the proposed data infrastructure modernization plan sent on Tuesday."
-            logoUrl="https://ui-avatars.com/api/?name=GreenLeaf+Inc.&background=random&color=fff&size=128"
+            logoUrl="https://unavatar.io/greenleaf.com"
           />
           {/* State: Done (Green) */}
           <NextStepCard
@@ -81,7 +81,7 @@ export default function DesignPreviewPage() {
             companyName="TechSolutions Ltd."
             contactName="Mike Chen"
             description="Schedule introductory demo call for next week. (Completed via email)."
-            logoUrl="https://ui-avatars.com/api/?name=TechSolutions+Ltd.&background=random&color=fff&size=128"
+            logoUrl="https://unavatar.io/techsolutions.com"
           />
         </div>
       </section>
