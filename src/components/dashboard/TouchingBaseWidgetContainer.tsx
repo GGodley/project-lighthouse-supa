@@ -26,17 +26,32 @@ export function TouchingBaseWidgetContainer() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
-        // Fetch active companies with last_interaction_at
-        const { data, error: fetchError } = await supabase
+        // Fetch all companies first, then filter out archived in JavaScript to handle NULL properly
+        const { data: allCompanies, error: fetchError } = await supabase
           .from('companies')
-          .select('company_id, company_name, last_interaction_at')
+          .select('company_id, company_name, last_interaction_at, status')
           .eq('user_id', user.id)
-          .or('status.is.null,status.neq.archived,status.neq.deleted')
-          .order('last_interaction_at', { ascending: true, nullsFirst: true })
 
         if (fetchError) throw fetchError
 
-        setCompanies(data || [])
+        // Filter out archived companies (keep NULL and all other statuses)
+        const activeCompanies = (allCompanies || []).filter(
+          company => company.status !== 'archived' && company.status !== 'deleted'
+        )
+
+        // Sort by last_interaction_at (oldest first, nulls first)
+        const sortedCompanies = activeCompanies.sort((a, b) => {
+          if (!a.last_interaction_at && !b.last_interaction_at) return 0
+          if (!a.last_interaction_at) return -1
+          if (!b.last_interaction_at) return 1
+          return new Date(a.last_interaction_at).getTime() - new Date(b.last_interaction_at).getTime()
+        })
+
+        setCompanies(sortedCompanies.map(c => ({
+          company_id: c.company_id,
+          company_name: c.company_name,
+          last_interaction_at: c.last_interaction_at
+        })))
       } catch (err) {
         console.error('Error fetching companies:', err)
         setError('An unexpected error occurred')
