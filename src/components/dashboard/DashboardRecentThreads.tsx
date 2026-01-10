@@ -13,6 +13,38 @@ interface Thread {
   company_id?: string | null
 }
 
+interface ThreadCompanyLink {
+  thread_id: string
+  company_id: string
+}
+
+// Type definition for untyped Supabase queries
+// Cast through unknown to avoid 'any' - this is necessary until types are regenerated
+type SupabaseQueryResponse<T> = {
+  data: T | null;
+  error: { message: string; details?: string; hint?: string; code?: string } | null;
+};
+
+type UntypedSupabaseForThreads = {
+  from: (table: 'threads') => {
+    select: (columns: string) => {
+      eq: (column: string, value: string) => {
+        order: (column: string, options: { ascending: boolean }) => {
+          limit: (count: number) => Promise<SupabaseQueryResponse<Pick<Thread, 'thread_id' | 'subject' | 'snippet' | 'last_message_date'>[]>>;
+        };
+      };
+    };
+  };
+};
+
+type UntypedSupabaseForLinks = {
+  from: (table: 'thread_company_link') => {
+    select: (columns: string) => {
+      in: (column: string, values: string[]) => Promise<SupabaseQueryResponse<ThreadCompanyLink[]>>;
+    };
+  };
+};
+
 export default function DashboardRecentThreads() {
   const [threads, setThreads] = useState<Thread[]>([])
   const [loading, setLoading] = useState(true)
@@ -26,10 +58,11 @@ export default function DashboardRecentThreads() {
 
         // Cast through unknown to access untyped tables (threads and thread_company_link)
         // This is necessary until types are regenerated to include these tables
-        const client = supabase as any;
+        const threadsClient = supabase as unknown as UntypedSupabaseForThreads;
+        const linksClient = supabase as unknown as UntypedSupabaseForLinks;
 
         // Get recent threads
-        const { data: threadsData, error: threadsError } = await client
+        const { data: threadsData, error: threadsError } = await threadsClient
           .from('threads')
           .select('thread_id, subject, snippet, last_message_date')
           .eq('user_id', user.id)
@@ -39,9 +72,9 @@ export default function DashboardRecentThreads() {
         if (threadsError) throw threadsError
 
         // Get company IDs for each thread
-        const threadIds = (threadsData || []).map((t: Thread) => t.thread_id)
+        const threadIds = (threadsData || []).map(t => t.thread_id)
         if (threadIds.length > 0) {
-          const { data: links } = await client
+          const { data: links } = await linksClient
             .from('thread_company_link')
             .select('thread_id, company_id')
             .in('thread_id', threadIds)
