@@ -39,8 +39,9 @@ export default function DashboardMeetingsListWithCards() {
         const nextWeek = new Date(today)
         nextWeek.setDate(nextWeek.getDate() + 7)
 
-        // Fetch meetings with bot_enabled - cast to handle type that may not be in generated types yet
-        const { data, error } = await supabase
+        // Fetch meetings with bot_enabled
+        // Cast query result to handle bot_enabled column that exists in DB but may not be in generated types
+        const queryResult = await supabase
           .from('meetings')
           .select('id, title, start_time, meeting_url, company_id, bot_enabled')
           .eq('user_id', user.id)
@@ -49,10 +50,13 @@ export default function DashboardMeetingsListWithCards() {
           .order('start_time', { ascending: true })
           .limit(10)
 
-        if (error) throw error
+        if (queryResult.error) throw queryResult.error
         
-        // Map data to Meeting type, handling bot_enabled column that exists in DB but may not be in generated types
-        const meetingsWithBotEnabled: Meeting[] = (data || []).map((meeting: MeetingRow) => ({
+        // Cast data to MeetingRow[] to handle bot_enabled column
+        const rawData = queryResult.data as MeetingRow[] | null
+        
+        // Map data to Meeting type
+        const meetingsWithBotEnabled: Meeting[] = (rawData || []).map((meeting) => ({
           id: meeting.id,
           title: meeting.title,
           start_time: meeting.start_time,
