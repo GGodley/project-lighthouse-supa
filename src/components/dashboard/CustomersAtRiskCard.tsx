@@ -8,18 +8,25 @@ export default async function CustomersAtRiskCard() {
   let percentage = 0
   
   if (user) {
-    // Get all customers for this user
-    const { data: allCustomers } = await supabase
-      .from('customers')
-      .select('health_score')
+    // Get total active companies count (excludes archived/deleted)
+    const { count: totalActiveCount, error: totalError } = await supabase
+      .from('companies')
+      .select('*', { count: 'exact', head: true })
       .eq('user_id', user.id)
-      .not('health_score', 'is', null)
+      .neq('status', 'archived')
+      .neq('status', 'deleted')
     
-    const totalCount = allCustomers?.length || 0
+    // Get companies with health_score < 0 (customers at risk)
+    const { count: atRiskCount, error: atRiskError } = await supabase
+      .from('companies')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .neq('status', 'archived')
+      .neq('status', 'deleted')
+      .lt('health_score', 0)
     
-    if (totalCount > 0) {
-      const atRiskCount = allCustomers?.filter(c => c.health_score && c.health_score < 0).length || 0
-      percentage = Math.round((atRiskCount / totalCount) * 100)
+    if (!totalError && !atRiskError && totalActiveCount !== null && atRiskCount !== null && totalActiveCount > 0) {
+      percentage = Math.round((atRiskCount / totalActiveCount) * 100)
     }
   }
 

@@ -8,18 +8,25 @@ export default async function HappyCustomersCard() {
   let percentage = 0
   
   if (user) {
-    // Get all customers for this user
-    const { data: allCustomers } = await supabase
-      .from('customers')
-      .select('health_score')
+    // Get total active companies count (excludes archived/deleted)
+    const { count: totalActiveCount, error: totalError } = await supabase
+      .from('companies')
+      .select('*', { count: 'exact', head: true })
       .eq('user_id', user.id)
-      .not('health_score', 'is', null)
+      .neq('status', 'archived')
+      .neq('status', 'deleted')
     
-    const totalCount = allCustomers?.length || 0
+    // Get companies with health_score > 0 (happy customers)
+    const { count: happyCount, error: happyError } = await supabase
+      .from('companies')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .neq('status', 'archived')
+      .neq('status', 'deleted')
+      .gt('health_score', 0)
     
-    if (totalCount > 0) {
-      const happyCount = allCustomers?.filter(c => c.health_score && c.health_score > 0).length || 0
-      percentage = Math.round((happyCount / totalCount) * 100)
+    if (!totalError && !happyError && totalActiveCount !== null && happyCount !== null && totalActiveCount > 0) {
+      percentage = Math.round((happyCount / totalActiveCount) * 100)
     }
   }
 
