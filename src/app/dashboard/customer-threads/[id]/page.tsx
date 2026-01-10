@@ -78,9 +78,10 @@ interface MeetingWithAttendees extends Meeting {
   meeting_attendees: { customer_id: string }[];
 }
 
-// Extend Meeting type to include location field (exists in DB but not in generated types)
+// Extend Meeting type to include location and transcripts fields (exist in DB but not in generated types)
 type Meeting = Database["public"]["Tables"]["meetings"]["Row"] & {
   location?: string | null;
+  transcripts?: string | null;
 };
 
 type NextStep = Database["public"]["Tables"]["next_steps"]["Row"];
@@ -412,8 +413,9 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
           console.error("Error fetching meeting details:", meetingError);
         } else {
           setMeetingDetails(meeting as Meeting);
-          // Extract transcript from meeting data
-          setMeetingTranscript(meeting?.transcript || "");
+          // Extract transcript from meeting data (using transcripts plural field)
+          const meetingData = meeting as Meeting;
+          setMeetingTranscript(meetingData?.transcripts || meetingData?.transcript || "");
         }
 
         // 2. Fetch Attendees (via meeting_attendees -> customers)
