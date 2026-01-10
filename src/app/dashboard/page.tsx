@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import DashboardMeetingsListWithCards from '@/components/dashboard/DashboardMeetingsListWithCards';
 import DashboardTasksList from '@/components/dashboard/DashboardTasksList';
+import { TouchingBaseWidgetContainer } from '@/components/dashboard/TouchingBaseWidgetContainer';
 
 export const dynamic = 'force-dynamic'
 
@@ -134,13 +135,18 @@ export default async function DashboardPage() {
           <DashboardMeetingsListWithCards />
         </div>
 
-        {/* Right: Priority Tasks (1/3 width) */}
+        {/* Right: Priority Tasks and Needs Attention (1/3 width) */}
         <div className="space-y-6">
           <h2 className="text-lg font-bold text-gray-900">Priority Tasks</h2>
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
             <div className="p-6">
               <DashboardTasksList />
             </div>
+          </div>
+
+          {/* Needs Attention Widget */}
+          <div className="h-[400px]">
+            <TouchingBaseWidgetContainer />
           </div>
         </div>
       </div>

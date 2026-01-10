@@ -11,6 +11,7 @@ import { TimelineCard } from "@/components/ui/TimelineCard";
 import { FeedbackRequestCard } from "@/components/ui/FeedbackRequestCard";
 import { CompactActivityRow } from "@/components/ui/CompactActivityRow";
 import { MeetingCard } from "@/components/dashboard/MeetingCard";
+import { TouchingBaseWidget } from "@/components/dashboard/TouchingBaseWidget";
 
 export default function DesignPreviewPage() {
   const [isRecording, setIsRecording] = useState(true);
@@ -267,6 +268,23 @@ export default function DesignPreviewPage() {
               setIsRecording(val);
               console.log('Toggled to:', val);
             }}
+          />
+        </div>
+      </section>
+
+      <section className="space-y-8 border-t border-gray-200 pt-8 max-w-3xl">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">10. Touching Base Widget</h2>
+          <p className="text-sm text-gray-500 mb-6">Widget to identify customers who need attention.</p>
+        </div>
+
+        <div className="max-w-md">
+          <TouchingBaseWidget 
+            candidates={[
+              { id: '1', name: 'Roee Lahav', company: 'Emectric', lastContactDate: '2025-12-01' }, // Critical
+              { id: '2', name: 'Dana Cohen', company: 'Google', lastContactDate: '2025-12-25' },   // Warning
+              { id: '3', name: 'John Smith', company: 'Tesla', lastContactDate: '2026-01-05' },    // Recent
+            ]} 
           />
         </div>
       </section>
