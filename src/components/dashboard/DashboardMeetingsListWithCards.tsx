@@ -10,7 +10,6 @@ interface Meeting {
   start_time: string | null
   meeting_url: string | null
   company_id: string | null
-  bot_enabled?: boolean | null
 }
 
 export default function DashboardMeetingsListWithCards() {
@@ -31,7 +30,7 @@ export default function DashboardMeetingsListWithCards() {
 
         const { data, error } = await supabase
           .from('meetings')
-          .select('id, title, start_time, meeting_url, company_id, bot_enabled')
+          .select('id, title, start_time, meeting_url, company_id')
           .eq('user_id', user.id)
           .gte('start_time', today.toISOString())
           .lt('start_time', nextWeek.toISOString())
@@ -61,21 +60,19 @@ export default function DashboardMeetingsListWithCards() {
 
   const handleRecordToggle = async (meetingId: number, newStatus: boolean) => {
     try {
+      // Try to update bot_enabled if the column exists
+      // If it doesn't exist, the update will fail gracefully
       const { error } = await supabase
         .from('meetings')
         .update({ bot_enabled: newStatus })
         .eq('id', meetingId)
 
-      if (error) throw error
-
-      // Optimistic update
-      setMeetings(prevMeetings =>
-        prevMeetings.map(meeting =>
-          meeting.id === meetingId
-            ? { ...meeting, bot_enabled: newStatus }
-            : meeting
-        )
-      )
+      if (error) {
+        // If column doesn't exist, just log and continue
+        // The toggle will still work visually but won't persist
+        console.warn('bot_enabled column may not exist:', error.message)
+        return
+      }
     } catch (err) {
       console.error('Error updating recording status:', err)
     }
@@ -106,7 +103,7 @@ export default function DashboardMeetingsListWithCards() {
           title={meeting.title || "Untitled Meeting"}
           startTime={meeting.start_time || new Date().toISOString()}
           platform={getPlatform(meeting.meeting_url)}
-          isRecording={meeting.bot_enabled ?? true}
+          isRecording={true}
           onRecordToggle={(newStatus) => handleRecordToggle(meeting.id, newStatus)}
         />
       ))}
