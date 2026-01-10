@@ -82,7 +82,28 @@ interface MeetingWithAttendees extends Meeting {
 type Meeting = Database["public"]["Tables"]["meetings"]["Row"] & {
   location?: string | null;
   transcripts?: string | null;
+  meeting_llm_summary?: string | null;
 };
+
+// Interface for parsed meeting LLM summary
+interface MeetingLLMSummary {
+  sentiment?: string;
+  sentiment_score?: number;
+  action_items?: Array<{
+    text: string;
+    owner: string | null;
+    due_date: string | null;
+  }>;
+  feature_requests?: Array<{
+    title: string;
+    urgency: string;
+    use_case: string;
+    customer_impact: string;
+    urgency_signals: string;
+    customer_description: string;
+  }>;
+  discussion_points?: string;
+}
 
 type NextStep = Database["public"]["Tables"]["next_steps"]["Row"];
 
@@ -109,6 +130,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
   const [meetingDetails, setMeetingDetails] = useState<Meeting | null>(null);
   const [meetingTranscript, setMeetingTranscript] = useState<string>("");
+  const [meetingLLMSummary, setMeetingLLMSummary] = useState<MeetingLLMSummary | null>(null);
   const [threadContext, setThreadContext] = useState<{
     steps: NextStep[];
     requests: unknown[];
@@ -335,6 +357,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
       setThreadMessages([]);
       setMeetingDetails(null);
       setMeetingTranscript("");
+      setMeetingLLMSummary(null);
       setThreadContext({ steps: [], requests: [], attendees: [] });
       return;
     }
@@ -344,6 +367,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
       setThreadMessages([]);
       setMeetingDetails(null);
       setMeetingTranscript("");
+      setMeetingLLMSummary(null);
       setThreadContext({ steps: [], requests: [], attendees: [] });
 
       // === SCENARIO A: THREAD ===
@@ -412,10 +436,25 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         if (meetingError) {
           console.error("Error fetching meeting details:", meetingError);
         } else {
-          setMeetingDetails(meeting as Meeting);
-          // Extract transcript from meeting data (using transcripts plural field)
           const meetingData = meeting as Meeting;
+          setMeetingDetails(meetingData);
+          // Extract transcript from meeting data (using transcripts plural field)
           setMeetingTranscript(meetingData?.transcripts || meetingData?.transcript || "");
+          
+          // Parse meeting_llm_summary if it exists
+          if (meetingData?.meeting_llm_summary) {
+            try {
+              const parsedSummary = typeof meetingData.meeting_llm_summary === 'string'
+                ? JSON.parse(meetingData.meeting_llm_summary)
+                : meetingData.meeting_llm_summary;
+              setMeetingLLMSummary(parsedSummary as MeetingLLMSummary);
+            } catch (error) {
+              console.error("Error parsing meeting_llm_summary:", error);
+              setMeetingLLMSummary(null);
+            }
+          } else {
+            setMeetingLLMSummary(null);
+          }
         }
 
         // 2. Fetch Attendees (via meeting_attendees -> customers)
@@ -1040,69 +1079,193 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
 
           {/* RIGHT: Context Sidebar */}
           <div className="w-[320px] bg-gray-50 p-6 overflow-y-auto shrink-0 space-y-8">
-            {/* Summary */}
-            <div>
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
-                Summary
-              </h3>
-              <p className="text-sm text-gray-700 leading-relaxed">
-                {event.summary || "No summary available."}
-              </p>
-            </div>
-
-            {/* Next Steps - Using NextStepCard Components */}
-            <div>
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
-                Extracted Steps
-              </h3>
-              {threadContext.steps.length > 0 ? (
-                <div className="space-y-3">
-                  {threadContext.steps.map((step) => (
-                    <div
-                      key={step.step_id}
-                      onClick={() => {
-                        setSelectedEvent(null); // Close Modal
-                        setActiveTab("tasks"); // Switch Tab
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <NextStepCard
-                        variant="compact"
-                        status={mapStepStatus(step.status)}
-                        companyName={step.owner || company?.company_name || "Owner"}
-                        contactName="Linked Task"
-                        description={step.description}
-                        className="mb-0 hover:ring-2 hover:ring-blue-500 transition-all"
-                      />
+            {selectedEvent.type === "meeting" && meetingLLMSummary ? (
+              <>
+                {/* Sentiment */}
+                {meetingLLMSummary.sentiment && (
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+                      Sentiment
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                          meetingLLMSummary.sentiment === "Positive"
+                            ? "bg-green-100 text-green-800"
+                            : meetingLLMSummary.sentiment === "Negative"
+                            ? "bg-red-100 text-red-800"
+                            : "bg-gray-100 text-gray-800"
+                        }`}
+                      >
+                        {meetingLLMSummary.sentiment}
+                      </span>
+                      {meetingLLMSummary.sentiment_score !== undefined && (
+                        <span className="text-xs text-gray-500">
+                          Score: {meetingLLMSummary.sentiment_score}
+                        </span>
+                      )}
                     </div>
-                  ))}
-            </div>
-          ) : (
-                <div className="text-xs text-gray-400 italic">No steps detected.</div>
-          )}
-      </div>
+                  </div>
+                )}
 
-            {/* Attendees */}
-            <div>
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
-                Attendees
-              </h3>
-              {uniqueAttendees.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {uniqueAttendees.map((email) => (
-                    <span
-                      key={email}
-                      className="px-2 py-1 bg-white border border-gray-200 rounded-md text-xs text-gray-600 truncate max-w-[140px]"
-                      title={email}
-                    >
-                      {email}
-                    </span>
-                  ))}
+                {/* Summary (from discussion_points) */}
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+                    Summary
+                  </h3>
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    {meetingLLMSummary.discussion_points || "No summary available."}
+                  </p>
                 </div>
-              ) : (
-                <div className="text-xs text-gray-400 italic">No attendees found.</div>
-              )}
-            </div>
+
+                {/* Next Steps (from action_items) */}
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+                    Action Items
+                  </h3>
+                  {meetingLLMSummary.action_items && meetingLLMSummary.action_items.length > 0 ? (
+                    <div className="space-y-3">
+                      {meetingLLMSummary.action_items.map((item, index) => (
+                        <div
+                          key={index}
+                          className="p-3 bg-white border border-gray-200 rounded-lg hover:shadow-sm transition-shadow"
+                        >
+                          <p className="text-sm text-gray-800 mb-1">{item.text}</p>
+                          {item.owner && (
+                            <p className="text-xs text-gray-500">Owner: {item.owner}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-400 italic">No action items found.</div>
+                  )}
+                </div>
+
+                {/* Feature Requests */}
+                {meetingLLMSummary.feature_requests && meetingLLMSummary.feature_requests.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+                      Feature Requests
+                    </h3>
+                    <div className="space-y-3">
+                      {meetingLLMSummary.feature_requests.map((request, index) => (
+                        <div
+                          key={index}
+                          className="p-3 bg-white border border-gray-200 rounded-lg"
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <h4 className="text-sm font-semibold text-gray-900">{request.title}</h4>
+                            <span
+                              className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                request.urgency === "High"
+                                  ? "bg-red-100 text-red-800"
+                                  : request.urgency === "Medium"
+                                  ? "bg-yellow-100 text-yellow-800"
+                                  : "bg-gray-100 text-gray-800"
+                              }`}
+                            >
+                              {request.urgency}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-600 mb-1">{request.customer_description}</p>
+                          <p className="text-xs text-gray-500 italic">{request.use_case}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Attendees */}
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+                    Attendees
+                  </h3>
+                  {uniqueAttendees.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {uniqueAttendees.map((email) => (
+                        <span
+                          key={email}
+                          className="px-2 py-1 bg-white border border-gray-200 rounded-md text-xs text-gray-600 truncate max-w-[140px]"
+                          title={email}
+                        >
+                          {email}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-400 italic">No attendees found.</div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Thread View - Original Logic */}
+                {/* Summary */}
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+                    Summary
+                  </h3>
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    {event.summary || "No summary available."}
+                  </p>
+                </div>
+
+                {/* Next Steps - Using NextStepCard Components */}
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+                    Extracted Steps
+                  </h3>
+                  {threadContext.steps.length > 0 ? (
+                    <div className="space-y-3">
+                      {threadContext.steps.map((step) => (
+                        <div
+                          key={step.step_id}
+                          onClick={() => {
+                            setSelectedEvent(null); // Close Modal
+                            setActiveTab("tasks"); // Switch Tab
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <NextStepCard
+                            variant="compact"
+                            status={mapStepStatus(step.status)}
+                            companyName={step.owner || company?.company_name || "Owner"}
+                            contactName="Linked Task"
+                            description={step.description}
+                            className="mb-0 hover:ring-2 hover:ring-blue-500 transition-all"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-400 italic">No steps detected.</div>
+                  )}
+                </div>
+
+                {/* Attendees */}
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+                    Attendees
+                  </h3>
+                  {uniqueAttendees.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {uniqueAttendees.map((email) => (
+                        <span
+                          key={email}
+                          className="px-2 py-1 bg-white border border-gray-200 rounded-md text-xs text-gray-600 truncate max-w-[140px]"
+                          title={email}
+                        >
+                          {email}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-400 italic">No attendees found.</div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
