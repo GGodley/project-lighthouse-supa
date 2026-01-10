@@ -280,10 +280,10 @@ export default function DesignPreviewPage() {
 
         <div className="max-w-md">
           <TouchingBaseWidget 
-            candidates={[
-              { id: '1', name: 'Roee Lahav', company: 'Emectric', lastContactDate: '2025-12-01' }, // Critical
-              { id: '2', name: 'Dana Cohen', company: 'Google', lastContactDate: '2025-12-25' },   // Warning
-              { id: '3', name: 'John Smith', company: 'Tesla', lastContactDate: '2026-01-05' },    // Recent
+            companies={[
+              { company_id: '1', company_name: 'Emectric', last_interaction_at: '2025-12-01' }, // Critical
+              { company_id: '2', company_name: 'Google', last_interaction_at: '2025-12-25' },   // Warning
+              { company_id: '3', company_name: 'Tesla', last_interaction_at: '2026-01-05' },    // Recent
             ]} 
           />
         </div>

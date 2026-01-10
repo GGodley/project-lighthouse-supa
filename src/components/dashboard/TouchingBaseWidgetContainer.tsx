@@ -1,56 +1,52 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useSupabase } from '@/components/SupabaseProvider'
 import { TouchingBaseWidget } from '@/components/dashboard/TouchingBaseWidget'
 import { Loader2 } from 'lucide-react'
 
-interface Customer {
-  customer_id: string
-  full_name: string | null
-  email: string
+interface CompanyCandidate {
   company_id: string
-  company_name: string | null
-  domain_name: string | null
+  company_name: string
   last_interaction_at: string | null
 }
 
-interface TouchingBaseResponse {
-  customers: Customer[]
-  totalCount: number
-}
-
 export function TouchingBaseWidgetContainer() {
-  const [customers, setCustomers] = useState<Customer[]>([])
+  const [companies, setCompanies] = useState<CompanyCandidate[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const router = useRouter()
+  const supabase = useSupabase()
 
   useEffect(() => {
-    const fetchTouchingBaseCustomers = async () => {
+    const fetchCompanies = async () => {
       try {
         setLoading(true)
         setError(null)
 
-        // Fetch customers not contacted in > 30 days (using the existing API)
-        const resp = await fetch('/api/customers/touching-base?days=30', { cache: 'no-store' })
-        if (!resp.ok) {
-          const msg = await resp.text()
-          setError(msg || 'Failed to fetch customers')
-          return
-        }
-        const json: TouchingBaseResponse = await resp.json()
-        setCustomers(json.customers || [])
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+
+        // Fetch active companies with last_interaction_at
+        const { data, error: fetchError } = await supabase
+          .from('companies')
+          .select('company_id, company_name, last_interaction_at')
+          .eq('user_id', user.id)
+          .or('status.is.null,status.neq.archived,status.neq.deleted')
+          .order('last_interaction_at', { ascending: true, nullsFirst: true })
+
+        if (fetchError) throw fetchError
+
+        setCompanies(data || [])
       } catch (err) {
-        console.error('Error fetching touching base customers:', err)
+        console.error('Error fetching companies:', err)
         setError('An unexpected error occurred')
       } finally {
         setLoading(false)
       }
     }
 
-    fetchTouchingBaseCustomers()
-  }, [])
+    fetchCompanies()
+  }, [supabase])
 
   if (loading) {
     return (
@@ -78,31 +74,5 @@ export function TouchingBaseWidgetContainer() {
     )
   }
 
-  // Create a map to store company IDs for navigation
-  const companyIdMap = new Map<string, string>()
-  customers.forEach(customer => {
-    companyIdMap.set(customer.customer_id, customer.company_id)
-  })
-
-  // Transform API data to widget format
-  const candidates = customers.map(customer => ({
-    id: customer.customer_id,
-    name: customer.full_name || customer.email || 'Unnamed Customer',
-    company: customer.company_name || 'No Company',
-    lastContactDate: customer.last_interaction_at || customer.created_at || new Date().toISOString(),
-    avatarUrl: customer.domain_name ? `https://unavatar.io/${customer.domain_name}` : undefined,
-  }))
-
-  return (
-    <TouchingBaseWidget 
-      candidates={candidates}
-      onCandidateClick={(candidateId) => {
-        const companyId = companyIdMap.get(candidateId)
-        if (companyId) {
-          router.push(`/dashboard/customer-threads/${companyId}`)
-        }
-      }}
-    />
-  )
+  return <TouchingBaseWidget companies={companies} />
 }
-
