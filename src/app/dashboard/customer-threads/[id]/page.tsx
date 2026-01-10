@@ -124,7 +124,6 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const [allTasks, setAllTasks] = useState<NextStep[]>([]);
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
   const [recentActivities, setRecentActivities] = useState<MeetingWithAttendees[]>([]);
-  const [recentActivities, setRecentActivities] = useState<MeetingWithAttendees[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<{
     id: string;
     type: "thread" | "meeting";
@@ -584,7 +583,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
       const weeks = Math.floor(diffInSeconds / 604800);
       return `${weeks} ${weeks === 1 ? "week" : "weeks"} ago`;
     }
-    return date.toLocaleDateString();
+      return date.toLocaleDateString();
   };
 
   // Helper function to format meeting date
