@@ -107,6 +107,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   } | null>(null);
   const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
   const [meetingDetails, setMeetingDetails] = useState<Meeting | null>(null);
+  const [meetingTranscript, setMeetingTranscript] = useState<string>("");
   const [threadContext, setThreadContext] = useState<{
     steps: NextStep[];
     requests: unknown[];
@@ -332,6 +333,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
     if (!selectedEvent) {
       setThreadMessages([]);
       setMeetingDetails(null);
+      setMeetingTranscript("");
       setThreadContext({ steps: [], requests: [], attendees: [] });
       return;
     }
@@ -340,6 +342,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
       // Reset state
       setThreadMessages([]);
       setMeetingDetails(null);
+      setMeetingTranscript("");
       setThreadContext({ steps: [], requests: [], attendees: [] });
 
       // === SCENARIO A: THREAD ===
@@ -398,7 +401,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         // Extract meeting_id from selectedEvent.id (format: "meeting-{meeting_id}")
         const meetingId = selectedEvent.id.replace("meeting-", "");
 
-        // 1. Fetch Meeting Details
+        // 1. Fetch Meeting Details (including transcript)
         const { data: meeting, error: meetingError } = await supabase
           .from("meetings")
           .select("*")
@@ -409,6 +412,8 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
           console.error("Error fetching meeting details:", meetingError);
         } else {
           setMeetingDetails(meeting as Meeting);
+          // Extract transcript from meeting data
+          setMeetingTranscript(meeting?.transcript || "");
         }
 
         // 2. Fetch Attendees (via meeting_attendees -> customers)
@@ -1003,54 +1008,30 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                   <div className="text-center py-12 text-gray-500">Loading messages...</div>
                 )
               ) : (
-                // Meeting: Show Meeting Details
-                meetingDetails ? (
-                  <div className="space-y-6">
-                    <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-                      <h3 className="text-lg font-bold text-gray-900 mb-4">Meeting Details</h3>
-                      <div className="space-y-4">
-                        <div>
-                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                            Date & Time
-                          </span>
-                          <p className="text-base text-gray-900 mt-1">
-                            {meetingDetails.start_time
-                              ? formatMeetingDate(meetingDetails.start_time)
-                              : "Not specified"}
-                          </p>
-                        </div>
-                        {meetingDetails.location && (
-                          <div>
-                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                              Location
-                            </span>
-                            <p className="text-base text-gray-900 mt-1">{meetingDetails.location}</p>
-                          </div>
-                        )}
-                        <div>
-                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                            Platform
-                          </span>
-                          <p className="text-base text-gray-900 mt-1">
-                            {getMeetingPlatform(meetingDetails)}
-                          </p>
-                        </div>
-                        {meetingDetails.description && (
-                          <div>
-                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                              Description
-                            </span>
-                            <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">
-                              {meetingDetails.description}
-                            </p>
-                          </div>
-                        )}
+                // Meeting: Show Meeting Transcript
+                <div className="flex-1 overflow-y-auto p-6 bg-gray-50/50">
+                  <div className="bg-white border border-gray-200 rounded-lg p-8 shadow-sm">
+                    <div className="flex items-center gap-2 mb-6 border-b border-gray-100 pb-4">
+                      <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
+                        <span className="text-purple-600">📝</span>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
+                          Meeting Transcript
+                        </h3>
+                        <p className="text-xs text-gray-500">Auto-generated recording text</p>
                       </div>
                     </div>
+
+                    <div className="prose max-w-none text-sm text-gray-800 whitespace-pre-wrap leading-relaxed font-mono">
+                      {meetingTranscript || (
+                        <span className="text-gray-400 italic">
+                          No transcript available for this meeting.
+                        </span>
+                      )}
+                    </div>
                   </div>
-                ) : (
-                  <div className="text-center py-12 text-gray-500">Loading meeting details...</div>
-                )
+                </div>
               )}
             </div>
           </div>
