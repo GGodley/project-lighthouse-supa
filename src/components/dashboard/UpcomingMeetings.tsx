@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSupabase } from '@/components/SupabaseProvider'
-import MeetingCard from './MeetingCard'
+import { UpcomingMeetingCard } from '@/components/ui/UpcomingMeetingCard'
 
 interface Meeting {
   id: string | number
@@ -117,9 +117,43 @@ export default function UpcomingMeetings() {
               : 'No completed meetings'}
           </p>
         ) : (
-          meetings.map((meeting) => (
-            <MeetingCard key={meeting.id} meeting={meeting} />
-          ))
+          meetings.map((meeting) => {
+            // Format date for UpcomingMeetingCard
+            const formatDate = (dateString: string | null): string => {
+              if (!dateString) return "Date TBD";
+              try {
+                const date = new Date(dateString);
+                return date.toLocaleString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                  hour12: true,
+                });
+              } catch {
+                return "Date TBD";
+              }
+            };
+
+            // Get platform from meeting URL
+            const getPlatform = (): string => {
+              if (!meeting.meeting_url) return "Google Meet";
+              const url = meeting.meeting_url.toLowerCase();
+              if (url.includes("zoom")) return "Zoom";
+              if (url.includes("teams") || url.includes("microsoft")) return "Microsoft Teams";
+              if (url.includes("meet") || url.includes("google")) return "Google Meet";
+              return "Video Call";
+            };
+
+            return (
+              <UpcomingMeetingCard
+                key={meeting.id}
+                title={meeting.title || "Untitled Meeting"}
+                date={formatDate(meeting.start_time)}
+                platform={getPlatform()}
+              />
+            );
+          })
         )}
       </div>
     </div>
