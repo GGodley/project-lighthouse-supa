@@ -123,6 +123,8 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const [nextStep, setNextStep] = useState<NextStep | null>(null);
   const [allTasks, setAllTasks] = useState<NextStep[]>([]);
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
+  const [recentActivities, setRecentActivities] = useState<MeetingWithAttendees[]>([]);
+  const [recentActivities, setRecentActivities] = useState<MeetingWithAttendees[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<{
     id: string;
     type: "thread" | "meeting";
@@ -247,6 +249,26 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                 console.error("Error fetching tasks:", tasksError);
               } else {
                 setAllTasks(tasksData || []);
+              }
+
+              // Fetch recent past meetings for Activity section (last 4 meetings)
+              const { data: recentMeetingsData, error: recentMeetingsError } = await supabase
+                .from("meetings")
+                .select(
+                  `
+                  *,
+                  meeting_attendees!inner(customer_id)
+                `
+                )
+                .in("meeting_attendees.customer_id", customerIds)
+                .lt("start_time", new Date().toISOString()) // Past meetings only
+                .order("start_time", { ascending: false })
+                .limit(4);
+
+              if (recentMeetingsError) {
+                console.error("Error fetching recent meetings:", recentMeetingsError);
+              } else {
+                setRecentActivities((recentMeetingsData as MeetingWithAttendees[]) || []);
               }
 
               // Fetch timeline events (threads and meetings)
@@ -768,36 +790,39 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         </div>
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
           <div className="space-y-4">
-            <CompactActivityRow
-              icon={Heart}
-              userName="Michael Chang"
-              action="attended an"
-              target="in-person meeting"
-              time="6 hours ago"
-            />
-            <CompactActivityRow
-              icon={Calendar}
-              userName="Sarah Johnson"
-              action="attended an"
-              target="event"
-              time="2 days ago"
-            />
-            <CompactActivityRow
-              icon={Phone}
-              iconColor="text-green-600"
-              userName="Michael Chang"
-              action="made an"
-              target="outbound phone call"
-              time="4 days ago"
-            />
-            <CompactActivityRow
-              icon={Mail}
-              userName="System"
-              action="sent an"
-              target="automated email sequence"
-              time="5 days ago"
-              isLast
-            />
+            {recentActivities.length > 0 ? (
+              recentActivities.map((meeting, index) => {
+                // Get meeting platform for icon color
+                const platform = getMeetingPlatform(meeting);
+                const iconColor = platform === "Google Meet" 
+                  ? "text-blue-600" 
+                  : platform === "Zoom" 
+                  ? "text-blue-500" 
+                  : "text-gray-500";
+                
+                // Get attendee name from customers list or use meeting title
+                const attendeeName = customers.find(
+                  c => meeting.meeting_attendees?.some((ma: { customer_id: string }) => ma.customer_id === c.id)
+                )?.full_name || meeting.title || "Team member";
+                
+                return (
+                  <CompactActivityRow
+                    key={meeting.id}
+                    icon={Calendar}
+                    iconColor={iconColor}
+                    userName={attendeeName}
+                    action="attended"
+                    target={meeting.title || "a meeting"}
+                    time={formatRelativeTime(meeting.start_time)}
+                    isLast={index === recentActivities.length - 1}
+                  />
+                );
+              })
+            ) : (
+              <div className="text-center py-8 text-gray-400 text-sm">
+                No recent activity found
+              </div>
+            )}
           </div>
         </div>
       </div>
