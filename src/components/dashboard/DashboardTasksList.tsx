@@ -31,7 +31,7 @@ export default function DashboardTasksList() {
           .select('step_id, company_id, thread_id, company_name, owner, description, status, priority')
           .eq('user_id', user.id)
           .neq('status', 'done')
-          .order('priority', { ascending: false, nullsLast: true })
+          .order('priority', { ascending: false, nullsFirst: false })
           .order('created_at', { ascending: false })
           .limit(5)
 
@@ -84,7 +84,7 @@ export default function DashboardTasksList() {
           .select('step_id, company_id, thread_id, company_name, owner, description, status, priority')
           .eq('user_id', user.id)
           .neq('status', 'done')
-          .order('priority', { ascending: false, nullsLast: true })
+          .order('priority', { ascending: false, nullsFirst: false })
           .order('created_at', { ascending: false })
           .limit(5)
         if (data) setTasks(data)
