@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { NextStepCard, NextStepStatus } from '@/components/ui/NextStepCard'
 
@@ -20,23 +20,83 @@ export default function DashboardTasksList() {
   const [loading, setLoading] = useState(true)
   const supabase = useSupabase()
 
+  const fetchTasksWithCompanies = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return []
+
+    // Step 1: Fetch next_steps (only columns that exist in the table)
+    const { data: tasksData, error: tasksError } = await supabase
+      .from('next_steps')
+      .select('step_id, thread_id, owner, description, status, priority')
+      .eq('user_id', user.id)
+      .neq('status', 'done')
+      .order('priority', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
+      .limit(5)
+
+    if (tasksError) throw tasksError
+
+    // Step 2: Get company_id from thread_company_link for tasks with thread_id
+    const threadIds = (tasksData || [])
+      .map(t => t.thread_id)
+      .filter((id): id is string => id !== null)
+
+    let linksMap: Record<string, string> = {}
+    let companiesMap: Record<string, string> = {}
+
+    if (threadIds.length > 0) {
+      // Get company_id from thread_company_link
+      const { data: links } = await supabase
+        .from('thread_company_link')
+        .select('thread_id, company_id')
+        .in('thread_id', threadIds)
+
+      links?.forEach(link => {
+        if (link.thread_id && link.company_id) {
+          linksMap[link.thread_id] = link.company_id
+        }
+      })
+
+      // Get company names for the company_ids we found
+      const companyIds = Array.from(new Set(Object.values(linksMap)))
+      if (companyIds.length > 0) {
+        const { data: companies } = await supabase
+          .from('companies')
+          .select('company_id, company_name')
+          .in('company_id', companyIds)
+
+        companies?.forEach(company => {
+          if (company.company_id && company.company_name) {
+            companiesMap[company.company_id] = company.company_name
+          }
+        })
+      }
+    }
+
+    // Step 3: Map tasks with company_id and company_name
+    return (tasksData || []).map(task => {
+      const companyId = task.thread_id ? linksMap[task.thread_id] || null : null
+      const companyName = companyId ? companiesMap[companyId] || null : null
+
+      return {
+        step_id: task.step_id,
+        company_id: companyId,
+        thread_id: task.thread_id,
+        company_name: companyName,
+        owner: task.owner,
+        description: task.description,
+        status: task.status,
+        priority: task.priority
+      }
+    })
+  }, [supabase])
+
   useEffect(() => {
     const fetchTasks = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-
-        const { data, error } = await supabase
-          .from('next_steps')
-          .select('step_id, company_id, thread_id, company_name, owner, description, status, priority')
-          .eq('user_id', user.id)
-          .neq('status', 'done')
-          .order('priority', { ascending: false, nullsFirst: false })
-          .order('created_at', { ascending: false })
-          .limit(5)
-
-        if (error) throw error
-        setTasks(data || [])
+        setLoading(true)
+        const tasksWithCompanies = await fetchTasksWithCompanies()
+        setTasks(tasksWithCompanies)
       } catch (err) {
         console.error('Error fetching tasks:', err)
       } finally {
@@ -45,7 +105,7 @@ export default function DashboardTasksList() {
     }
 
     fetchTasks()
-  }, [supabase])
+  }, [fetchTasksWithCompanies])
 
   const mapStepStatus = (status: string): NextStepStatus => {
     if (status === 'done') return 'done'
@@ -77,17 +137,11 @@ export default function DashboardTasksList() {
     if (error) {
       console.error('Error updating status:', error)
       // Refetch on error
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data } = await supabase
-          .from('next_steps')
-          .select('step_id, company_id, thread_id, company_name, owner, description, status, priority')
-          .eq('user_id', user.id)
-          .neq('status', 'done')
-          .order('priority', { ascending: false, nullsFirst: false })
-          .order('created_at', { ascending: false })
-          .limit(5)
-        if (data) setTasks(data)
+      try {
+        const tasksWithCompanies = await fetchTasksWithCompanies()
+        setTasks(tasksWithCompanies)
+      } catch (fetchError) {
+        console.error('Error refetching tasks:', fetchError)
       }
     }
   }
