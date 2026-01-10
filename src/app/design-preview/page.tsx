@@ -10,7 +10,7 @@ import { NextStepCard } from "@/components/ui/NextStepCard";
 import { TimelineCard } from "@/components/ui/TimelineCard";
 import { FeedbackRequestCard } from "@/components/ui/FeedbackRequestCard";
 import { CompactActivityRow } from "@/components/ui/CompactActivityRow";
-import MeetingCard from "@/components/dashboard/MeetingCard";
+import { MeetingCard } from "@/components/dashboard/MeetingCard";
 
 export default function DesignPreviewPage() {
   const [isRecording, setIsRecording] = useState(true);
