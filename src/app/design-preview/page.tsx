@@ -262,10 +262,6 @@ export default function DesignPreviewPage() {
             title="Weekly Sync: Emectric"
             startTime={new Date().toISOString()} 
             platform="google_meet"
-            attendees={[
-              { name: 'Roee', avatarUrl: 'https://unavatar.io/roee' }, 
-              { name: 'Dana' }
-            ]}
             isRecording={isRecording}
             onRecordToggle={(val) => {
               setIsRecording(val);
