@@ -55,7 +55,7 @@ export default async function DashboardPage() {
     (c.health_score !== null && c.health_score < 0)
   ).length;
   const happyCount = activeCompanies.filter(c => 
-    (c.health_score !== null && c.health_score > 50)
+    (c.health_score !== null && c.health_score > 0)
   ).length;
 
   // Calculate percentages
