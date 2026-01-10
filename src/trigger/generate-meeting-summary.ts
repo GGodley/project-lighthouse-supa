@@ -252,6 +252,52 @@ If no feature requests are found, return an empty array [].`;
 
       console.log(`✅ Updated meeting with LLM summary`);
 
+      // Step 7: Update company health score
+      // Get company_id from meeting (or from customer if meeting.company_id is null)
+      let companyId = meeting.company_id;
+      
+      if (!companyId && meeting.customer_id) {
+        // Fallback: Get company_id from customer
+        const { data: customerData } = await supabaseAdmin
+          .from("customers")
+          .select("company_id")
+          .eq("customer_id", meeting.customer_id)
+          .maybeSingle();
+        
+        if (customerData?.company_id) {
+          companyId = customerData.company_id;
+        }
+      }
+
+      if (companyId) {
+        console.log(`[LOG] Updating health score for company: ${companyId}`);
+        try {
+          const { error: healthScoreError } = await supabaseAdmin.rpc(
+            "recalculate_company_health_score",
+            { target_company_id: companyId }
+          );
+
+          if (healthScoreError) {
+            console.error(
+              `⚠️  Failed to update company health score: ${healthScoreError.message}`
+            );
+            // Don't fail the task - health score update is non-critical
+          } else {
+            console.log(`✅ Updated company health score for company: ${companyId}`);
+          }
+        } catch (error) {
+          console.error(
+            `⚠️  Error updating company health score:`,
+            error instanceof Error ? error.message : String(error)
+          );
+          // Don't fail the task - health score update is non-critical
+        }
+      } else {
+        console.log(
+          `ℹ️  Skipping health score update: No company_id found for meeting ${meetingId}`
+        );
+      }
+
       return {
         ok: true,
         meetingId,

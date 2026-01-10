@@ -698,6 +698,38 @@ The "customer" is any participant who is NOT the "CSM"."""
             "current_stage": "completed"
         }).eq("thread_id", thread_id).eq("user_id", user_id).execute()
         
+        # Update company health scores for all companies linked to this thread
+        try:
+            # Get all company_ids linked to this thread via thread_company_link
+            link_response = supabase.table("thread_company_link").select(
+                "company_id"
+            ).eq("thread_id", thread_id).execute()
+            
+            if link_response.data:
+                company_ids = [link["company_id"] for link in link_response.data]
+                logger.info(f"Updating health scores for {len(company_ids)} companies linked to thread {thread_id}")
+                
+                for company_id in company_ids:
+                    try:
+                        # Call the RPC function to recalculate health score
+                        supabase.rpc(
+                            "recalculate_company_health_score",
+                            {"target_company_id": company_id}
+                        ).execute()
+                        logger.info(f"✅ Updated health score for company: {company_id}")
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️  Failed to update health score for company {company_id}: {str(e)}"
+                        )
+                        # Don't fail the analysis - health score update is non-critical
+            else:
+                logger.info(f"ℹ️  No companies linked to thread {thread_id}, skipping health score update")
+        except Exception as e:
+            logger.warning(
+                f"⚠️  Error updating company health scores for thread {thread_id}: {str(e)}"
+            )
+            # Don't fail the analysis - health score update is non-critical
+        
         result["success"] = True
         result["analysis"] = {
             "mode": analysis_mode,

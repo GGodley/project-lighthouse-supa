@@ -1,35 +1,9 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import { Users, TrendingUp, AlertTriangle, Calendar } from 'lucide-react';
-import ConsiderTouchingBase from '@/components/ConsiderTouchingBase';
+import DashboardMeetingsListWithCards from '@/components/dashboard/DashboardMeetingsListWithCards';
+import DashboardTasksList from '@/components/dashboard/DashboardTasksList';
 
 export const dynamic = 'force-dynamic'
-
-// StatCard Component (Inline)
-const StatCard = ({ 
-  title, 
-  value, 
-  icon: Icon 
-}: { 
-  title: string; 
-  value: string | number; 
-  icon: React.ElementType;
-}) => (
-  <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-    <div>
-      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{title}</p>
-      <h3 className="text-2xl font-bold text-gray-900 mt-1">{value}</h3>
-    </div>
-    <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500">
-      <Icon className="w-5 h-5" />
-    </div>
-  </div>
-);
-
-// Client component for meetings list (needs interactivity)
-import DashboardMeetingsList from '@/components/dashboard/DashboardMeetingsList';
-import DashboardTasksList from '@/components/dashboard/DashboardTasksList';
-import DashboardRecentThreads from '@/components/dashboard/DashboardRecentThreads';
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -49,7 +23,12 @@ export default async function DashboardPage() {
     .single();
   
   if (profile?.full_name) {
-    fullName = profile.full_name;
+    const nameParts = profile.full_name.split(' ');
+    if (nameParts.length > 0) {
+      fullName = nameParts[0]; // Use first name only
+    } else {
+      fullName = profile.full_name;
+    }
   }
 
   const getGreeting = () => {
@@ -59,39 +38,31 @@ export default async function DashboardPage() {
     return 'Good evening';
   };
 
-  // Fetch stats data
-  // 1. Total Active Customers (where status != 'archived')
-  const { count: activeCustomersCount } = await supabase
-    .from('companies')
-    .select('*', { count: 'exact', head: true })
-    .or('status.is.null,status.neq.archived');
-
-  // 2. Health Score Avg (avg health_score of active companies)
-  const { data: activeCompanies } = await supabase
-    .from('companies')
-    .select('health_score')
-    .or('status.is.null,status.neq.archived');
-
-  const avgHealthScore = activeCompanies && activeCompanies.length > 0
-    ? Math.round(
-        activeCompanies
-          .filter(c => c.health_score !== null)
-          .reduce((sum, c) => sum + (c.health_score || 0), 0) / 
-        activeCompanies.filter(c => c.health_score !== null).length
-      )
-    : 0;
-
-  // 3. At Risk (health_score < 50 OR status = 'churn_risk', excluding archived)
-  const { data: allCompanies } = await supabase
+  // Fetch all companies to calculate stats
+  const { data: allCompaniesData } = await supabase
     .from('companies')
     .select('status, health_score')
-    .or('status.is.null,status.neq.archived');
-  
-  const atRiskCount = allCompanies?.filter(c => 
-    c.status === 'churn_risk' || (c.health_score !== null && c.health_score < 50)
-  ).length || 0;
+    .eq('user_id', user.id);
 
-  // 4. Upcoming Meetings (today/tomorrow)
+  // Filter to active companies (not archived or deleted)
+  const activeCompanies = (allCompaniesData || []).filter(c => 
+    !['archived', 'deleted'].includes(c.status || '')
+  );
+
+  // Calculate stats from active companies
+  const totalActive = activeCompanies.length;
+  const atRiskCount = activeCompanies.filter(c => 
+    (c.health_score !== null && c.health_score < 0)
+  ).length;
+  const happyCount = activeCompanies.filter(c => 
+    (c.health_score !== null && c.health_score > 50)
+  ).length;
+
+  // Calculate percentages
+  const atRiskPercentage = totalActive > 0 ? Math.round((atRiskCount / totalActive) * 100) : 0;
+  const happyPercentage = totalActive > 0 ? Math.round((happyCount / totalActive) * 100) : 0;
+
+  // Fetch today's meetings count
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
@@ -105,80 +76,74 @@ export default async function DashboardPage() {
     .lt('start_time', tomorrow.toISOString());
 
   return (
-    <div className="min-h-screen bg-gray-50/95 p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header */}
-        <header>
-          <h1 className="text-3xl font-bold text-gray-900">
-            {getGreeting()}, {fullName}
-          </h1>
-        </header>
+    <main className="p-8 max-w-[1600px] mx-auto space-y-8">
+      {/* Header */}
+      <header className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900">
+          {getGreeting()}, {fullName}
+        </h1>
+        <p className="text-gray-500 mt-1">
+          Here is what is happening with your customers today.
+        </p>
+      </header>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard 
-            title="Active Customers" 
-            value={activeCustomersCount || 0} 
-            icon={Users}
-          />
-          <StatCard 
-            title="Avg Health" 
-            value={avgHealthScore} 
-            icon={TrendingUp}
-          />
-          <StatCard 
-            title="At Risk" 
-            value={atRiskCount || 0} 
-            icon={AlertTriangle}
-          />
-          <StatCard 
-            title="Meetings Today" 
-            value={upcomingMeetingsCount || 0} 
-            icon={Calendar}
-          />
+      {/* ROW 1: STATS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Active Customers */}
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+          <p className="text-xs font-bold text-gray-500 uppercase">Active Customers</p>
+          <div className="flex items-end justify-between mt-2">
+            <h3 className="text-3xl font-bold text-gray-900">{totalActive}</h3>
+            <span className="text-gray-400 mb-1 text-sm">Total</span>
+          </div>
         </div>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column (Activity Feed) */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Upcoming Meetings Widget */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-              <div className="p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Upcoming Meetings</h3>
-                <DashboardMeetingsList />
-              </div>
-            </div>
-
-            {/* Recent Threads Widget */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-              <div className="p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Recent Threads</h3>
-                <DashboardRecentThreads />
-              </div>
-            </div>
+        {/* Happy Customers */}
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+          <p className="text-xs font-bold text-gray-500 uppercase">Happy Customers</p>
+          <div className="flex items-end justify-between mt-2">
+            <h3 className="text-3xl font-bold text-green-600">{happyPercentage}%</h3>
+            <span className="text-xs font-medium bg-green-50 text-green-600 px-2 py-1 rounded-full">Positive</span>
           </div>
+        </div>
 
-          {/* Right Column (Action Items) */}
-          <div className="space-y-8">
-            {/* Priority Tasks Widget */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-              <div className="p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Priority Tasks</h3>
-                <DashboardTasksList />
-              </div>
-            </div>
+        {/* At Risk */}
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+          <p className="text-xs font-bold text-gray-500 uppercase">At Risk</p>
+          <div className="flex items-end justify-between mt-2">
+            <h3 className="text-3xl font-bold text-red-600">{atRiskPercentage}%</h3>
+            <span className="text-xs font-medium bg-red-50 text-red-600 px-2 py-1 rounded-full">Score &lt; 0</span>
+          </div>
+        </div>
 
-            {/* Needs Attention Widget */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-              <div className="p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Needs Attention</h3>
-                <ConsiderTouchingBase />
-              </div>
+        {/* Meetings Today */}
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+          <p className="text-xs font-bold text-gray-500 uppercase">Meetings Today</p>
+          <div className="flex items-end justify-between mt-2">
+            <h3 className="text-3xl font-bold text-gray-900">{upcomingMeetingsCount || 0}</h3>
+            <span className="text-xs font-medium bg-blue-50 text-blue-600 px-2 py-1 rounded-full">Scheduled</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ROW 2: CONTENT SPLIT */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left: Upcoming Meetings (2/3 width) */}
+        <div className="lg:col-span-2 space-y-6">
+          <h2 className="text-lg font-bold text-gray-900">Upcoming Meetings</h2>
+          <DashboardMeetingsListWithCards />
+        </div>
+
+        {/* Right: Priority Tasks (1/3 width) */}
+        <div className="space-y-6">
+          <h2 className="text-lg font-bold text-gray-900">Priority Tasks</h2>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+            <div className="p-6">
+              <DashboardTasksList />
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

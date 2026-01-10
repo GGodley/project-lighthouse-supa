@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Heart, Calendar, Phone, Mail } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/Button";
@@ -10,8 +10,11 @@ import { NextStepCard } from "@/components/ui/NextStepCard";
 import { TimelineCard } from "@/components/ui/TimelineCard";
 import { FeedbackRequestCard } from "@/components/ui/FeedbackRequestCard";
 import { CompactActivityRow } from "@/components/ui/CompactActivityRow";
+import MeetingCard from "@/components/dashboard/MeetingCard";
 
 export default function DesignPreviewPage() {
+  const [isRecording, setIsRecording] = useState(true);
+
   return (
     <div className="min-h-screen bg-gray-50 p-12 space-y-12">
       <div>
@@ -244,6 +247,31 @@ export default function DesignPreviewPage() {
             />
 
           </div>
+        </div>
+      </section>
+
+      <section className="space-y-8 border-t border-gray-200 pt-8 max-w-3xl">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">9. Meeting Card</h2>
+          <p className="text-sm text-gray-500 mb-6">Reusable meeting card component with recording toggle.</p>
+        </div>
+
+        <div className="space-y-4">
+          <MeetingCard 
+            id="1"
+            title="Weekly Sync: Emectric"
+            startTime={new Date().toISOString()} 
+            platform="google_meet"
+            attendees={[
+              { name: 'Roee', avatarUrl: 'https://unavatar.io/roee' }, 
+              { name: 'Dana' }
+            ]}
+            isRecording={isRecording}
+            onRecordToggle={(val) => {
+              setIsRecording(val);
+              console.log('Toggled to:', val);
+            }}
+          />
         </div>
       </section>
     </div>
