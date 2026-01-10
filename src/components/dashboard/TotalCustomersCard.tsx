@@ -8,13 +8,16 @@ export default async function TotalCustomersCard() {
   let totalCustomers = 0
   
   if (user) {
-    const { data: companies, error } = await supabase
+    const { count, error } = await supabase
       .from('companies')
-      .select('company_id', { count: 'exact', head: false })
+      .select('*', { count: 'exact', head: true })
       .eq('user_id', user.id)
+      // Filter out archived and deleted companies
+      .neq('status', 'archived')
+      .neq('status', 'deleted')
     
-    if (!error && companies) {
-      totalCustomers = companies.length
+    if (!error && count !== null) {
+      totalCustomers = count
     }
   }
 
