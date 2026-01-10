@@ -266,8 +266,28 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
 
               if (recentMeetingsError) {
                 console.error("Error fetching recent meetings:", recentMeetingsError);
+                setRecentActivities([]);
+              } else if (recentMeetingsData) {
+                // Transform the data to match MeetingWithAttendees type
+                // The query returns meetings with meeting_attendees as an array
+                const transformedMeetings: MeetingWithAttendees[] = recentMeetingsData.map((meeting) => {
+                  const baseMeeting = meeting as Meeting;
+                  // Extract meeting_attendees - handle the response structure
+                  const meetingData = meeting as {
+                    meeting_attendees?: { customer_id: string }[] | { error: true } | string;
+                  };
+                  let attendees: { customer_id: string }[] = [];
+                  if (Array.isArray(meetingData.meeting_attendees)) {
+                    attendees = meetingData.meeting_attendees;
+                  }
+                  return {
+                    ...baseMeeting,
+                    meeting_attendees: attendees,
+                  };
+                });
+                setRecentActivities(transformedMeetings);
               } else {
-                setRecentActivities((recentMeetingsData as MeetingWithAttendees[]) || []);
+                setRecentActivities([]);
               }
 
               // Fetch timeline events (threads and meetings)
