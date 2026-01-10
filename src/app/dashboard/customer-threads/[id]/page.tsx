@@ -12,10 +12,7 @@ import {
   Search,
   Filter,
   ArrowDownWideNarrow,
-  Heart,
   Calendar,
-  Phone,
-  Mail,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/Button";

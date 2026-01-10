@@ -41,8 +41,8 @@ export default function DashboardTasksList() {
       .map(t => t.thread_id)
       .filter((id): id is string => id !== null)
 
-    let linksMap: Record<string, string> = {}
-    let companiesMap: Record<string, string> = {}
+    const linksMap: Record<string, string> = {}
+    const companiesMap: Record<string, string> = {}
 
     if (threadIds.length > 0) {
       // Get company_id from thread_company_link
