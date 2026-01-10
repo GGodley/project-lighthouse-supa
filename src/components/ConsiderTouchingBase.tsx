@@ -67,11 +67,7 @@ const ConsiderTouchingBase: React.FC = () => {
   }, [selectedDays])
 
   return (
-    <div className="glass-card p-6 h-full flex flex-col">
-      <h3 className="text-lg font-semibold mb-4">
-        Consider Touching Base
-      </h3>
-      
+    <div className="h-full flex flex-col">
       {/* Filter Pills */}
       <div className="flex flex-wrap gap-2 mb-4">
         {TIME_PERIODS.map((period) => {
