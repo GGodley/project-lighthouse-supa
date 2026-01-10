@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { CheckCircle2, Circle } from 'lucide-react'
-import TaskDetailModal from './TaskDetailModal'
+import { NextStepCard, type NextStepStatus } from '@/components/ui/NextStepCard'
+import { useSupabase } from '@/components/SupabaseProvider'
 
 interface NextStep {
   step_id: string
@@ -16,50 +15,6 @@ interface NextStep {
   meeting_id: string | null
   company_id: string | null
   company_name: string | null
-}
-
-const STATUS_CONFIG = {
-  todo: { 
-    label: 'To Do', 
-    color: 'bg-slate-800 text-white border border-slate-700 shadow-sm shadow-slate-200 font-bold' 
-  },
-  in_progress: { 
-    label: 'In Progress', 
-    color: 'bg-blue-500 text-white border border-blue-400 shadow-sm shadow-blue-200 font-bold' 
-  },
-  blocked: { 
-    label: 'Blocked', 
-    color: 'bg-pink-500 text-white border border-pink-400 shadow-sm shadow-pink-200 font-bold' 
-  },
-  done: { 
-    label: 'Done', 
-    color: 'bg-emerald-500 text-white border border-emerald-400 shadow-sm shadow-emerald-200 font-bold' 
-  },
-}
-
-const PRIORITY_CONFIG = {
-  high: { 
-    label: 'High', 
-    color: 'bg-rose-500 text-white border border-rose-400 font-bold' 
-  },
-  medium: { 
-    label: 'Medium', 
-    color: 'bg-yellow-400 text-yellow-900 border border-yellow-300 font-bold' 
-  },
-  low: { 
-    label: 'Low', 
-    color: 'bg-teal-500 text-white border border-teal-400 font-bold' 
-  },
-}
-
-const formatDueDate = (dateString: string | null) => {
-  if (!dateString) return null
-  try {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  } catch {
-    return null
-  }
 }
 
 interface TaskResponse {
@@ -84,7 +39,22 @@ interface TasksApiResponse {
 export default function TasksNextSteps() {
   const [tasks, setTasks] = useState<NextStep[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedTask, setSelectedTask] = useState<NextStep | null>(null)
+  const supabase = useSupabase()
+
+  // Helper function to map status to NextStepCard status
+  const mapStepStatus = (status: string | null | undefined): NextStepStatus => {
+    if (!status) return 'todo';
+    const statusLower = status.toLowerCase().trim();
+    if (statusLower === 'in_progress' || statusLower === 'in-progress') return 'in_progress';
+    if (statusLower === 'done' || statusLower === 'completed') return 'done';
+    return 'todo';
+  };
+
+  // Helper function to format priority
+  const formatPriority = (priority: string | null | undefined): string => {
+    if (!priority) return 'No priority';
+    return `Priority: ${priority.charAt(0).toUpperCase() + priority.slice(1)}`;
+  };
 
   const fetchTasks = async () => {
     try {
@@ -119,126 +89,62 @@ export default function TasksNextSteps() {
     fetchTasks()
   }, [])
 
-  const isCompleted = (status: string) => {
-    return status === 'completed' || status === 'done'
-  }
+  // Handle status update
+  const handleStatusUpdate = async (stepId: string, newStatus: NextStepStatus) => {
+    // Optimistic update
+    setTasks(prevTasks => 
+      prevTasks.map(task => 
+        task.step_id === stepId 
+          ? { ...task, status: newStatus }
+          : task
+      )
+    );
 
-  const handleTaskUpdate = async (updatedTask: NextStep) => {
-    // Update local state immediately
-    setTasks(tasks.map(t => t.step_id === updatedTask.step_id ? updatedTask : t))
-    if (selectedTask && selectedTask.step_id === updatedTask.step_id) {
-      setSelectedTask(updatedTask)
+    // Update in database
+    const { error } = await supabase
+      .from('next_steps')
+      .update({ status: newStatus })
+      .eq('step_id', stepId);
+
+    if (error) {
+      console.error('Error updating status:', error);
+      // Revert on error by refetching
+      await fetchTasks();
     }
-    // Refetch to ensure data is in sync
-    await fetchTasks()
-  }
+  };
 
   return (
     <div className="glass-card p-6 h-full flex flex-col">
       <h3 className="text-lg font-semibold mb-4">
         Tasks / Next Steps
       </h3>
-      <div className="space-y-3 flex-1 overflow-y-auto" style={{ maxHeight: '20rem' }}>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 flex-1 overflow-y-auto" style={{ maxHeight: '20rem' }}>
         {loading ? (
-          <p className="text-sm">Loading tasks...</p>
+          <div className="col-span-full flex items-center justify-center py-8">
+            <p className="text-sm text-gray-500">Loading tasks...</p>
+          </div>
         ) : tasks.length === 0 ? (
-          <p className="text-sm">No tasks at this time</p>
+          <div className="col-span-full flex items-center justify-center py-8">
+            <p className="text-sm text-gray-500">No tasks at this time</p>
+          </div>
         ) : (
-          tasks.map((task) => {
-            const completed = isCompleted(task.status)
-            const dueDateFormatted = formatDueDate(task.due_date)
-            const statusLower = (task.status || '').toLowerCase().trim()
-            const statusKey = Object.keys(STATUS_CONFIG).find(key => key.toLowerCase() === statusLower)
-            const statusColor = statusKey ? STATUS_CONFIG[statusKey as keyof typeof STATUS_CONFIG].color : 'bg-slate-800 text-white border border-slate-700 shadow-sm shadow-slate-200 font-bold'
-            const statusLabel = statusKey ? STATUS_CONFIG[statusKey as keyof typeof STATUS_CONFIG].label : task.status
-            const priorityKey = task.priority as keyof typeof PRIORITY_CONFIG
-            const priorityColor = PRIORITY_CONFIG[priorityKey] ? PRIORITY_CONFIG[priorityKey].color : 'bg-teal-500 text-white border border-teal-400 font-bold'
-            const priorityLabel = PRIORITY_CONFIG[priorityKey] ? PRIORITY_CONFIG[priorityKey].label : task.priority
-            
-            return (
-              <div
-                key={task.step_id}
-                onClick={() => setSelectedTask(task)}
-                className="glass-bar-row relative p-4 cursor-pointer group"
-              >
-                {/* Due Date - Top Right */}
-                {dueDateFormatted && (
-                  <div className="absolute top-2 right-2 text-xs text-slate-500">
-                    {dueDateFormatted}
-                  </div>
-                )}
-
-                {/* Task Content */}
-                <div className="flex items-start gap-3 pr-16">
-                  {/* Checkbox */}
-                  <div className="flex-shrink-0 mt-0.5">
-                    {completed ? (
-                      <CheckCircle2 className="w-5 h-5 text-blue-600" />
-                    ) : (
-                      <Circle className="w-5 h-5 text-gray-400 border-2 border-gray-300 rounded-full" />
-                    )}
-                  </div>
-
-                  {/* Task Description and Pills */}
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm mb-2 ${completed ? 'line-through opacity-60' : ''}`}>
-                      {task.description}
-                    </p>
-                    
-                    {/* Pill Row */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {/* Priority */}
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${priorityColor}`}>
-                        {priorityLabel}
-                      </span>
-                      
-                      {/* Status */}
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${statusColor}`}>
-                        {statusLabel}
-                      </span>
-                      
-                      {/* Source */}
-                      {task.company_id && task.thread_id && (
-                        <Link
-                          href={`/dashboard/customer-threads/${task.company_id}?thread=${task.thread_id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200 font-bold hover:bg-yellow-200 transition-colors"
-                        >
-                          Source
-                        </Link>
-                      )}
-                      
-                      {/* Owner */}
-                      {task.owner && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-medium">
-                          {task.owner}
-                        </span>
-                      )}
-                      
-                      {/* Company */}
-                      {task.company_name && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-medium">
-                          {task.company_name}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })
+          tasks.map((task) => (
+            <NextStepCard
+              key={task.step_id}
+              variant="default"
+              status={mapStepStatus(task.status)}
+              companyName={task.company_name || task.owner || "Unassigned"}
+              contactName={formatPriority(task.priority)}
+              description={task.description}
+              onStatusChange={(newStatus) => handleStatusUpdate(task.step_id, newStatus)}
+              onGoToSource={task.company_id && task.thread_id ? () => {
+                window.location.href = `/dashboard/customer-threads/${task.company_id}?thread=${task.thread_id}`;
+              } : undefined}
+              className="h-full"
+            />
+          ))
         )}
       </div>
-
-      {/* Modal - rendered outside the map loop */}
-      {selectedTask && (
-        <TaskDetailModal
-          task={selectedTask}
-          onClose={() => setSelectedTask(null)}
-          onUpdate={handleTaskUpdate}
-        />
-      )}
     </div>
   )
 }
-
