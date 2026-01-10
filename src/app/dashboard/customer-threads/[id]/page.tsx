@@ -104,6 +104,42 @@ interface MeetingLLMSummary {
 
 type NextStep = Database["public"]["Tables"]["next_steps"]["Row"];
 
+// Structure of a single request inside the JSONB column
+interface LLMRequestItem {
+  title: string;
+  urgency?: 'Low' | 'Medium' | 'High';
+  customer_description?: string; // Sometimes called this
+  description?: string;          // Sometimes called this
+  use_case?: string;
+  customer_impact?: string;
+}
+
+// Structure of the Thread Query Result
+interface ThreadQueryRow {
+  company_id: string;
+  threads: {
+    thread_id: string;
+    subject: string | null;
+    last_message_date: string | null;
+    llm_summary: {
+      feature_requests?: LLMRequestItem[];
+    } | null; // llm_summary can be null or any JSON
+  };
+}
+
+// Structure of the Meeting Query Result
+interface MeetingQueryRow {
+  id: string;
+  title: string | null;
+  start_time: string | null;
+  meeting_llm_summary: {
+    feature_requests?: LLMRequestItem[];
+  } | null;
+  meeting_attendees: {
+    customer_id: string;
+  }[];
+}
+
 interface FeatureRequestItem {
   id: string; // Unique ID (generated)
   title: string;
@@ -432,27 +468,18 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               const allRequests: FeatureRequestItem[] = [];
 
               // Process Threads
-              threadReqs?.forEach((row: any) => {
-                const llmSummary = row.threads.llm_summary;
-                // Handle both string and object formats
-                let parsedSummary: any = null;
-                if (llmSummary) {
-                  try {
-                    parsedSummary = typeof llmSummary === 'string' 
-                      ? JSON.parse(llmSummary) 
-                      : llmSummary;
-                  } catch (e) {
-                    console.error("Error parsing thread llm_summary:", e);
-                  }
-                }
-                const requests = parsedSummary?.feature_requests || [];
-                requests.forEach((req: any, idx: number) => {
+              // Cast data to known type: (threadReqs as unknown as ThreadQueryRow[])
+              (threadReqs as unknown as ThreadQueryRow[])?.forEach((row) => {
+                // Use optional chaining carefully
+                const summary = row.threads.llm_summary; 
+                // Need to cast summary to expected shape if Supabase returns 'any' for JSONB
+                const requests = (summary as { feature_requests?: LLMRequestItem[] })?.feature_requests || [];
+                
+                requests.forEach((req, idx) => {
                   allRequests.push({
                     id: `thread-${row.threads.thread_id}-${idx}`,
                     title: req.title || 'Untitled Request',
-                    urgency: (req.urgency === 'High' || req.urgency === 'Medium' || req.urgency === 'Low') 
-                      ? req.urgency 
-                      : 'Low',
+                    urgency: req.urgency || 'Low',
                     customer_description: req.customer_description || req.description || '',
                     use_case: req.use_case,
                     customer_impact: req.customer_impact,
@@ -464,27 +491,15 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               });
 
               // Process Meetings
-              meetingReqs?.forEach((row: any) => {
-                const llmSummary = row.meeting_llm_summary;
-                // Handle both string and object formats
-                let parsedSummary: any = null;
-                if (llmSummary) {
-                  try {
-                    parsedSummary = typeof llmSummary === 'string' 
-                      ? JSON.parse(llmSummary) 
-                      : llmSummary;
-                  } catch (e) {
-                    console.error("Error parsing meeting llm_summary:", e);
-                  }
-                }
-                const requests = parsedSummary?.feature_requests || [];
-                requests.forEach((req: any, idx: number) => {
+              (meetingReqs as unknown as MeetingQueryRow[])?.forEach((row) => {
+                const summary = row.meeting_llm_summary;
+                const requests = (summary as { feature_requests?: LLMRequestItem[] })?.feature_requests || [];
+
+                requests.forEach((req, idx) => {
                   allRequests.push({
                     id: `meeting-${row.id}-${idx}`,
                     title: req.title || 'Untitled Request',
-                    urgency: (req.urgency === 'High' || req.urgency === 'Medium' || req.urgency === 'Low') 
-                      ? req.urgency 
-                      : 'Low',
+                    urgency: req.urgency || 'Low',
                     customer_description: req.customer_description || req.description || '',
                     use_case: req.use_case,
                     customer_impact: req.customer_impact,
@@ -1146,7 +1161,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
 
               <div className="space-y-4 mt-4">
                 <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
-                  <p className="text-sm text-gray-800 italic">"{req.customer_description}"</p>
+                  <p className="text-sm text-gray-800 italic">&quot;{req.customer_description}&quot;</p>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

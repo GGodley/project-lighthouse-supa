@@ -81,6 +81,7 @@ export function TouchingBaseWidget({ companies }: { companies: CompanyCandidate[
               >
                 {/* Logo Avatar */}
                 <div className="w-10 h-10 rounded-lg bg-white border border-gray-200 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+                   {/* eslint-disable-next-line @next/next/no-img-element */}
                    <img 
                       src={`https://ui-avatars.com/api/?name=${encodeURIComponent(company.company_name)}&background=random&size=64`} 
                       alt={company.company_name}
