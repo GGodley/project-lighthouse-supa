@@ -10,17 +10,18 @@ interface Meeting {
   start_time: string | null
   meeting_url: string | null
   company_id: string | null
-  bot_enabled: boolean | null
+  bot_enabled: boolean
 }
 
 // Type for meeting data returned from Supabase (includes bot_enabled which may not be in generated types)
+// According to schema: bot_enabled boolean not null default true
 type MeetingRow = {
   id: number
   title: string | null
   start_time: string | null
   meeting_url: string | null
   company_id: string | null
-  bot_enabled?: boolean | null
+  bot_enabled: boolean
 }
 
 export default function DashboardMeetingsListWithCards() {
@@ -52,8 +53,9 @@ export default function DashboardMeetingsListWithCards() {
 
         if (queryResult.error) throw queryResult.error
         
-        // Cast data to MeetingRow[] to handle bot_enabled column
-        const rawData = queryResult.data as MeetingRow[] | null
+        // Cast data to MeetingRow[] to handle bot_enabled column that exists in DB but not in generated types
+        // Cast through unknown first as TypeScript suggests for type conversions
+        const rawData = queryResult.data as unknown as MeetingRow[] | null
         
         // Map data to Meeting type
         const meetingsWithBotEnabled: Meeting[] = (rawData || []).map((meeting) => ({
@@ -62,7 +64,7 @@ export default function DashboardMeetingsListWithCards() {
           start_time: meeting.start_time,
           meeting_url: meeting.meeting_url,
           company_id: meeting.company_id,
-          bot_enabled: meeting.bot_enabled ?? true // Default to true if null/undefined
+          bot_enabled: meeting.bot_enabled // Always present per schema (not null default true)
         }))
         
         setMeetings(meetingsWithBotEnabled)
@@ -135,7 +137,7 @@ export default function DashboardMeetingsListWithCards() {
           title={meeting.title || "Untitled Meeting"}
           startTime={meeting.start_time || new Date().toISOString()}
           platform={getPlatform(meeting.meeting_url)}
-          isRecording={meeting.bot_enabled ?? true}
+          isRecording={meeting.bot_enabled}
           onRecordToggle={(newStatus) => handleRecordToggle(meeting.id, newStatus)}
         />
       ))}
