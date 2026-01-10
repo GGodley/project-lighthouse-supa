@@ -10,6 +10,7 @@ interface Meeting {
   start_time: string | null
   meeting_url: string | null
   company_id: string | null
+  bot_enabled: boolean | null
 }
 
 export default function DashboardMeetingsListWithCards() {
@@ -28,9 +29,10 @@ export default function DashboardMeetingsListWithCards() {
         const nextWeek = new Date(today)
         nextWeek.setDate(nextWeek.getDate() + 7)
 
+        // Fetch meetings with bot_enabled - cast to handle type that may not be in generated types yet
         const { data, error } = await supabase
           .from('meetings')
-          .select('id, title, start_time, meeting_url, company_id')
+          .select('id, title, start_time, meeting_url, company_id, bot_enabled')
           .eq('user_id', user.id)
           .gte('start_time', today.toISOString())
           .lt('start_time', nextWeek.toISOString())
@@ -38,7 +40,14 @@ export default function DashboardMeetingsListWithCards() {
           .limit(10)
 
         if (error) throw error
-        setMeetings(data || [])
+        
+        // Type assertion to handle bot_enabled column that exists in DB but may not be in types
+        const meetingsWithBotEnabled = (data || []).map(meeting => ({
+          ...meeting,
+          bot_enabled: (meeting as any).bot_enabled ?? true // Default to true if null/undefined
+        })) as Meeting[]
+        
+        setMeetings(meetingsWithBotEnabled)
       } catch (err) {
         console.error('Error fetching meetings:', err)
       } finally {
@@ -60,19 +69,22 @@ export default function DashboardMeetingsListWithCards() {
 
   const handleRecordToggle = async (meetingId: number, newStatus: boolean) => {
     try {
-      // Try to update bot_enabled if the column exists
-      // If it doesn't exist, the update will fail gracefully
+      // Update bot_enabled in database
       const { error } = await supabase
         .from('meetings')
-        .update({ bot_enabled: newStatus })
+        .update({ bot_enabled: newStatus } as any) // Type assertion for column not in types yet
         .eq('id', meetingId)
 
-      if (error) {
-        // If column doesn't exist, just log and continue
-        // The toggle will still work visually but won't persist
-        console.warn('bot_enabled column may not exist:', error.message)
-        return
-      }
+      if (error) throw error
+
+      // Optimistic update
+      setMeetings(prevMeetings =>
+        prevMeetings.map(meeting =>
+          meeting.id === meetingId
+            ? { ...meeting, bot_enabled: newStatus }
+            : meeting
+        )
+      )
     } catch (err) {
       console.error('Error updating recording status:', err)
     }
@@ -103,7 +115,7 @@ export default function DashboardMeetingsListWithCards() {
           title={meeting.title || "Untitled Meeting"}
           startTime={meeting.start_time || new Date().toISOString()}
           platform={getPlatform(meeting.meeting_url)}
-          isRecording={true}
+          isRecording={meeting.bot_enabled ?? true}
           onRecordToggle={(newStatus) => handleRecordToggle(meeting.id, newStatus)}
         />
       ))}
