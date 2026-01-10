@@ -452,7 +452,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               console.error("Error parsing meeting_llm_summary:", error);
               setMeetingLLMSummary(null);
             }
-          } else {
+    } else {
             setMeetingLLMSummary(null);
           }
         }
@@ -676,11 +676,11 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
             <div className="flex items-center gap-2.5 mb-3">
               <Sparkles className="w-5 h-5 text-yellow-500 fill-yellow-500/20" />
               <h3 className="font-bold text-gray-900 text-base">Summary</h3>
-            </div>
+          </div>
             <p className="text-gray-700 text-[15px] leading-7 font-medium line-clamp-4">
               {insights.summary ||
                 "No summary available. AI insights are being generated."}
-            </p>
+          </p>
           </div>
         </Card>
 
@@ -689,7 +689,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
             <div className="flex justify-between items-start mb-6">
               <h3 className="font-bold text-gray-900 text-base">LinkedIn</h3>
               <Linkedin className="w-6 h-6 text-[#0A66C2]" />
-            </div>
+          </div>
             <div className="mt-auto mb-2">
               <div className="text-lg font-bold text-gray-900 mb-1">
                 {company?.company_name || "Company"}
@@ -727,7 +727,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
           onClick={() => setActiveTab("tasks")}
         >
           {nextStep ? (
-            <NextStepCard
+          <NextStepCard
               variant="compact"
               status={mapStepStatus(nextStep.status)}
               companyName={nextStep.owner || company?.company_name || "Company"}
@@ -881,7 +881,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         <div>
           <h2 className="text-xl font-bold text-gray-900">Tasks</h2>
           <p className="text-sm text-gray-500 mt-1">Manage action items.</p>
-        </div>
+          </div>
         <Button
           variant="primary"
           className="bg-gray-900 text-white hover:bg-gray-800 shadow-sm"
@@ -924,7 +924,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         >
           + Log Request
         </Button>
-      </div>
+            </div>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <FeedbackRequestCard
           title="Automated invoices via API"
@@ -1062,7 +1062,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                         </h3>
                         <p className="text-xs text-gray-500">Auto-generated recording text</p>
                       </div>
-                    </div>
+      </div>
 
                     <div className="prose max-w-none text-sm text-gray-800 whitespace-pre-wrap leading-relaxed font-mono">
                       {meetingTranscript || (
@@ -1104,7 +1104,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                           Score: {meetingLLMSummary.sentiment_score}
                         </span>
                       )}
-                    </div>
+        </div>
                   </div>
                 )}
 
@@ -1126,15 +1126,15 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                   {meetingLLMSummary.action_items && meetingLLMSummary.action_items.length > 0 ? (
                     <div className="space-y-3">
                       {meetingLLMSummary.action_items.map((item, index) => (
-                        <div
+                        <NextStepCard
                           key={index}
-                          className="p-3 bg-white border border-gray-200 rounded-lg hover:shadow-sm transition-shadow"
-                        >
-                          <p className="text-sm text-gray-800 mb-1">{item.text}</p>
-                          {item.owner && (
-                            <p className="text-xs text-gray-500">Owner: {item.owner}</p>
-                          )}
-                        </div>
+                          variant="compact"
+                          status="todo"
+                          companyName={item.owner || company?.company_name || "Unassigned"}
+                          contactName="Action Item"
+                          description={item.text}
+                          className="mb-0"
+                        />
                       ))}
                     </div>
                   ) : (
@@ -1148,31 +1148,20 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                     <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
                       Feature Requests
                     </h3>
-                    <div className="space-y-3">
+          <div className="space-y-3">
                       {meetingLLMSummary.feature_requests.map((request, index) => (
-                        <div
+                        <FeedbackRequestCard
                           key={index}
-                          className="p-3 bg-white border border-gray-200 rounded-lg"
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <h4 className="text-sm font-semibold text-gray-900">{request.title}</h4>
-                            <span
-                              className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                request.urgency === "High"
-                                  ? "bg-red-100 text-red-800"
-                                  : request.urgency === "Medium"
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : "bg-gray-100 text-gray-800"
-                              }`}
-                            >
-                              {request.urgency}
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-600 mb-1">{request.customer_description}</p>
-                          <p className="text-xs text-gray-500 italic">{request.use_case}</p>
-                        </div>
+                          variant="compact"
+                          title={request.title}
+                          context={request.urgency}
+                          date={meetingDetails?.start_time ? formatMeetingDate(meetingDetails.start_time) : "Recently"}
+                          status="open"
+                          description={request.customer_description}
+                          className="mb-0"
+                        />
                       ))}
-                    </div>
+                </div>
                   </div>
                 )}
 
@@ -1235,9 +1224,9 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                             description={step.description}
                             className="mb-0 hover:ring-2 hover:ring-blue-500 transition-all"
                           />
-                        </div>
-                      ))}
-                    </div>
+              </div>
+            ))}
+          </div>
                   ) : (
                     <div className="text-xs text-gray-400 italic">No steps detected.</div>
                   )}
