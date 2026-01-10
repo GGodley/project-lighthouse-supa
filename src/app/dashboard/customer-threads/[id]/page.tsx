@@ -849,7 +849,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                 
                 // Get attendee name from customers list or use meeting title
                 const attendeeName = customers.find(
-                  c => meeting.meeting_attendees?.some((ma: { customer_id: string }) => ma.customer_id === c.id)
+                  c => meeting.meeting_attendees?.some((ma: { customer_id: string }) => ma.customer_id === c.customer_id)
                 )?.full_name || meeting.title || "Team member";
                 
                 return (
