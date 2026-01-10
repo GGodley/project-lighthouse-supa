@@ -24,8 +24,12 @@ export default function DashboardRecentThreads() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
+        // Cast through unknown to access untyped tables (threads and thread_company_link)
+        // This is necessary until types are regenerated to include these tables
+        const client = supabase as any;
+
         // Get recent threads
-        const { data: threadsData, error: threadsError } = await supabase
+        const { data: threadsData, error: threadsError } = await client
           .from('threads')
           .select('thread_id, subject, snippet, last_message_date')
           .eq('user_id', user.id)
@@ -35,9 +39,9 @@ export default function DashboardRecentThreads() {
         if (threadsError) throw threadsError
 
         // Get company IDs for each thread
-        const threadIds = (threadsData || []).map(t => t.thread_id)
+        const threadIds = (threadsData || []).map((t: Thread) => t.thread_id)
         if (threadIds.length > 0) {
-          const { data: links } = await supabase
+          const { data: links } = await client
             .from('thread_company_link')
             .select('thread_id, company_id')
             .in('thread_id', threadIds)
