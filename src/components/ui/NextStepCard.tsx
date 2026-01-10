@@ -70,14 +70,14 @@ export function NextStepCard({
   const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(companyName)}&background=random&color=fff`;
 
   const isCompact = variant === "compact";
-  const heightClass = isCompact ? "h-full min-h-[180px]" : "h-auto"; 
+  const heightClass = isCompact ? "h-full min-h-[180px]" : "min-h-[200px]"; 
   
   // Use p-4 for the inner content box, p-5 for the outer card padding in compact mode
   const paddingClass = isCompact ? "p-4" : "p-4"; 
 
   return (
     <Card noPadding className={`flex flex-col ${heightClass} ${className}`}>
-      <div className={`flex flex-col h-full ${isCompact ? "p-5" : "p-6"}`}>
+      <div className={`flex flex-col ${isCompact ? "h-full p-5" : "p-6"}`}>
         
         {isCompact && (
           <div className="flex justify-between items-center mb-2">
@@ -106,7 +106,7 @@ export function NextStepCard({
         {/* Content Box */}
         <div className={`
           rounded-lg border transition-colors duration-300 ${config.container} 
-          mt-auto flex flex-col justify-between flex-1
+          ${isCompact ? "mt-auto flex flex-col justify-between flex-1" : ""}
           ${paddingClass} 
         `}>
           <p className={`leading-relaxed font-medium text-sm ${config.text} line-clamp-3`}>

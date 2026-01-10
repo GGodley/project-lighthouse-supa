@@ -118,7 +118,7 @@ export default function TasksNextSteps() {
       <h3 className="text-lg font-semibold mb-4">
         Tasks / Next Steps
       </h3>
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 flex-1 overflow-y-auto" style={{ maxHeight: '20rem' }}>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 overflow-y-auto flex-1 min-h-0">
         {loading ? (
           <div className="col-span-full flex items-center justify-center py-8">
             <p className="text-sm text-gray-500">Loading tasks...</p>
@@ -140,7 +140,6 @@ export default function TasksNextSteps() {
               onGoToSource={task.company_id && task.thread_id ? () => {
                 window.location.href = `/dashboard/customer-threads/${task.company_id}?thread=${task.thread_id}`;
               } : undefined}
-              className="h-full"
             />
           ))
         )}
