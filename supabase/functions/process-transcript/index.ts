@@ -51,9 +51,11 @@ Deno.serve(async (req) => {
 
       const botIdFromPayload = payload.data?.bot?.id;
       if (!botIdFromPayload) {
-        throw new Error('Could not find bot.id in payload.');
+        console.error('[ERROR] Could not find bot.id in payload. Payload structure:', JSON.stringify(payload, null, 2));
+        return new Response(JSON.stringify({ received: true, error: 'Missing bot.id in payload' }), { status: 200 });
       }
       console.log(`[LOG] Bot ID: ${botIdFromPayload}`);
+      console.log("Looking for meeting with recall_bot_id:", botIdFromPayload);
 
       const supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL')!,
@@ -237,9 +239,11 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('Error in process-transcript webhook:', error);
+    // Return 200 to prevent Recall.ai from disabling the webhook
+    // Errors are logged for debugging but we acknowledge receipt
     return new Response(
-      JSON.stringify({ error: 'Internal Server Error' }),
-      { status: 500 }
+      JSON.stringify({ received: true, error: 'Internal Server Error' }),
+      { status: 200 }
     );
   }
 });
