@@ -104,6 +104,18 @@ interface MeetingLLMSummary {
 
 type NextStep = Database["public"]["Tables"]["next_steps"]["Row"];
 
+interface FeatureRequestItem {
+  id: string; // Unique ID (generated)
+  title: string;
+  urgency: 'Low' | 'Medium' | 'High';
+  customer_description: string;
+  use_case?: string;
+  customer_impact?: string;
+  sourceType: 'thread' | 'meeting';
+  sourceTitle: string;
+  date: string; // ISO string
+}
+
 export default function CompanyDetailDashboard({ params }: PageProps) {
   const [activeTab, setActiveTab] = useState<"highlights" | "timeline" | "tasks" | "requests">(
     "highlights",
@@ -134,6 +146,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
     requests: unknown[];
     attendees: string[];
   }>({ steps: [], requests: [], attendees: [] });
+  const [featureRequests, setFeatureRequests] = useState<FeatureRequestItem[]>([]);
   const supabase = useSupabase();
 
   useEffect(() => {
@@ -376,6 +389,121 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               );
 
               setTimelineEvents(combinedEvents);
+
+              // Fetch Feature Requests from Threads and Meetings
+              // 1. Fetch Thread Requests
+              const { data: threadReqs, error: threadReqsError } = await untypedSupabase
+                .from("thread_company_link")
+                .select(
+                  `
+                  company_id,
+                  threads!inner (
+                    thread_id,
+                    subject,
+                    last_message_date,
+                    llm_summary
+                  )
+                `
+                )
+                .eq("company_id", companyId);
+
+              // 2. Fetch Meeting Requests
+              const { data: meetingReqs, error: meetingReqsError } = await supabase
+                .from("meetings")
+                .select(
+                  `
+                  id,
+                  title,
+                  start_time,
+                  meeting_llm_summary,
+                  meeting_attendees!inner(customer_id)
+                `
+                )
+                .in("meeting_attendees.customer_id", customerIds);
+
+              if (threadReqsError) {
+                console.error("Error fetching thread requests:", threadReqsError);
+              }
+              if (meetingReqsError) {
+                console.error("Error fetching meeting requests:", meetingReqsError);
+              }
+
+              // 3. Transform & Merge
+              const allRequests: FeatureRequestItem[] = [];
+
+              // Process Threads
+              threadReqs?.forEach((row: any) => {
+                const llmSummary = row.threads.llm_summary;
+                // Handle both string and object formats
+                let parsedSummary: any = null;
+                if (llmSummary) {
+                  try {
+                    parsedSummary = typeof llmSummary === 'string' 
+                      ? JSON.parse(llmSummary) 
+                      : llmSummary;
+                  } catch (e) {
+                    console.error("Error parsing thread llm_summary:", e);
+                  }
+                }
+                const requests = parsedSummary?.feature_requests || [];
+                requests.forEach((req: any, idx: number) => {
+                  allRequests.push({
+                    id: `thread-${row.threads.thread_id}-${idx}`,
+                    title: req.title || 'Untitled Request',
+                    urgency: (req.urgency === 'High' || req.urgency === 'Medium' || req.urgency === 'Low') 
+                      ? req.urgency 
+                      : 'Low',
+                    customer_description: req.customer_description || req.description || '',
+                    use_case: req.use_case,
+                    customer_impact: req.customer_impact,
+                    sourceType: 'thread',
+                    sourceTitle: row.threads.subject || 'Email Thread',
+                    date: row.threads.last_message_date || new Date().toISOString()
+                  });
+                });
+              });
+
+              // Process Meetings
+              meetingReqs?.forEach((row: any) => {
+                const llmSummary = row.meeting_llm_summary;
+                // Handle both string and object formats
+                let parsedSummary: any = null;
+                if (llmSummary) {
+                  try {
+                    parsedSummary = typeof llmSummary === 'string' 
+                      ? JSON.parse(llmSummary) 
+                      : llmSummary;
+                  } catch (e) {
+                    console.error("Error parsing meeting llm_summary:", e);
+                  }
+                }
+                const requests = parsedSummary?.feature_requests || [];
+                requests.forEach((req: any, idx: number) => {
+                  allRequests.push({
+                    id: `meeting-${row.id}-${idx}`,
+                    title: req.title || 'Untitled Request',
+                    urgency: (req.urgency === 'High' || req.urgency === 'Medium' || req.urgency === 'Low') 
+                      ? req.urgency 
+                      : 'Low',
+                    customer_description: req.customer_description || req.description || '',
+                    use_case: req.use_case,
+                    customer_impact: req.customer_impact,
+                    sourceType: 'meeting',
+                    sourceTitle: row.title || 'Meeting',
+                    date: row.start_time || new Date().toISOString()
+                  });
+                });
+              });
+
+              // Sort by Urgency (High -> Medium -> Low) then Date
+              const urgencyOrder = { 'High': 3, 'Medium': 2, 'Low': 1 };
+              allRequests.sort((a, b) => {
+                const diff = (urgencyOrder[b.urgency] || 0) - (urgencyOrder[a.urgency] || 0);
+                if (diff !== 0) return diff;
+                return new Date(b.date).getTime() - new Date(a.date).getTime();
+              });
+
+              setFeatureRequests(allRequests);
             }
           }
         }
@@ -994,23 +1122,55 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
           + Log Request
         </Button>
             </div>
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <FeedbackRequestCard
-          title="Automated invoices via API"
-          context="Feature Request"
-          date="2 days ago"
-          status="open"
-          voteCount={12}
-          description="Customer wants to pull PDF invoices directly."
-        />
-        <FeedbackRequestCard
-          title="Dark Mode Support"
-          context="UX Enhancement"
-          date="3 weeks ago"
-          status="completed"
-          voteCount={45}
-          description="Engineering team requested dark mode."
-        />
+      <div className="grid grid-cols-1 gap-6">
+        {featureRequests.length > 0 ? (
+          featureRequests.map((req) => (
+            <div key={req.id} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex justify-between items-start mb-3">
+                <div>
+                  <div className="flex items-center gap-3 mb-1">
+                    <h3 className="text-lg font-bold text-gray-900">{req.title}</h3>
+                    <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wide border ${
+                      req.urgency === 'High' ? 'bg-red-50 text-red-700 border-red-100' :
+                      req.urgency === 'Medium' ? 'bg-orange-50 text-orange-700 border-orange-100' :
+                      'bg-blue-50 text-blue-700 border-blue-100'
+                    }`}>
+                      {req.urgency}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-500 flex items-center gap-2">
+                    From {req.sourceType === 'meeting' ? '🎥' : '✉️'} <span className="font-medium text-gray-700">{req.sourceTitle}</span> on {new Date(req.date).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4 mt-4">
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                  <p className="text-sm text-gray-800 italic">"{req.customer_description}"</p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {req.use_case && (
+                     <div>
+                       <h4 className="text-xs font-bold text-gray-500 uppercase mb-1">Use Case</h4>
+                       <p className="text-sm text-gray-700">{req.use_case}</p>
+                     </div>
+                  )}
+                  {req.customer_impact && (
+                     <div>
+                       <h4 className="text-xs font-bold text-gray-500 uppercase mb-1">Impact</h4>
+                       <p className="text-sm text-gray-700">{req.customer_impact}</p>
+                     </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300 text-gray-500">
+            No feature requests detected yet.
+          </div>
+        )}
       </div>
     </div>
   );

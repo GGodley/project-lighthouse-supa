@@ -49,7 +49,8 @@ export function TouchingBaseWidgetContainer() {
 
         setCompanies(sortedCompanies.map(c => ({
           company_id: c.company_id,
-          company_name: c.company_name,
+          // Fix: Handle null name by defaulting to "Unknown Company"
+          company_name: c.company_name || "Unknown Company",
           last_interaction_at: c.last_interaction_at
         })))
       } catch (err) {
