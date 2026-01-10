@@ -15,6 +15,26 @@ interface NextStep {
   priority: string | null
 }
 
+interface ThreadCompanyLink {
+  thread_id: string
+  company_id: string
+}
+
+// Type definition for untyped Supabase queries
+// Cast through unknown to avoid 'any' - this is necessary until types are regenerated
+type SupabaseQueryResponse<T> = {
+  data: T | null;
+  error: { message: string; details?: string; hint?: string; code?: string } | null;
+};
+
+type UntypedSupabaseForLinks = {
+  from: (table: 'thread_company_link') => {
+    select: (columns: string) => {
+      in: (column: string, values: string[]) => Promise<SupabaseQueryResponse<ThreadCompanyLink[]>>;
+    };
+  };
+};
+
 export default function DashboardTasksList() {
   const [tasks, setTasks] = useState<NextStep[]>([])
   const [loading, setLoading] = useState(true)
@@ -46,7 +66,9 @@ export default function DashboardTasksList() {
 
     if (threadIds.length > 0) {
       // Get company_id from thread_company_link
-      const { data: links } = await supabase
+      // Cast through unknown to access untyped table
+      const linksClient = supabase as unknown as UntypedSupabaseForLinks;
+      const { data: links } = await linksClient
         .from('thread_company_link')
         .select('thread_id, company_id')
         .in('thread_id', threadIds)
