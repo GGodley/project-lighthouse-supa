@@ -10,7 +10,7 @@ interface MeetingCardProps {
   onRecordToggle: (newStatus: boolean) => void;
 }
 
-export function MeetingCard({ id, title, startTime, platform = 'google_meet', isRecording, onRecordToggle }: MeetingCardProps) {
+export function MeetingCard({ title, startTime, platform = 'google_meet', isRecording, onRecordToggle }: MeetingCardProps) {
   const dateObj = new Date(startTime);
   const month = dateObj.toLocaleString('default', { month: 'short' }).toUpperCase();
   const day = dateObj.getDate();

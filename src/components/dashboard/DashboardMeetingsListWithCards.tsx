@@ -13,6 +13,16 @@ interface Meeting {
   bot_enabled: boolean | null
 }
 
+// Type for meeting data returned from Supabase (includes bot_enabled which may not be in generated types)
+type MeetingRow = {
+  id: number
+  title: string | null
+  start_time: string | null
+  meeting_url: string | null
+  company_id: string | null
+  bot_enabled?: boolean | null
+}
+
 export default function DashboardMeetingsListWithCards() {
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [loading, setLoading] = useState(true)
@@ -41,11 +51,15 @@ export default function DashboardMeetingsListWithCards() {
 
         if (error) throw error
         
-        // Type assertion to handle bot_enabled column that exists in DB but may not be in types
-        const meetingsWithBotEnabled = (data || []).map(meeting => ({
-          ...meeting,
-          bot_enabled: (meeting as any).bot_enabled ?? true // Default to true if null/undefined
-        })) as Meeting[]
+        // Map data to Meeting type, handling bot_enabled column that exists in DB but may not be in generated types
+        const meetingsWithBotEnabled: Meeting[] = (data || []).map((meeting: MeetingRow) => ({
+          id: meeting.id,
+          title: meeting.title,
+          start_time: meeting.start_time,
+          meeting_url: meeting.meeting_url,
+          company_id: meeting.company_id,
+          bot_enabled: meeting.bot_enabled ?? true // Default to true if null/undefined
+        }))
         
         setMeetings(meetingsWithBotEnabled)
       } catch (err) {
@@ -70,9 +84,11 @@ export default function DashboardMeetingsListWithCards() {
   const handleRecordToggle = async (meetingId: number, newStatus: boolean) => {
     try {
       // Update bot_enabled in database
+      // Use type assertion for update payload since bot_enabled may not be in generated types
+      const updatePayload: { bot_enabled: boolean } = { bot_enabled: newStatus }
       const { error } = await supabase
         .from('meetings')
-        .update({ bot_enabled: newStatus } as any) // Type assertion for column not in types yet
+        .update(updatePayload as Record<string, unknown>)
         .eq('id', meetingId)
 
       if (error) throw error
