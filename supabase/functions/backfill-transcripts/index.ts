@@ -482,45 +482,111 @@ Deno.serve(async (req) => {
 
         console.log(`[LOG] Formatted transcript (length: ${formattedTranscript.length})`);
 
-        // 4. Trigger Trigger.dev Task - Let it handle saving transcript, deleting media, AI analysis, and health score
-        console.log(`[LOG] Triggering Trigger.dev task to handle complete flow...`);
+        // 4. Save Transcript to Database (CRITICAL - must happen before Trigger.dev)
+        console.log(`[LOG] Saving transcript to database...`);
+        const { error: updateError } = await supabaseClient
+          .from('meetings')
+          .update({
+            transcript: formattedTranscript,
+            status: 'recording_scheduled',
+            dispatch_status: 'completed',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', meeting.id);
+
+        if (updateError) {
+          throw new Error(`Failed to update meeting: ${updateError.message}`);
+        }
+        console.log(`[SUCCESS] Transcript saved and status updated in database`);
+
+        // 5. Delete Media from Recall.ai (CRITICAL - must happen to avoid storage costs)
+        const deleteMediaUrl = `https://us-west-2.recall.ai/api/v1/bot/${botId}/delete_media/`;
+        console.log(`[API] Deleting media from Recall.ai to avoid storage costs...`);
+        console.log(`[API]   URL: ${deleteMediaUrl}`);
+        console.log(`[API]   Method: POST`);
+        try {
+          const deleteCallStart = Date.now();
+          const deleteResponse = await fetch(
+            deleteMediaUrl,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Token ${recallApiKey}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          );
+          const deleteCallDuration = Date.now() - deleteCallStart;
+
+          console.log(`[API] Delete media response:`);
+          console.log(`[API]   Status: ${deleteResponse.status} ${deleteResponse.statusText}`);
+
+          // Store API call details for debug mode
+          if (debug) {
+            results.api_calls.push({
+              meeting_id: meetingId,
+              bot_id: botId,
+              call: 'delete_media',
+              url: deleteMediaUrl,
+              method: 'POST',
+              status: deleteResponse.status,
+              status_text: deleteResponse.statusText,
+              duration_ms: deleteCallDuration,
+              timestamp: new Date().toISOString()
+            });
+          }
+
+          if (!deleteResponse.ok && deleteResponse.status !== 404) {
+            console.error(`❌ CRITICAL: Failed to delete Recall.ai media: ${deleteResponse.status}`);
+            // This is critical - log but don't fail the process since transcript is saved
+            const errorText = await deleteResponse.text().catch(() => 'Unknown error');
+            console.error(`   Error details: ${errorText}`);
+          } else {
+            console.log(`[SUCCESS] Recall.ai media deleted - storage costs avoided`);
+          }
+        } catch (deleteError) {
+          console.error(`❌ CRITICAL: Error deleting Recall.ai media:`, deleteError);
+          // Log but don't fail - transcript is saved, but we need to track this
+        }
+
+        // 6. Trigger Trigger.dev Task for AI Analysis (non-critical - can retry later)
+        console.log(`[LOG] Triggering Trigger.dev task for AI analysis...`);
         try {
           const triggerApiKey = Deno.env.get("TRIGGER_API_KEY");
           if (!triggerApiKey) {
-            throw new Error("TRIGGER_API_KEY not configured");
-          }
-
-          const triggerUrl = `https://api.trigger.dev/api/v1/tasks/generate-meeting-summary/trigger`;
-          const triggerResponse = await fetch(triggerUrl, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${triggerApiKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              payload: {
-                meetingId: meeting.id.toString(),
-                googleEventId: meeting.google_event_id,
-                transcript: formattedTranscript,
-                userId: meeting.user_id,
-                recallBotId: botId, // Pass bot ID so Trigger.dev can delete media
-                saveTranscript: true, // Tell Trigger.dev to save the transcript
-                deleteMedia: true, // Tell Trigger.dev to delete media
+            console.warn(`⚠️  TRIGGER_API_KEY not configured, skipping AI analysis`);
+          } else {
+            const triggerUrl = `https://api.trigger.dev/api/v1/tasks/generate-meeting-summary/trigger`;
+            const triggerResponse = await fetch(triggerUrl, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${triggerApiKey}`,
+                "Content-Type": "application/json",
               },
-            }),
-          });
+              body: JSON.stringify({
+                payload: {
+                  meetingId: meeting.id.toString(),
+                  googleEventId: meeting.google_event_id,
+                  transcript: formattedTranscript,
+                  userId: meeting.user_id,
+                  recallBotId: botId,
+                  saveTranscript: false, // Already saved above
+                  deleteMedia: false, // Already deleted above
+                },
+              }),
+            });
 
-          if (!triggerResponse.ok) {
-            const errorText = await triggerResponse.text();
-            throw new Error(
-              `Failed to trigger Trigger.dev: ${triggerResponse.status} - ${errorText}`
-            );
+            if (!triggerResponse.ok) {
+              const errorText = await triggerResponse.text();
+              console.warn(`⚠️  Failed to trigger Trigger.dev: ${triggerResponse.status} - ${errorText}`);
+              // Don't fail - critical operations are done
+            } else {
+              console.log(`[SUCCESS] Trigger.dev task triggered for AI analysis`);
+            }
           }
-
-          console.log(`[SUCCESS] Trigger.dev task triggered - it will handle saving transcript, AI analysis, health score, and media deletion`);
         } catch (triggerError) {
-          console.error(`⚠️  Failed to trigger Trigger.dev:`, triggerError);
-          throw triggerError; // Fail if we can't trigger - transcript recovery is incomplete
+          console.warn(`⚠️  Error triggering Trigger.dev:`, triggerError);
+          // Don't fail - critical operations (save transcript, delete media) are done
         }
 
         results.processed++;
