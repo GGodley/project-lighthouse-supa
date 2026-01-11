@@ -183,6 +183,11 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
     attendees: string[];
   }>({ steps: [], requests: [], attendees: [] });
   const [featureRequests, setFeatureRequests] = useState<FeatureRequestItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'meeting' | 'thread'>('all');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isSortOpen, setIsSortOpen] = useState(false);
   const supabase = useSupabase();
 
   useEffect(() => {
@@ -708,6 +713,24 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
     fetchDetails();
   }, [selectedEvent, supabase]);
 
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.filter-dropdown') && !target.closest('.sort-dropdown')) {
+        setIsFilterOpen(false);
+        setIsSortOpen(false);
+      }
+    };
+
+    if (isFilterOpen || isSortOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [isFilterOpen, isSortOpen]);
+
   // Helper function to get initials from name
   const getInitials = (name: string | null): string => {
     if (!name) return "?";
@@ -1016,31 +1039,130 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
             </div>
   );
 
-  const renderTimeline = () => (
-    <div className="space-y-6 pb-12 animate-in slide-in-from-right-8 fade-in duration-500">
-      <div className="flex items-center justify-between mb-8">
-        <h2 className="text-xl font-bold text-gray-900">Interaction History</h2>
-        <div className="flex gap-2">
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search events..."
-              className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
-            />
-          </div>
-          <Button variant="outline" size="icon" className="border-gray-200">
-            <Filter className="w-4 h-4 text-gray-500" />
-          </Button>
-          <Button variant="outline" size="icon" className="border-gray-200">
-            <ArrowDownWideNarrow className="w-4 h-4 text-gray-500" />
-          </Button>
-            </div>
-      </div>
+  const renderTimeline = () => {
+    // Filter and sort timeline events
+    const filteredTimeline = timelineEvents
+      .filter((item) => {
+        // 1. Search Filter
+        const searchTarget = `${item.title} ${item.summary}`.toLowerCase();
+        const matchesSearch = searchTarget.includes(searchQuery.toLowerCase());
 
-      <div className="relative pl-4 space-y-10 border-l border-gray-200 ml-3">
-        {timelineEvents.length > 0 ? (
-          timelineEvents.map((event) => {
+        // 2. Type Filter
+        const matchesType = typeFilter === 'all' || item.type === typeFilter;
+
+        return matchesSearch && matchesType;
+      })
+      .sort((a, b) => {
+        // 3. Sort Logic
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+      });
+
+    return (
+      <div className="space-y-6 pb-12 animate-in slide-in-from-right-8 fade-in duration-500">
+        <div className="flex items-center justify-between mb-8">
+          <h2 className="text-xl font-bold text-gray-900">Interaction History</h2>
+          <div className="flex gap-2">
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search events..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
+              />
+            </div>
+            <div className="relative filter-dropdown">
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="border-gray-200"
+                onClick={() => setIsFilterOpen(!isFilterOpen)}
+              >
+                <Filter className="w-4 h-4 text-gray-500" />
+              </Button>
+              {isFilterOpen && (
+                <div className="absolute right-0 top-full mt-2 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                  <button
+                    onClick={() => {
+                      setTypeFilter('all');
+                      setIsFilterOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${
+                      typeFilter === 'all' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700'
+                    }`}
+                  >
+                    All Types
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTypeFilter('meeting');
+                      setIsFilterOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${
+                      typeFilter === 'meeting' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700'
+                    }`}
+                  >
+                    Meetings
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTypeFilter('thread');
+                      setIsFilterOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${
+                      typeFilter === 'thread' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700'
+                    }`}
+                  >
+                    Threads
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="relative sort-dropdown">
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="border-gray-200"
+                onClick={() => setIsSortOpen(!isSortOpen)}
+              >
+                <ArrowDownWideNarrow className="w-4 h-4 text-gray-500" />
+              </Button>
+              {isSortOpen && (
+                <div className="absolute right-0 top-full mt-2 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                  <button
+                    onClick={() => {
+                      setSortOrder('desc');
+                      setIsSortOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${
+                      sortOrder === 'desc' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700'
+                    }`}
+                  >
+                    Newest First
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSortOrder('asc');
+                      setIsSortOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${
+                      sortOrder === 'asc' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700'
+                    }`}
+                  >
+                    Oldest First
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="relative pl-4 space-y-10 border-l border-gray-200 ml-3">
+          {filteredTimeline.length > 0 ? (
+            filteredTimeline.map((event) => {
             const eventDate = new Date(event.date);
             const formattedDate = eventDate.toLocaleDateString("en-US", {
               month: "short",
@@ -1078,14 +1200,17 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               </div>
             );
           })
-        ) : (
-          <div className="text-center py-12 text-gray-500 bg-white rounded-xl border border-dashed border-gray-300">
-            No interaction history found
+          ) : (
+            <div className="text-center py-12 text-gray-500 bg-white rounded-xl border border-dashed border-gray-300">
+              {timelineEvents.length > 0 
+                ? "No events found matching your search" 
+                : "No interaction history found"}
             </div>
-        )}
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderTasks = () => (
     <div className="space-y-6 pb-12 animate-in slide-in-from-right-8 fade-in duration-500">
