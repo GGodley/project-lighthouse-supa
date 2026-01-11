@@ -37,8 +37,11 @@ export const generateMeetingSummaryTask = task({
     googleEventId: string;
     transcript: string;
     userId: string;
+    recallBotId?: string; // Optional: for deleting media from Recall.ai
+    saveTranscript?: boolean; // Optional: whether to save transcript (default: true)
+    deleteMedia?: boolean; // Optional: whether to delete media (default: true if recallBotId provided)
   }) => {
-    const { meetingId, googleEventId, transcript } = payload;
+    const { meetingId, googleEventId, transcript, recallBotId, saveTranscript = true, deleteMedia = !!recallBotId } = payload;
 
     console.log(
       `🔄 Generating summary for meeting: ${meetingId} (${googleEventId})`
@@ -70,7 +73,57 @@ export const generateMeetingSummaryTask = task({
     const genAI = getGeminiClient();
 
     try {
-      // Step 1: Fetch meeting details for context
+      // Step 1: Save transcript to database (if not already saved)
+      if (saveTranscript) {
+        console.log(`💾 Saving transcript to database for meeting ${meetingId}...`);
+        const { error: transcriptSaveError } = await supabaseAdmin
+          .from("meetings")
+          .update({
+            transcript: transcript,
+            status: 'recording_scheduled',
+            dispatch_status: 'completed',
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", parseInt(meetingId));
+
+        if (transcriptSaveError) {
+          throw new Error(`Failed to save transcript: ${transcriptSaveError.message}`);
+        }
+        console.log(`✅ Transcript saved to database`);
+      }
+
+      // Step 2: Delete media from Recall.ai (if bot ID provided)
+      if (deleteMedia && recallBotId) {
+        console.log(`🗑️  Deleting media from Recall.ai for bot ${recallBotId}...`);
+        try {
+          const recallApiKey = process.env.RECALLAI_API_KEY;
+          if (recallApiKey) {
+            const deleteResponse = await fetch(
+              `https://us-west-2.recall.ai/api/v1/bot/${recallBotId}/delete_media/`,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Token ${recallApiKey}`,
+                  'Content-Type': 'application/json',
+                },
+              }
+            );
+
+            if (!deleteResponse.ok && deleteResponse.status !== 404) {
+              console.warn(`⚠️  Failed to delete Recall.ai media: ${deleteResponse.status}`);
+            } else {
+              console.log(`✅ Recall.ai media deleted`);
+            }
+          } else {
+            console.warn(`⚠️  RECALLAI_API_KEY not configured, skipping media deletion`);
+          }
+        } catch (deleteError) {
+          console.warn(`⚠️  Error deleting Recall.ai media:`, deleteError);
+          // Don't fail the task - transcript is saved
+        }
+      }
+
+      // Step 3: Fetch meeting details for context
       const { data: meeting, error: meetingError } = await supabaseAdmin
         .from("meetings")
         .select("title, meeting_url, customer_id, company_id")
@@ -87,7 +140,7 @@ export const generateMeetingSummaryTask = task({
 
       const meetingTitle = meeting.title || meeting.meeting_url || "Meeting";
 
-      // Step 2: Extract participant names from transcript
+      // Step 4: Extract participant names from transcript
       // Transcript format: "Speaker Name: text\n\nSpeaker Name: text"
       const attendees = new Set<string>();
       const transcriptLines = transcript.split("\n\n");
@@ -103,7 +156,7 @@ export const generateMeetingSummaryTask = task({
         `📝 Context: Title='${meetingTitle}', Attendees='${attendeeList}'`
       );
 
-      // Step 3: Construct AI Prompt (matching generate-summary Edge Function)
+      // Step 5: Construct AI Prompt (matching generate-summary Edge Function)
       const prompt = `You are an expert Customer Success Manager assistant.
 Your task is to analyze a customer meeting transcript and provide a structured summary, key action items, and a detailed sentiment analysis.
 
@@ -184,7 +237,7 @@ CRITICAL: Only extract action items that are EXPLICITLY mentioned in the convers
   - "customer_impact": Who is affected and how (1 sentence)
 If no feature requests are found, return an empty array [].`;
 
-      // Step 4: Call Gemini API
+      // Step 6: Call Gemini API
       console.log("🤖 Sending prompt to Gemini...");
       const model = genAI.getGenerativeModel({
         model: "gemini-3-flash-preview",
@@ -202,7 +255,7 @@ If no feature requests are found, return an empty array [].`;
 
       console.log("✅ Received response from Gemini");
 
-      // Step 5: Parse JSON response
+      // Step 7: Parse JSON response
       let analysisResult: {
         discussion_points?: string;
         action_items?: Array<{
@@ -230,7 +283,7 @@ If no feature requests are found, return an empty array [].`;
         );
       }
 
-      // Step 6: Update meetings table with LLM summary
+      // Step 8: Update meetings table with LLM summary
       const { error: updateError } = await supabaseAdmin
         .from("meetings")
         .update({
@@ -252,7 +305,7 @@ If no feature requests are found, return an empty array [].`;
 
       console.log(`✅ Updated meeting with LLM summary`);
 
-      // Step 7: Update company health score
+      // Step 9: Update company health score
       // Get company_id from meeting (or from customer if meeting.company_id is null)
       let companyId = meeting.company_id;
       
