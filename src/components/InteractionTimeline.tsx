@@ -1,6 +1,6 @@
 'use client'
 
-import { Mail, Video, Maximize2 } from 'lucide-react'
+import { Mail, Video, Maximize2, Clock } from 'lucide-react'
 import { useInteractionTimeline } from '@/hooks/useInteractionTimeline'
 
 interface DateParts {
@@ -95,6 +95,7 @@ export default function InteractionTimeline({ companyId, onItemClick }: Interact
           const currentDateString = getDateString(item.timestamp)
           const previousDateString = index > 0 ? getDateString(items[index - 1].timestamp) : ''
           const showDate = index === 0 || currentDateString !== previousDateString
+          const isUpcoming = new Date(item.timestamp) > new Date()
           
           return (
             <div 
@@ -141,19 +142,29 @@ export default function InteractionTimeline({ companyId, onItemClick }: Interact
                   >
                     {/* Badge Row: Type Badge (left) + Status Badge (right) */}
                     <div className="mb-2 flex items-center justify-between">
-                      {/* Unified Type Badge with Icon */}
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold border ${
-                        isConversation 
-                          ? 'bg-green-50 text-green-700 border-green-200' 
-                          : 'bg-blue-50 text-blue-700 border-blue-200'
-                      }`}>
-                        {isConversation ? (
-                          <Mail className="w-3 h-3" />
-                        ) : (
-                          <Video className="w-3 h-3" />
+                      {/* Unified Type Badge with Icon + Upcoming Badge */}
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold border ${
+                          isConversation 
+                            ? 'bg-green-50 text-green-700 border-green-200' 
+                            : 'bg-blue-50 text-blue-700 border-blue-200'
+                        }`}>
+                          {isConversation ? (
+                            <Mail className="w-3 h-3" />
+                          ) : (
+                            <Video className="w-3 h-3" />
+                          )}
+                          {isConversation ? 'Conversation' : 'Meeting'}
+                        </span>
+                        
+                        {/* Upcoming Badge */}
+                        {item.type === 'meeting' && isUpcoming && (
+                          <span className="inline-flex items-center gap-x-1.5 rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                            <Clock className="h-3.5 w-3.5" />
+                            Upcoming
+                          </span>
                         )}
-                        {isConversation ? 'Conversation' : 'Meeting'}
-                      </span>
+                      </div>
                       
                       {/* Status Badge (top-right) */}
                       <span className="bg-gray-100 text-gray-600 rounded-full px-2 py-0.5 text-xs font-medium">
