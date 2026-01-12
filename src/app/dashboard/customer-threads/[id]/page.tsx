@@ -25,7 +25,6 @@ import { useSupabase } from "@/components/SupabaseProvider";
 import { generateCompanyInsights } from "@/app/actions/generateCompanyInsights";
 import type { ThreadMessage } from "@/lib/types/threads";
 import { CreateTaskModal } from "@/components/modals/CreateTaskModal";
-import { CreateRequestModal } from "@/components/modals/CreateRequestModal";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -154,17 +153,6 @@ interface FeatureRequestItem {
   date: string; // ISO string
 }
 
-interface ManualFeatureRequest {
-  id?: string;
-  feature_id?: string;
-  title: string;
-  urgency: 'Low' | 'Medium' | 'High';
-  description?: string | null;
-  request_details?: string | null;
-  created_at?: string | null;
-  requested_at?: string | null;
-  customer_id: string;
-}
 
 export default function CompanyDetailDashboard({ params }: PageProps) {
   const [activeTab, setActiveTab] = useState<"highlights" | "timeline" | "tasks" | "requests">(
@@ -203,7 +191,6 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const supabase = useSupabase();
 
   useEffect(() => {
@@ -485,30 +472,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                 console.error("Error fetching meeting requests:", meetingReqsError);
               }
 
-              // 3. Fetch Manual Feature Requests
-              // Note: manual_feature_requests table exists but is not in generated types yet
-              // Using type assertion to work around missing type definition
-              type UntypedSupabaseManual = {
-                from: (table: string) => {
-                  select: (columns: string) => {
-                    in: (column: string, values: string[]) => Promise<{
-                      data: ManualFeatureRequest[] | null;
-                      error: { message: string } | null;
-                    }>;
-                  };
-                };
-              };
-              const untypedSupabaseManual = supabase as unknown as UntypedSupabaseManual;
-              const { data: manualRequests, error: manualReqsError } = await untypedSupabaseManual
-                .from("manual_feature_requests")
-                .select("*")
-                .in("customer_id", customerIds);
-
-              if (manualReqsError) {
-                console.error("Error fetching manual feature requests:", manualReqsError);
-              }
-
-              // 4. Transform & Merge
+              // 3. Transform & Merge
               const allRequests: FeatureRequestItem[] = [];
 
               // Process Threads
@@ -551,21 +515,6 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                     sourceTitle: row.title || 'Meeting',
                     date: row.start_time || new Date().toISOString()
                   });
-                });
-              });
-
-              // Process Manual Requests
-              (manualRequests as ManualFeatureRequest[] || []).forEach((req: ManualFeatureRequest) => {
-                allRequests.push({
-                  id: `manual-${req.id || req.feature_id || Math.random()}`,
-                  title: req.title || 'Untitled Request',
-                  urgency: req.urgency || 'Low',
-                  customer_description: req.description || req.request_details || '',
-                  use_case: undefined,
-                  customer_impact: undefined,
-                  sourceType: 'thread', // Using 'thread' as specified, but could be 'manual' if interface supports it
-                  sourceTitle: 'Manual Entry',
-                  date: req.created_at || req.requested_at || new Date().toISOString()
                 });
               });
 
@@ -1314,7 +1263,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         <Button
           variant="primary"
           className="bg-gray-900 text-white hover:bg-gray-800 shadow-sm"
-          onClick={() => setIsRequestModalOpen(true)}
+          disabled
         >
           + Log Request
         </Button>
@@ -1928,15 +1877,6 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         />
       )}
 
-      {/* Create Request Modal */}
-      {customers.length > 0 && (
-        <CreateRequestModal
-          isOpen={isRequestModalOpen}
-          onClose={() => setIsRequestModalOpen(false)}
-          customerId={customers[0].customer_id}
-          onSuccess={() => window.location.reload()}
-        />
-      )}
     </div>
   );
 }
