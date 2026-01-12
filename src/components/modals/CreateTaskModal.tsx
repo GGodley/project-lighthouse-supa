@@ -86,16 +86,37 @@ export function CreateTaskModal({
       }
 
       // Insert into next_steps table
-      const { error: insertError } = await supabase.from("next_steps").insert({
-        customer_id: customerId,
-        user_id: user.id,
-        description: description.trim(),
-        owner: owner.trim() || null,
-        due_date: dueDate || null,
-        priority: priority,
-        status: "todo",
-        thread_id: null,
-      });
+      // Note: thread_id is required in types but we need to set it to null for manual tasks
+      // Using type assertion to allow null value
+      type UntypedSupabaseNextStep = {
+        from: (table: string) => {
+          insert: (values: {
+            customer_id: string;
+            user_id: string;
+            description: string;
+            owner: string | null;
+            due_date: string | null;
+            priority: "low" | "medium" | "high";
+            status: "todo";
+            thread_id: string | null;
+          }) => Promise<{
+            error: { message: string } | null;
+          }>;
+        };
+      };
+      const untypedSupabaseNextStep = supabase as unknown as UntypedSupabaseNextStep;
+      const { error: insertError } = await untypedSupabaseNextStep
+        .from("next_steps")
+        .insert({
+          customer_id: customerId,
+          user_id: user.id,
+          description: description.trim(),
+          owner: owner.trim() || null,
+          due_date: dueDate || null,
+          priority: priority,
+          status: "todo",
+          thread_id: null,
+        });
 
       if (insertError) {
         console.error("Error creating task:", insertError);
