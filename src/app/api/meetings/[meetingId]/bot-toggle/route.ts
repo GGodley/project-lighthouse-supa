@@ -55,14 +55,28 @@ export async function PATCH(
     // Handle bot cancellation (disabling)
     if (!bot_enabled && meeting.recall_bot_id) {
       console.log(`[BOT-TOGGLE] Cancelling bot ${meeting.recall_bot_id} for meeting ${meetingId}`)
+      console.log(`[BOT-TOGGLE] Meeting details:`, {
+        meetingId,
+        recall_bot_id: meeting.recall_bot_id,
+        meeting_url: meeting.meeting_url || meeting.hangout_link,
+        start_time: meeting.start_time
+      })
+      
       const deleteResult = await deleteBotFromRecall(meeting.recall_bot_id, recallApiKey)
       
+      console.log(`[BOT-TOGGLE] Delete result:`, {
+        success: deleteResult.success,
+        deleted: deleteResult.deleted,
+        statusCode: deleteResult.statusCode,
+        error: deleteResult.error
+      })
+      
       if (!deleteResult.success) {
-        console.error(`[BOT-TOGGLE] Failed to cancel bot: ${deleteResult.error}`)
+        console.error(`[BOT-TOGGLE] Failed to cancel bot: ${deleteResult.error} (status: ${deleteResult.statusCode})`)
         // Return error if deletion fails (unless it's a 404 which means already deleted)
         if (deleteResult.statusCode !== 404) {
           return NextResponse.json(
-            { error: `Failed to delete bot from Recall.ai: ${deleteResult.error}` },
+            { error: `Failed to delete bot from Recall.ai: ${deleteResult.error}`, statusCode: deleteResult.statusCode },
             { status: 500 }
           )
         }
@@ -152,7 +166,14 @@ export async function PATCH(
       }
 
       const webhookUrl = `${supabaseUrl}/functions/v1/process-transcript`
-      console.log(`[BOT-TOGGLE] Creating bot for meeting ${meetingId}, join_at: ${joinAt}`)
+      console.log(`[BOT-TOGGLE] Creating bot for meeting ${meetingId}`)
+      console.log(`[BOT-TOGGLE] Bot creation details:`, {
+        meetingId,
+        meetingUrl,
+        startTime,
+        joinAt,
+        webhookUrl
+      })
       
       const createResult = await createBotInRecall(
         meetingUrl,
@@ -161,10 +182,17 @@ export async function PATCH(
         recallApiKey
       )
 
+      console.log(`[BOT-TOGGLE] Create result:`, {
+        success: createResult.success,
+        botId: createResult.botId,
+        statusCode: createResult.statusCode,
+        error: createResult.error
+      })
+
       if (!createResult.success || !createResult.botId) {
-        console.error(`[BOT-TOGGLE] Failed to create bot: ${createResult.error}`)
+        console.error(`[BOT-TOGGLE] Failed to create bot: ${createResult.error} (status: ${createResult.statusCode})`)
         return NextResponse.json(
-          { error: `Failed to schedule bot: ${createResult.error}` },
+          { error: `Failed to schedule bot: ${createResult.error}`, statusCode: createResult.statusCode },
           { status: 500 }
         )
       }
