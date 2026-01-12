@@ -59,8 +59,15 @@ export async function PATCH(
       
       if (!deleteResult.success) {
         console.error(`[BOT-TOGGLE] Failed to cancel bot: ${deleteResult.error}`)
-        // Continue with database update even if bot deletion fails
-        // (bot might already be deleted or in a state that prevents deletion)
+        // Return error if deletion fails (unless it's a 404 which means already deleted)
+        if (deleteResult.statusCode !== 404) {
+          return NextResponse.json(
+            { error: `Failed to delete bot from Recall.ai: ${deleteResult.error}` },
+            { status: 500 }
+          )
+        }
+        // 404 is fine - bot was already deleted
+        console.log(`[BOT-TOGGLE] Bot ${meeting.recall_bot_id} was already deleted (404)`)
       } else {
         console.log(`[BOT-TOGGLE] Successfully cancelled bot ${meeting.recall_bot_id}`)
       }
@@ -87,7 +94,7 @@ export async function PATCH(
 
       return NextResponse.json({ 
         meeting: updatedMeeting,
-        bot_cancelled: deleteResult.success
+        bot_cancelled: deleteResult.success || deleteResult.statusCode === 404
       })
     }
 
@@ -123,7 +130,15 @@ export async function PATCH(
       // If bot already exists, delete it first (in case of re-enabling)
       if (meeting.recall_bot_id) {
         console.log(`[BOT-TOGGLE] Deleting existing bot ${meeting.recall_bot_id} before creating new one`)
-        await deleteBotFromRecall(meeting.recall_bot_id, recallApiKey)
+        const deleteResult = await deleteBotFromRecall(meeting.recall_bot_id, recallApiKey)
+        
+        if (!deleteResult.success && deleteResult.statusCode !== 404) {
+          // 404 is fine (bot already deleted), but other errors should be logged
+          console.warn(`[BOT-TOGGLE] Warning: Failed to delete old bot ${meeting.recall_bot_id}: ${deleteResult.error}`)
+          // Continue anyway - we'll create a new bot and update the ID
+        } else {
+          console.log(`[BOT-TOGGLE] Successfully deleted old bot ${meeting.recall_bot_id}`)
+        }
       }
 
       // Create new bot on Recall.ai

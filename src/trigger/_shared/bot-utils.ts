@@ -25,7 +25,8 @@ export async function deleteBotFromRecall(
   apiKey: string
 ): Promise<DeleteBotResult> {
   try {
-    const response = await fetch(`https://us-west-2.recall.ai/api/v1/bot/${botId}`, {
+    // Add trailing slash as required by Recall.ai API
+    const response = await fetch(`https://us-west-2.recall.ai/api/v1/bot/${botId}/`, {
       method: 'DELETE',
       headers: {
         Authorization: `Token ${apiKey}`,
@@ -33,27 +34,31 @@ export async function deleteBotFromRecall(
       },
     });
 
+    // 204 No Content or 200 OK means success
+    if (response.ok || response.status === 204) {
+      return {
+        success: true,
+        deleted: true,
+        statusCode: response.status,
+      };
+    }
+
     // 404 means bot already deleted - this is fine
     if (response.status === 404) {
       return {
         success: true,
         deleted: false, // Already deleted
+        statusCode: 404,
       };
     }
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      return {
-        success: false,
-        deleted: false,
-        error: errorText,
-        statusCode: response.status,
-      };
-    }
-
+    // For other errors, get error text
+    const errorText = await response.text();
     return {
-      success: true,
-      deleted: true,
+      success: false,
+      deleted: false,
+      error: errorText,
+      statusCode: response.status,
     };
   } catch (error) {
     return {
