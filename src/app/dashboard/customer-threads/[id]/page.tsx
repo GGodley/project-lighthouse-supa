@@ -486,7 +486,20 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               }
 
               // 3. Fetch Manual Feature Requests
-              const { data: manualRequests, error: manualReqsError } = await supabase
+              // Note: manual_feature_requests table exists but is not in generated types yet
+              // Using type assertion to work around missing type definition
+              type UntypedSupabaseManual = {
+                from: (table: string) => {
+                  select: (columns: string) => {
+                    in: (column: string, values: string[]) => Promise<{
+                      data: ManualFeatureRequest[] | null;
+                      error: { message: string } | null;
+                    }>;
+                  };
+                };
+              };
+              const untypedSupabaseManual = supabase as unknown as UntypedSupabaseManual;
+              const { data: manualRequests, error: manualReqsError } = await untypedSupabaseManual
                 .from("manual_feature_requests")
                 .select("*")
                 .in("customer_id", customerIds);
