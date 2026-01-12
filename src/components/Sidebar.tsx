@@ -2,18 +2,28 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { 
   LayoutGrid, Bell, Users, Sparkles, Calendar, 
-  FileText, Settings, LogOut, Star 
+  FileText, Settings, LogOut
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 // Define the Favorite type
 interface FavoriteCompany {
   company_id: string;
   company_name: string;
   logo_url?: string; // Optional if we strictly use ui-avatars
+}
+
+// Define NavItem props interface
+interface NavItemProps {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  badge?: string;
 }
 
 export function Sidebar() {
@@ -43,7 +53,7 @@ export function Sidebar() {
   };
 
   // Helper for Nav Item Styling
-  const NavItem = ({ href, icon: Icon, label, badge }: any) => {
+  const NavItem = ({ href, icon: Icon, label, badge }: NavItemProps) => {
     const isActive = pathname === href;
     return (
       <Link
@@ -119,11 +129,14 @@ export function Sidebar() {
                       }`}
                     >
                       {/* Logo Avatar */}
-                      <div className="w-4 h-4 rounded-sm overflow-hidden shrink-0">
-                        <img 
+                      <div className="w-4 h-4 rounded-sm overflow-hidden shrink-0 relative">
+                        <Image 
                           src={`https://ui-avatars.com/api/?name=${encodeURIComponent(company.company_name)}&background=random&size=32`} 
                           alt={company.company_name}
-                          className="w-full h-full object-cover"
+                          width={16}
+                          height={16}
+                          className="object-cover"
+                          unoptimized
                         />
                       </div>
                       <span className="truncate">{company.company_name}</span>
