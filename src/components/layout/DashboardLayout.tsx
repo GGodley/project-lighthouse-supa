@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { useRouter } from 'next/navigation'
-import Sidebar from './Sidebar'
+import { Sidebar } from '@/components/Sidebar'
 import DashboardSyncManager from '@/components/DashboardSyncManager'
 import { useGmailSync } from '@/hooks/useGmailSync'
 
@@ -128,11 +128,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   }, [supabase, triggerSync, loading])
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -146,7 +141,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <div className="flex h-screen glass-bg">
       <DashboardSyncManager />
-      <Sidebar onSignOut={handleSignOut} />
+      <Sidebar />
       <main className="flex-1 overflow-auto relative">
         {children}
       </main>
