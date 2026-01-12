@@ -24,6 +24,8 @@ import { CompactActivityRow } from "@/components/ui/CompactActivityRow";
 import { useSupabase } from "@/components/SupabaseProvider";
 import { generateCompanyInsights } from "@/app/actions/generateCompanyInsights";
 import type { ThreadMessage } from "@/lib/types/threads";
+import { CreateTaskModal } from "@/components/modals/CreateTaskModal";
+import { CreateRequestModal } from "@/components/modals/CreateRequestModal";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -188,6 +190,8 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   const [typeFilter, setTypeFilter] = useState<'all' | 'meeting' | 'thread'>('all');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isSortOpen, setIsSortOpen] = useState(false);
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const supabase = useSupabase();
 
   useEffect(() => {
@@ -469,7 +473,17 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                 console.error("Error fetching meeting requests:", meetingReqsError);
               }
 
-              // 3. Transform & Merge
+              // 3. Fetch Manual Feature Requests
+              const { data: manualRequests, error: manualReqsError } = await supabase
+                .from("manual_feature_requests")
+                .select("*")
+                .in("customer_id", customerIds);
+
+              if (manualReqsError) {
+                console.error("Error fetching manual feature requests:", manualReqsError);
+              }
+
+              // 4. Transform & Merge
               const allRequests: FeatureRequestItem[] = [];
 
               // Process Threads
@@ -512,6 +526,21 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                     sourceTitle: row.title || 'Meeting',
                     date: row.start_time || new Date().toISOString()
                   });
+                });
+              });
+
+              // Process Manual Requests
+              (manualRequests || []).forEach((req: any) => {
+                allRequests.push({
+                  id: `manual-${req.id || req.feature_id || Math.random()}`,
+                  title: req.title || 'Untitled Request',
+                  urgency: req.urgency || 'Low',
+                  customer_description: req.description || req.request_details || '',
+                  use_case: undefined,
+                  customer_impact: undefined,
+                  sourceType: 'thread', // Using 'thread' as specified, but could be 'manual' if interface supports it
+                  sourceTitle: 'Manual Entry',
+                  date: req.created_at || req.requested_at || new Date().toISOString()
                 });
               });
 
@@ -1223,6 +1252,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         <Button
           variant="primary"
           className="bg-gray-900 text-white hover:bg-gray-800 shadow-sm"
+          onClick={() => setIsTaskModalOpen(true)}
         >
           + New Task
         </Button>
@@ -1259,6 +1289,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         <Button
           variant="primary"
           className="bg-gray-900 text-white hover:bg-gray-800 shadow-sm"
+          onClick={() => setIsRequestModalOpen(true)}
         >
           + Log Request
         </Button>
@@ -1861,6 +1892,26 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
 
       {/* Event Detail Modal */}
       {renderEventModal()}
+
+      {/* Create Task Modal */}
+      {customers.length > 0 && (
+        <CreateTaskModal
+          isOpen={isTaskModalOpen}
+          onClose={() => setIsTaskModalOpen(false)}
+          customerId={customers[0].customer_id}
+          onSuccess={() => window.location.reload()}
+        />
+      )}
+
+      {/* Create Request Modal */}
+      {customers.length > 0 && (
+        <CreateRequestModal
+          isOpen={isRequestModalOpen}
+          onClose={() => setIsRequestModalOpen(false)}
+          customerId={customers[0].customer_id}
+          onSuccess={() => window.location.reload()}
+        />
+      )}
     </div>
   );
 }
