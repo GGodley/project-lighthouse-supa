@@ -154,6 +154,18 @@ interface FeatureRequestItem {
   date: string; // ISO string
 }
 
+interface ManualFeatureRequest {
+  id?: string;
+  feature_id?: string;
+  title: string;
+  urgency: 'Low' | 'Medium' | 'High';
+  description?: string | null;
+  request_details?: string | null;
+  created_at?: string | null;
+  requested_at?: string | null;
+  customer_id: string;
+}
+
 export default function CompanyDetailDashboard({ params }: PageProps) {
   const [activeTab, setActiveTab] = useState<"highlights" | "timeline" | "tasks" | "requests">(
     "highlights",
@@ -530,7 +542,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               });
 
               // Process Manual Requests
-              (manualRequests || []).forEach((req: any) => {
+              (manualRequests as ManualFeatureRequest[] || []).forEach((req: ManualFeatureRequest) => {
                 allRequests.push({
                   id: `manual-${req.id || req.feature_id || Math.random()}`,
                   title: req.title || 'Untitled Request',
