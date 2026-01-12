@@ -103,9 +103,9 @@ export function Sidebar() {
           </h3>
           <div className="space-y-0.5">
             <NavItem href="/dashboard/customer-threads" icon={Users} label="Customers" />
-            <NavItem href="/dashboard/feature-requests" icon={Sparkles} label="Feature Requests" />
-            <NavItem href="/dashboard/meetings" icon={Calendar} label="Meetings" />
-            <NavItem href="/dashboard/notes" icon={FileText} label="Notes" />
+            <NavItem href="/dashboard/feature-requests" icon={Sparkles} label="Feature Requests" badge="Coming Soon" />
+            <NavItem href="/dashboard/meetings" icon={Calendar} label="Meetings" badge="Coming Soon" />
+            <NavItem href="/dashboard/notes" icon={FileText} label="Notes" badge="Coming Soon" />
           </div>
         </div>
 
