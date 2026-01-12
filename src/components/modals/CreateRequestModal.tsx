@@ -89,7 +89,23 @@ export function CreateRequestModal({
       }
 
       // Insert into manual_feature_requests table
-      const { error: insertError } = await supabase
+      // Note: manual_feature_requests table exists but is not in generated types yet
+      // Using type assertion to work around missing type definition
+      type UntypedSupabaseManualInsert = {
+        from: (table: string) => {
+          insert: (values: {
+            customer_id: string;
+            created_by: string;
+            title: string;
+            description: string;
+            urgency: "Low" | "Medium" | "High";
+          }) => Promise<{
+            error: { message: string } | null;
+          }>;
+        };
+      };
+      const untypedSupabaseManualInsert = supabase as unknown as UntypedSupabaseManualInsert;
+      const { error: insertError } = await untypedSupabaseManualInsert
         .from("manual_feature_requests")
         .insert({
           customer_id: customerId,
