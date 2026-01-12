@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Mail, Video } from "lucide-react";
+import { Mail, Video, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export type TimelineItemType = "thread" | "meeting";
@@ -11,10 +11,12 @@ interface TimelineCardProps {
   title: string;
   summary: string;
   date: string;
+  eventDate?: string; // ISO string for date comparison
   onClick?: () => void;
 }
 
-export function TimelineCard({ type, title, summary, date, onClick }: TimelineCardProps) {
+export function TimelineCard({ type, title, summary, date, eventDate, onClick }: TimelineCardProps) {
+  const isUpcoming = eventDate ? new Date(eventDate) > new Date() : false;
   
   const config = {
     thread: {
@@ -54,7 +56,16 @@ export function TimelineCard({ type, title, summary, date, onClick }: TimelineCa
           </div>
           <h4 className="font-semibold text-gray-900 text-sm">{title}</h4>
         </div>
-        <Badge variant={theme.badgeVariant}>{theme.label}</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant={theme.badgeVariant}>{theme.label}</Badge>
+          {/* Upcoming Badge */}
+          {type === 'meeting' && isUpcoming && (
+            <span className="inline-flex items-center gap-x-1.5 rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+              <Clock className="h-3.5 w-3.5" />
+              Upcoming
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Divider */}

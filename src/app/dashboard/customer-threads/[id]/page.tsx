@@ -1194,6 +1194,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                     type={event.type}
                     title={event.title}
                     date={formattedTime}
+                    eventDate={event.date}
                     summary={event.summary}
                   />
                 </div>
