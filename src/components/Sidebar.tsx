@@ -58,18 +58,18 @@ export function Sidebar() {
     return (
       <Link
         href={href}
-        className={`group flex items-center justify-between px-2.5 py-1.5 rounded-md text-[13px] font-medium transition-all ${
+        className={`group flex items-center justify-between px-3 py-2 rounded-md text-[13px] font-medium transition-all ${
           isActive 
             ? 'bg-gray-100 text-gray-900' 
             : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
         }`}
       >
-        <div className="flex items-center gap-2.5">
-          <Icon className={`w-4 h-4 ${isActive ? 'text-gray-900' : 'text-gray-400 group-hover:text-gray-600'}`} />
-          <span>{label}</span>
+        <div className="flex items-center gap-3 overflow-hidden">
+          <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-gray-900' : 'text-gray-400 group-hover:text-gray-600'}`} />
+          <span className="truncate whitespace-nowrap">{label}</span>
         </div>
         {badge && (
-          <span className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.5 rounded font-bold">
+          <span className="ml-2 shrink-0 bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
             {badge}
           </span>
         )}
@@ -78,7 +78,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="w-60 bg-white border-r border-gray-200 h-screen flex flex-col pt-5 pb-4">
+    <aside className="w-72 bg-white border-r border-gray-200 h-screen flex flex-col pt-5 pb-4">
       {/* Brand */}
       <div className="px-5 mb-6 flex items-center gap-2.5">
         <div className="w-6 h-6 bg-blue-600 rounded-lg shadow-sm flex items-center justify-center text-white">
