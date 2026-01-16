@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import Navbar from '@/components/landing/Navbar'
 import { FeatureSection } from '@/components/landing/FeatureSection'
+import { DashboardPreview } from '@/components/landing/DashboardPreview'
 import { cn } from '@/lib/utils'
 
 export default function Home() {
@@ -25,13 +26,13 @@ export default function Home() {
             </p>
 
             {/* CTA Group */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-20">
               <Link
                 href="/login"
                 className={cn(
-                  'inline-flex items-center justify-center px-8 py-3 text-base font-medium',
-                  'text-white bg-gray-900 rounded-lg',
-                  'hover:bg-gray-800 transition-colors',
+                  'inline-flex items-center justify-center px-8 py-4 text-lg font-bold',
+                  'text-white bg-gray-900 rounded-full',
+                  'hover:bg-gray-800 transition-all',
                   'focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2',
                   'no-underline'
                 )}
@@ -42,9 +43,9 @@ export default function Home() {
               <Link
                 href="#"
                 className={cn(
-                  'inline-flex items-center justify-center px-8 py-3 text-base font-medium',
-                  'text-gray-900 bg-white border border-gray-200 rounded-lg',
-                  'hover:bg-gray-50 transition-colors',
+                  'inline-flex items-center justify-center px-8 py-4 text-lg font-bold',
+                  'text-gray-900 bg-white border border-gray-200 rounded-full',
+                  'hover:bg-gray-50 transition-all',
                   'focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2',
                   'no-underline'
                 )}
@@ -53,13 +54,13 @@ export default function Home() {
               </Link>
             </div>
 
-            {/* Visual Placeholder - Dashboard Preview */}
-            <div className="relative rounded-xl border border-gray-200 shadow-2xl bg-gray-50 overflow-hidden aspect-[16/9] mx-auto max-w-6xl w-full">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="text-gray-400 text-lg font-medium mb-2">Dashboard Preview</div>
-                  <div className="text-gray-300 text-sm">Visual interface coming soon</div>
-                </div>
+            {/* HERO VISUAL - The Live Component */}
+            <div className="relative mx-auto max-w-6xl transform transition-transform hover:scale-[1.01] duration-500">
+              {/* Decorative blur glow behind the dashboard */}
+              <div className="absolute -inset-1 bg-gradient-to-r from-blue-100 to-purple-100 rounded-2xl blur-2xl opacity-50"></div>
+              
+              <div className="relative">
+                <DashboardPreview />
               </div>
             </div>
           </div>

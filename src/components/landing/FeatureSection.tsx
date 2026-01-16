@@ -1,5 +1,4 @@
 import { CheckCircle2 } from 'lucide-react'
-import { DashboardPreview } from '@/components/landing/DashboardPreview'
 
 export function FeatureSection() {
   const benefits = [
@@ -35,9 +34,13 @@ export function FeatureSection() {
             </ul>
           </div>
 
-          {/* Visual Side */}
-          <div className="relative">
-            <DashboardPreview />
+          {/* Visual Side - Static Image */}
+          <div className="relative rounded-2xl border border-gray-200 bg-gray-50 shadow-2xl overflow-hidden aspect-[4/3]">
+            <img 
+              src="/dashboard-preview.jpg" 
+              alt="Feature Preview" 
+              className="absolute inset-0 w-full h-full object-cover"
+            />
           </div>
 
         </div>
