@@ -1,4 +1,5 @@
 import { CheckCircle2 } from 'lucide-react'
+import Image from 'next/image'
 
 export function FeatureSection() {
   const benefits = [
@@ -36,10 +37,11 @@ export function FeatureSection() {
 
           {/* Visual Side - Static Image */}
           <div className="relative rounded-2xl border border-gray-200 bg-gray-50 shadow-2xl overflow-hidden aspect-[4/3]">
-            <img 
+            <Image 
               src="/dashboard-preview.jpg" 
               alt="Feature Preview" 
-              className="absolute inset-0 w-full h-full object-cover"
+              fill
+              className="object-cover"
             />
           </div>
 

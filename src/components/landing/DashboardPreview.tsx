@@ -1,5 +1,5 @@
 import { 
-  LayoutGrid, Users, Calendar, Video, CheckSquare, 
+  LayoutGrid, Users, Calendar, Video, 
   MoreHorizontal, ArrowUpRight 
 } from 'lucide-react'
 

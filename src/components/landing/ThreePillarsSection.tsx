@@ -35,7 +35,7 @@ export function ThreePillarsSection() {
             From Tracking to Orchestrating
           </h3>
           <p className="text-xl text-gray-500 max-w-2xl mx-auto">
-            We aren't just a dashboard. We're your active partner in driving revenue.
+            We aren&apos;t just a dashboard. We&apos;re your active partner in driving revenue.
           </p>
         </div>
 
