@@ -1,4 +1,5 @@
 import { CheckCircle2 } from 'lucide-react'
+import { DashboardPreview } from '@/components/landing/DashboardPreview'
 
 export function FeatureSection() {
   const benefits = [
@@ -36,15 +37,7 @@ export function FeatureSection() {
 
           {/* Visual Side */}
           <div className="relative">
-            <div className="relative rounded-2xl border border-gray-200 bg-gray-50 shadow-2xl overflow-hidden aspect-[4/3] lg:aspect-auto lg:h-[600px]">
-              {/* Replace with your actual image path */}
-              <img 
-                src="/dashboard-screenshot.jpg" 
-                alt="Lighthouse Dashboard Interface" 
-                className="absolute inset-0 w-full h-full object-cover object-left-top"
-              />
-              {/* Optional: Add a subtle gradient overlay or fade if needed */}
-            </div>
+            <DashboardPreview />
           </div>
 
         </div>
