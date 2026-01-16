@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import Navbar from '@/components/landing/Navbar'
+import { FeatureSection } from '@/components/landing/FeatureSection'
 import { cn } from '@/lib/utils'
 
 export default function Home() {
@@ -64,6 +65,9 @@ export default function Home() {
           </div>
         </div>
       </main>
+
+      {/* Feature Section */}
+      <FeatureSection />
     </div>
   )
 }
