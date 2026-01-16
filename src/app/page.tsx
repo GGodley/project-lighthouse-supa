@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import Navbar from '@/components/landing/Navbar'
 import { FeatureSection } from '@/components/landing/FeatureSection'
+import { ThreePillarsSection } from '@/components/landing/ThreePillarsSection'
 import { DashboardPreview } from '@/components/landing/DashboardPreview'
 import { cn } from '@/lib/utils'
 
@@ -69,6 +70,9 @@ export default function Home() {
 
       {/* Feature Section */}
       <FeatureSection />
+
+      {/* Three Pillars Section */}
+      <ThreePillarsSection />
     </div>
   )
 }
