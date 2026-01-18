@@ -33,14 +33,12 @@ export default function DashboardMeetingsListWithCards({ filter = 'upcoming' }: 
   const [loading, setLoading] = useState(true)
   const supabase = useSupabase()
 
+  // Fetch all meetings once - filter is applied client-side, so it's intentionally not in deps
   useEffect(() => {
     const fetchMeetings = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
-
-        const now = new Date()
-        now.setHours(0, 0, 0, 0)
 
         // Fetch both upcoming and past meetings
         // Cast query result to handle bot_enabled column that exists in DB but may not be in generated types
@@ -48,7 +46,7 @@ export default function DashboardMeetingsListWithCards({ filter = 'upcoming' }: 
           .from('meetings')
           .select('id, title, start_time, meeting_url, company_id, bot_enabled')
           .eq('user_id', user.id)
-          .order('start_time', { ascending: filter === 'upcoming' })
+          .order('start_time', { ascending: false })
           .limit(50) // Fetch more to cover both upcoming and past
 
         if (queryResult.error) throw queryResult.error
@@ -76,6 +74,7 @@ export default function DashboardMeetingsListWithCards({ filter = 'upcoming' }: 
     }
 
     fetchMeetings()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase])
 
   const getPlatform = (url: string | null): string => {
@@ -152,7 +151,6 @@ export default function DashboardMeetingsListWithCards({ filter = 'upcoming' }: 
       {sortedMeetings.map((meeting, index) => (
         <MeetingListItem
           key={meeting.id}
-          id={meeting.id.toString()}
           title={meeting.title || "Untitled Meeting"}
           startTime={meeting.start_time || new Date().toISOString()}
           platform={getPlatform(meeting.meeting_url)}
