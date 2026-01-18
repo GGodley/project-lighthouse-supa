@@ -901,55 +901,48 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
 
   const renderDashboard = () => (
     <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-fr">
-        <Card
-          noPadding
-          className="md:col-span-2 relative flex flex-col cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => setIsSummaryOpen(true)}
-        >
-          <div className="p-5 h-full flex flex-col">
-            <div className="flex items-center gap-2.5 mb-3">
-              <Sparkles className="w-5 h-5 text-yellow-500 fill-yellow-500/20" />
-              <h3 className="font-bold text-gray-900 text-base">Summary</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Summary Widget - Full Width */}
+        <div className="col-span-2 border border-gray-200 rounded-xl p-6 cursor-pointer hover:border-gray-300 transition-colors" onClick={() => setIsSummaryOpen(true)}>
+          <div className="flex items-center gap-2.5 mb-3">
+            <Sparkles className="w-5 h-5 text-yellow-500 fill-yellow-500/20" />
+            <h3 className="font-bold text-gray-900 text-base">Summary</h3>
           </div>
-            <p className="text-gray-700 text-[15px] leading-7 font-medium line-clamp-4">
-              {insights.summary ||
-                "No summary available. AI insights are being generated."}
+          <p className="text-gray-700 text-[15px] leading-7 font-medium line-clamp-4">
+            {insights.summary ||
+              "No summary available. AI insights are being generated."}
           </p>
-          </div>
-        </Card>
+        </div>
 
-        <Card noPadding className="flex flex-col h-full">
-          <div className="p-5 h-full flex flex-col">
-            <div className="flex justify-between items-start mb-6">
-              <h3 className="font-bold text-gray-900 text-base">LinkedIn</h3>
-              <Linkedin className="w-6 h-6 text-[#0A66C2]" />
+        {/* LinkedIn Widget */}
+        <div className="border border-gray-200 rounded-xl p-6">
+          <div className="flex justify-between items-start mb-6">
+            <h3 className="font-bold text-gray-900 text-base">LinkedIn</h3>
+            <Linkedin className="w-6 h-6 text-[#0A66C2]" />
           </div>
-            <div className="mt-auto mb-2">
-              <div className="text-lg font-bold text-gray-900 mb-1">
-                {company?.company_name || "Company"}
-              </div>
-              {insights.linkedin_url ? (
-                <a
-                  href={insights.linkedin_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex items-center text-sm font-semibold text-gray-500 hover:text-[#0A66C2] transition-colors"
-                >
-                  View Company Profile{" "}
-                  <span className="ml-1 group-hover:translate-x-0.5 transition-transform">
-                    →
-                  </span>
-                </a>
-              ) : (
-                <span className="text-sm text-gray-400">No LinkedIn profile</span>
-              )}
+          <div className="mt-auto mb-2">
+            <div className="text-lg font-bold text-gray-900 mb-1">
+              {company?.company_name || "Company"}
             </div>
+            {insights.linkedin_url ? (
+              <a
+                href={insights.linkedin_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex items-center text-sm font-semibold text-gray-500 hover:text-[#0A66C2] transition-colors"
+              >
+                View Company Profile{" "}
+                <span className="ml-1 group-hover:translate-x-0.5 transition-transform">
+                  →
+                </span>
+              </a>
+            ) : (
+              <span className="text-sm text-gray-400">No LinkedIn profile</span>
+            )}
           </div>
-        </Card>
-      </div>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-fr">
+        {/* Upcoming Meeting Widget */}
         <div className="h-full">
           <UpcomingMeetingCard
             title={nextMeeting?.title || "No upcoming meetings"}
@@ -957,12 +950,14 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
             platform={getMeetingPlatform(nextMeeting)}
           />
         </div>
+
+        {/* Next Steps Widget */}
         <div
           className="h-full cursor-pointer"
           onClick={() => setActiveTab("tasks")}
         >
           {nextStep ? (
-          <NextStepCard
+            <NextStepCard
               variant="compact"
               status={mapStepStatus(nextStep.status)}
               companyName={nextStep.owner || company?.company_name || "Company"}
@@ -971,7 +966,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               className="h-full"
             />
           ) : (
-          <NextStepCard
+            <NextStepCard
               variant="compact"
               status="todo"
               companyName={company?.company_name || "Company"}
@@ -981,6 +976,8 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
             />
           )}
         </div>
+
+        {/* Feature Request Widget */}
         <div className="h-full">
           <FeedbackRequestCard
             variant="compact"
@@ -993,7 +990,8 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
         </div>
       </div>
 
-      <div className="pt-4 pb-12">
+      {/* Activity Feed below widgets */}
+      <div className="mt-8">
         <div
           className="flex items-center gap-2 mb-4 group cursor-pointer"
           onClick={() => setActiveTab("timeline")}
@@ -1001,45 +999,43 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
           <h3 className="font-bold text-gray-900 text-lg">Activity</h3>
           <span className="text-gray-400 group-hover:translate-x-1 transition-transform">›</span>
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-          <div className="space-y-4">
-            {recentActivities.length > 0 ? (
-              recentActivities.map((meeting, index) => {
-                // Get meeting platform for icon color
-                const platform = getMeetingPlatform(meeting);
-                const iconColor = platform === "Google Meet" 
-                  ? "text-blue-600" 
-                  : platform === "Zoom" 
-                  ? "text-blue-500" 
-                  : "text-gray-500";
-                
-                // Get attendee name from customers list or use meeting title
-                const attendeeName = customers.find(
-                  c => meeting.meeting_attendees?.some((ma: { customer_id: string }) => ma.customer_id === c.customer_id)
-                )?.full_name || meeting.title || "Team member";
-                
-                return (
-                  <CompactActivityRow
-                    key={meeting.id}
-                    icon={Calendar}
-                    iconColor={iconColor}
-                    userName={attendeeName}
-                    action="attended"
-                    target={meeting.title || "a meeting"}
-                    time={formatRelativeTime(meeting.start_time)}
-                    isLast={index === recentActivities.length - 1}
-                  />
-                );
-              })
-            ) : (
-              <div className="text-center py-8 text-gray-400 text-sm">
-                No recent activity found
-              </div>
-            )}
-          </div>
+        <div className="space-y-4">
+          {recentActivities.length > 0 ? (
+            recentActivities.map((meeting, index) => {
+              // Get meeting platform for icon color
+              const platform = getMeetingPlatform(meeting);
+              const iconColor = platform === "Google Meet" 
+                ? "text-blue-600" 
+                : platform === "Zoom" 
+                ? "text-blue-500" 
+                : "text-gray-500";
+              
+              // Get attendee name from customers list or use meeting title
+              const attendeeName = customers.find(
+                c => meeting.meeting_attendees?.some((ma: { customer_id: string }) => ma.customer_id === c.customer_id)
+              )?.full_name || meeting.title || "Team member";
+              
+              return (
+                <CompactActivityRow
+                  key={meeting.id}
+                  icon={Calendar}
+                  iconColor={iconColor}
+                  userName={attendeeName}
+                  action="attended"
+                  target={meeting.title || "a meeting"}
+                  time={formatRelativeTime(meeting.start_time)}
+                  isLast={index === recentActivities.length - 1}
+                />
+              );
+            })
+          ) : (
+            <div className="text-center py-8 text-gray-400 text-sm">
+              No recent activity found
+            </div>
+          )}
         </div>
       </div>
-            </div>
+    </div>
   );
 
   const renderTimeline = () => {
@@ -1271,7 +1267,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
       <div className="grid grid-cols-1 gap-6">
         {featureRequests.length > 0 ? (
           featureRequests.map((req) => (
-            <div key={req.id} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow">
+            <div key={req.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:border-gray-300 transition-colors">
               <div className="flex justify-between items-start mb-3">
                 <div>
                   <div className="flex items-center gap-3 mb-1">
@@ -1637,109 +1633,109 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
   };
 
   return (
-    <div className="flex h-full font-sans text-gray-900 bg-gray-50">
+    <main className="flex min-h-screen bg-white">
       <div className="flex-1 flex w-full">
-        <div className="hidden lg:block w-[360px] shrink-0 p-8 border-r border-transparent overflow-hidden">
+        <aside className="hidden lg:block w-80 border-r border-gray-200 p-6 flex flex-col gap-6 shrink-0 h-screen sticky top-0 overflow-y-auto">
           <div className="pt-[60px]">
             {loading ? (
-              <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm mb-6">
-                <div className="animate-pulse">
-                  <div className="w-14 h-14 bg-gray-200 rounded-lg mb-3" />
-                  <div className="h-6 bg-gray-200 rounded w-3/4 mb-2" />
-                  <div className="h-4 bg-gray-200 rounded w-1/2" />
-                </div>
+              <div className="animate-pulse">
+                <div className="w-14 h-14 bg-gray-200 rounded-lg mb-3" />
+                <div className="h-6 bg-gray-200 rounded w-3/4 mb-2" />
+                <div className="h-4 bg-gray-200 rounded w-1/2" />
               </div>
             ) : company ? (
               <>
-                <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm mb-6">
-                  <div className="mb-4">
-                    <div className="w-14 h-14 rounded-lg overflow-hidden mb-3 shadow-sm border border-gray-100 bg-white flex items-center justify-center">
-                      {company?.domain_name ? (
-                        <img
-                          src={`https://unavatar.io/${company.domain_name}`}
-                          alt={`${company?.company_name} logo`}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            // Fallback to initials if Unavatar fails
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            const fallback = target.parentElement?.querySelector('.logo-fallback') as HTMLElement;
-                            if (fallback) fallback.style.display = 'flex';
-                          }}
-                        />
-                      ) : null}
-                      <div className="logo-fallback w-full h-full bg-blue-600 flex items-center justify-center text-white text-xl font-bold" style={{ display: company?.domain_name ? 'none' : 'flex' }}>
-                        {company?.company_name?.charAt(0) || 'C'}
-                      </div>
+                {/* Profile Info (No Card Wrapper) */}
+                <div className="mb-4">
+                  <div className="w-14 h-14 rounded-lg overflow-hidden mb-3 border border-gray-200 bg-white flex items-center justify-center">
+                    {company?.domain_name ? (
+                      <img
+                        src={`https://unavatar.io/${company.domain_name}`}
+                        alt={`${company?.company_name} logo`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // Fallback to initials if Unavatar fails
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const fallback = target.parentElement?.querySelector('.logo-fallback') as HTMLElement;
+                          if (fallback) fallback.style.display = 'flex';
+                        }}
+                      />
+                    ) : null}
+                    <div className="logo-fallback w-full h-full bg-blue-600 flex items-center justify-center text-white text-xl font-bold" style={{ display: company?.domain_name ? 'none' : 'flex' }}>
+                      {company?.company_name?.charAt(0) || 'C'}
                     </div>
+                  </div>
 
-                    <h1 className="text-2xl font-bold text-gray-900 leading-tight">
-                      {company?.company_name || "Company"}
-                    </h1>
-                    <p className="text-sm text-gray-500 font-medium">
-                      {insights?.one_liner || "No description available"}
-                    </p>
-                  </div>
-                  <div className="space-y-3 mb-5">
-                    {company.domain_name && (
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Globe className="w-4 h-4 text-gray-400" />
-                        <a
-                          href={`https://${company.domain_name}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="hover:text-blue-600 hover:underline"
-                        >
-                          {company.domain_name}
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      {!insights.one_liner ? (
-                        <Button
-                          variant="outline"
-                          onClick={handleGenerateProfile}
-                          disabled={isGenerating}
-                          className="flex-1 bg-gray-50 border-gray-200 hover:bg-gray-100 text-gray-700 font-medium disabled:opacity-50"
-                        >
-                          <Sparkles className="w-4 h-4 mr-2" />
-                          {isGenerating ? "Generating..." : "Generate Profile"}
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          className="flex-1 bg-gray-50 border-gray-200 hover:bg-gray-100 text-gray-700 font-medium"
-                        >
-                          <Copy className="w-4 h-4 mr-2" />
-                          Copy Info
-                        </Button>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="bg-gray-50 border-gray-200 hover:bg-gray-100"
+                  <h1 className="text-2xl font-bold text-gray-900 leading-tight">
+                    {company?.company_name || "Company"}
+                  </h1>
+                  <p className="text-sm text-gray-500 font-medium">
+                    {insights?.one_liner || "No description available"}
+                  </p>
+                </div>
+                <div className="space-y-3 mb-5">
+                  {company.domain_name && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Globe className="w-4 h-4 text-gray-400" />
+                      <a
+                        href={`https://${company.domain_name}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-blue-600 hover:underline"
                       >
-                        <RefreshCw className="w-4 h-4 text-gray-600" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="bg-gray-50 border-gray-200 hover:bg-gray-100"
-                      >
-                        <MoreHorizontal className="w-4 h-4 text-gray-600" />
-                      </Button>
+                        {company.domain_name}
+                      </a>
                     </div>
-                    {successMessage && (
-                      <p className="text-xs text-green-600 text-left">{successMessage}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    {!insights.one_liner ? (
+                      <Button
+                        variant="outline"
+                        onClick={handleGenerateProfile}
+                        disabled={isGenerating}
+                        className="flex-1 bg-gray-50 border-gray-200 hover:bg-gray-100 text-gray-700 font-medium disabled:opacity-50"
+                      >
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        {isGenerating ? "Generating..." : "Generate Profile"}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        className="flex-1 bg-gray-50 border-gray-200 hover:bg-gray-100 text-gray-700 font-medium"
+                      >
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copy Info
+                      </Button>
                     )}
-                    {error && (
-                      <p className="text-xs text-red-500 text-left">{error}</p>
-                    )}
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="bg-gray-50 border-gray-200 hover:bg-gray-100"
+                    >
+                      <RefreshCw className="w-4 h-4 text-gray-600" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="bg-gray-50 border-gray-200 hover:bg-gray-100"
+                    >
+                      <MoreHorizontal className="w-4 h-4 text-gray-600" />
+                    </Button>
                   </div>
+                  {successMessage && (
+                    <p className="text-xs text-green-600 text-left">{successMessage}</p>
+                  )}
+                  {error && (
+                    <p className="text-xs text-red-500 text-left">{error}</p>
+                  )}
                 </div>
 
+                <div className="border-t border-gray-100 my-2" />
+
+                {/* Contact List */}
                 <div>
                   <div className="flex items-center justify-between mb-3 px-1">
                     <h3 className="text-sm font-bold text-gray-900">Customers</h3>
@@ -1755,7 +1751,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                         return (
                           <div
                             key={customer.customer_id}
-                            className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:shadow-sm transition-shadow cursor-pointer"
+                            className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl hover:border-gray-300 transition-colors cursor-pointer"
                           >
                             <div
                               className={`w-8 h-8 rounded-full ${color} flex items-center justify-center text-white text-xs font-bold shrink-0`}
@@ -1779,14 +1775,15 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
                 </div>
               </>
             ) : (
-              <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm mb-6">
+              <div>
                 <p className="text-sm text-gray-500">Company not found</p>
               </div>
             )}
           </div>
-        </div>
+        </aside>
 
-        <main className="flex-1 overflow-y-auto p-8 h-full">
+        {/* RIGHT PANE - Dashboard Widgets */}
+        <div className="flex-1 p-8 overflow-y-auto">
           <div className="space-y-6 max-w-5xl">
             <div className="flex gap-8 border-b border-gray-200 mb-6">
               {["Highlights", "Timeline", "Tasks", "Requests"].map((tab) => {
@@ -1812,7 +1809,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
             {activeTab === "tasks" && renderTasks()}
             {activeTab === "requests" && renderRequests()}
           </div>
-        </main>
+        </div>
       </div>
 
       {/* Summary Modal */}

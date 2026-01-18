@@ -13,7 +13,7 @@ interface UpcomingMeetingCardProps {
 export function UpcomingMeetingCard({ title, date, platform = "Zoom" }: UpcomingMeetingCardProps) {
   return (
     // Added noPadding and manual p-5 to match NextStepCard exactly
-    <Card noPadding className="flex flex-col h-full min-h-[180px]">
+    <Card noPadding className="flex flex-col h-full min-h-[180px] shadow-none">
        <div className="flex flex-col h-full justify-between p-5">
          {/* Header */}
          <div className="flex justify-between items-center mb-2">

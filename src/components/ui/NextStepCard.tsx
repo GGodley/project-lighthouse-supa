@@ -76,7 +76,7 @@ export function NextStepCard({
   const paddingClass = isCompact ? "p-4" : "p-4"; 
 
   return (
-    <Card noPadding className={`flex flex-col ${heightClass} ${className}`}>
+    <Card noPadding className={`flex flex-col ${heightClass} shadow-none ${className}`}>
       <div className={`flex flex-col ${isCompact ? "h-full p-5" : "p-6"}`}>
         
         {isCompact && (

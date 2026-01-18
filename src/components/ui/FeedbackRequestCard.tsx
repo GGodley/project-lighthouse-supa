@@ -34,7 +34,7 @@ export function FeedbackRequestCard({
   const paddingClass = isCompact ? "p-5" : "p-6";
 
   return (
-    <Card noPadding className={`flex flex-col ${heightClass} ${className}`}>
+    <Card noPadding className={`flex flex-col ${heightClass} shadow-none ${className}`}>
       <div className={`flex flex-col h-full ${paddingClass}`}>
         
         {/* Header */}
