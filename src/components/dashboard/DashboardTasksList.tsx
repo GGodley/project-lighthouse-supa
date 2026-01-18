@@ -185,24 +185,29 @@ export default function DashboardTasksList() {
   }
 
   return (
-    <div className="space-y-3">
-      {tasks.map((task) => (
-        <NextStepCard
+    <>
+      {tasks.map((task, index) => (
+        <div
           key={task.step_id}
-          variant="compact"
-          status={mapStepStatus(task.status)}
-          companyName={task.company_name || task.owner || "Unassigned"}
-          contactName={formatPriority(task.priority)}
-          description={task.description}
-          onStatusChange={(newStatus) => handleStatusUpdate(task.step_id, newStatus)}
-          onGoToSource={task.company_id && task.thread_id ? () => {
-            window.location.href = `/dashboard/customer-threads/${task.company_id}?thread=${task.thread_id}`;
-          } : task.company_id ? () => {
-            window.location.href = `/dashboard/customer-threads/${task.company_id}`;
-          } : undefined}
-        />
+          className={`hover:bg-gray-50/50 transition-colors ${index < tasks.length - 1 ? 'border-b border-gray-100' : ''}`}
+        >
+          <NextStepCard
+            variant="compact"
+            status={mapStepStatus(task.status)}
+            companyName={task.company_name || task.owner || "Unassigned"}
+            contactName={formatPriority(task.priority)}
+            description={task.description}
+            onStatusChange={(newStatus) => handleStatusUpdate(task.step_id, newStatus)}
+            onGoToSource={task.company_id && task.thread_id ? () => {
+              window.location.href = `/dashboard/customer-threads/${task.company_id}?thread=${task.thread_id}`;
+            } : task.company_id ? () => {
+              window.location.href = `/dashboard/customer-threads/${task.company_id}`;
+            } : undefined}
+            className="shadow-none !border-0 rounded-none"
+          />
+        </div>
       ))}
-    </div>
+    </>
   )
 }
 

@@ -1,8 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import DashboardMeetingsListWithCards from '@/components/dashboard/DashboardMeetingsListWithCards';
 import DashboardTasksList from '@/components/dashboard/DashboardTasksList';
-import { TouchingBaseWidgetContainer } from '@/components/dashboard/TouchingBaseWidgetContainer';
+import MeetingsWidget from '@/components/dashboard/MeetingsWidget';
 
 export const dynamic = 'force-dynamic'
 
@@ -77,7 +76,7 @@ export default async function DashboardPage() {
     .lt('start_time', tomorrow.toISOString());
 
   return (
-    <main className="p-8 max-w-[1600px] mx-auto space-y-8">
+    <div className="flex-1 bg-white p-8 overflow-y-auto">
       {/* Header */}
       <header className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">
@@ -88,11 +87,11 @@ export default async function DashboardPage() {
         </p>
       </header>
 
-      {/* ROW 1: STATS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {/* Active Customers */}
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <p className="text-xs font-bold text-gray-500 uppercase">Active Customers</p>
+        <div className="p-6 rounded-xl border border-gray-200 bg-white">
+          <p className="text-xs font-bold text-gray-500 uppercase mb-1">Active Customers</p>
           <div className="flex items-end justify-between mt-2">
             <h3 className="text-3xl font-bold text-gray-900">{totalActive}</h3>
             <span className="text-gray-400 mb-1 text-sm">Total</span>
@@ -100,8 +99,8 @@ export default async function DashboardPage() {
         </div>
 
         {/* Happy Customers */}
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <p className="text-xs font-bold text-gray-500 uppercase">Happy Customers</p>
+        <div className="p-6 rounded-xl border border-gray-200 bg-white">
+          <p className="text-xs font-bold text-gray-500 uppercase mb-1">Happy Customers</p>
           <div className="flex items-end justify-between mt-2">
             <h3 className="text-3xl font-bold text-green-600">{happyPercentage}%</h3>
             <span className="text-xs font-medium bg-green-50 text-green-600 px-2 py-1 rounded-full">Positive</span>
@@ -109,8 +108,8 @@ export default async function DashboardPage() {
         </div>
 
         {/* At Risk */}
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <p className="text-xs font-bold text-gray-500 uppercase">At Risk</p>
+        <div className="p-6 rounded-xl border border-gray-200 bg-white">
+          <p className="text-xs font-bold text-gray-500 uppercase mb-1">At Risk</p>
           <div className="flex items-end justify-between mt-2">
             <h3 className="text-3xl font-bold text-red-600">{atRiskPercentage}%</h3>
             <span className="text-xs font-medium bg-red-50 text-red-600 px-2 py-1 rounded-full">Score &lt; 0</span>
@@ -118,8 +117,8 @@ export default async function DashboardPage() {
         </div>
 
         {/* Meetings Today */}
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <p className="text-xs font-bold text-gray-500 uppercase">Meetings Today</p>
+        <div className="p-6 rounded-xl border border-gray-200 bg-white">
+          <p className="text-xs font-bold text-gray-500 uppercase mb-1">Meetings Today</p>
           <div className="flex items-end justify-between mt-2">
             <h3 className="text-3xl font-bold text-gray-900">{upcomingMeetingsCount || 0}</h3>
             <span className="text-xs font-medium bg-blue-50 text-blue-600 px-2 py-1 rounded-full">Scheduled</span>
@@ -127,29 +126,21 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* ROW 2: CONTENT SPLIT */}
+      {/* Main Content Split */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left: Upcoming Meetings (2/3 width) */}
-        <div className="lg:col-span-2 space-y-6">
-          <h2 className="text-lg font-bold text-gray-900">Upcoming Meetings</h2>
-          <DashboardMeetingsListWithCards />
-        </div>
+        {/* Meetings Widget (Takes 2 cols) */}
+        <MeetingsWidget />
 
-        {/* Right: Priority Tasks and Needs Attention (1/3 width) */}
-        <div className="space-y-6">
-          <h2 className="text-lg font-bold text-gray-900">Priority Tasks</h2>
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-            <div className="p-6">
-              <DashboardTasksList />
-            </div>
+        {/* Priority Tasks (Takes 1 col) */}
+        <div className="border border-gray-200 rounded-xl bg-white h-fit">
+          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50/30">
+            <h3 className="font-semibold text-gray-900">Priority Tasks</h3>
           </div>
-
-          {/* Needs Attention Widget */}
-          <div className="h-[400px]">
-            <TouchingBaseWidgetContainer />
+          <div className="divide-y divide-gray-100">
+            <DashboardTasksList />
           </div>
         </div>
       </div>
-    </main>
+    </div>
   );
 }
