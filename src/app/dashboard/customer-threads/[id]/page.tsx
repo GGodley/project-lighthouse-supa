@@ -1858,7 +1858,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               </Button>
             </div>
           </div>
-          </div>
+        </div>
         )}
 
       {/* Event Detail Modal */}
@@ -1873,8 +1873,7 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
           onSuccess={() => window.location.reload()}
         />
       )}
-
-    </div>
+    </main>
   );
 }
 
