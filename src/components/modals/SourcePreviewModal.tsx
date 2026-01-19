@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { X, Video, Mail, Calendar, ExternalLink } from "lucide-react";
 import { useSupabase } from "@/components/SupabaseProvider";
 import { getThreadById } from "@/lib/threads/queries";
-import type { Thread } from "@/lib/types/threads";
+import type { Thread, LLMSummary } from "@/lib/types/threads";
 
 interface SourcePreviewModalProps {
   isOpen: boolean;
@@ -172,7 +172,7 @@ export function SourcePreviewModal({
         if (typeof thread.llm_summary === "object" && "error" in thread.llm_summary) {
           return thread.snippet || "No summary available";
         }
-        const summary = thread.llm_summary as any;
+        const summary = thread.llm_summary as LLMSummary;
         return (
           summary.timeline_summary ||
           summary.problem_statement ||
