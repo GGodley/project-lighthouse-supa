@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { NextStepCard, type NextStepStatus } from '@/components/ui/NextStepCard'
 import { useSupabase } from '@/components/SupabaseProvider'
+import { SourcePreviewModal } from '@/components/modals/SourcePreviewModal'
 
 interface NextStep {
   step_id: string
@@ -39,6 +40,11 @@ interface TasksApiResponse {
 export default function TasksNextSteps() {
   const [tasks, setTasks] = useState<NextStep[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedSource, setSelectedSource] = useState<{
+    id: string
+    type: 'meeting' | 'thread' | 'manual'
+    companyId: string | null
+  } | null>(null)
   const supabase = useSupabase()
 
   // Helper function to map status to NextStepCard status
@@ -137,13 +143,42 @@ export default function TasksNextSteps() {
               contactName={formatPriority(task.priority)}
               description={task.description}
               onStatusChange={(newStatus) => handleStatusUpdate(task.step_id, newStatus)}
-              onGoToSource={task.company_id && task.thread_id ? () => {
-                window.location.href = `/dashboard/customer-threads/${task.company_id}?thread=${task.thread_id}`;
-              } : undefined}
+              onGoToSource={
+                task.meeting_id
+                  ? () => {
+                      setSelectedSource({
+                        id: task.meeting_id!,
+                        type: 'meeting',
+                        companyId: task.company_id,
+                      })
+                    }
+                  : task.thread_id
+                  ? () => {
+                      setSelectedSource({
+                        id: task.thread_id!,
+                        type: 'thread',
+                        companyId: task.company_id,
+                      })
+                    }
+                  : () => {
+                      setSelectedSource({
+                        id: '',
+                        type: 'manual',
+                        companyId: task.company_id,
+                      })
+                    }
+              }
             />
           ))
         )}
       </div>
+      <SourcePreviewModal
+        isOpen={!!selectedSource}
+        onClose={() => setSelectedSource(null)}
+        sourceId={selectedSource?.id || ''}
+        sourceType={selectedSource?.type || 'manual'}
+        companyId={selectedSource?.companyId || null}
+      />
     </div>
   )
 }
