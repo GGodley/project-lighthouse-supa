@@ -93,18 +93,29 @@ export function Sidebar() {
 
   return (
     <aside 
-      className={`h-screen sticky top-0 transition-all duration-300 shrink-0 ${isLocked ? 'w-72' : 'w-20'}`}
+      className={`
+        h-screen sticky top-0 flex flex-col
+        transition-[width] duration-300 ease-in-out shrink-0
+        ${isLocked ? 'w-72' : 'w-20'} 
+        z-[100] relative
+      `}
     >
       {/* Inner Drawer (The Visual Element) */}
       <div 
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         className={`
-          h-full bg-white border-r border-gray-200 border-y border-gray-200 
-          flex flex-col pt-5 pb-4
+          h-full bg-white flex flex-col pt-5 pb-4
           transition-all duration-300 ease-in-out
-          ${isLocked ? 'w-full relative' : 'absolute top-0 left-0 z-50'}
-          ${!isLocked && isHovered ? 'w-72 shadow-2xl' : 'w-full'}
+          ${isLocked 
+              ? 'relative w-full border-r border-gray-200' 
+              : 'absolute top-0 left-0 border-gray-200'
+          }
+          ${!isLocked && isHovered ? 'w-72' : 'w-full'}
+          ${!isLocked && isHovered 
+              ? 'shadow-2xl border-r border-y border-gray-300 z-50 rounded-r-xl' 
+              : 'border-r'
+          }
           ${!isLocked && !isHovered ? 'overflow-hidden' : ''}
         `}
       >
