@@ -22,7 +22,7 @@ export default function Navbar() {
               Product
             </Link>
             <Link
-              href="#"
+              href="/solutions"
               className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors no-underline"
             >
               Solutions
