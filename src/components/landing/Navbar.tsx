@@ -28,10 +28,10 @@ export default function Navbar() {
               Solutions
             </Link>
             <Link
-              href="#"
+              href="/pricing"
               className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors no-underline"
             >
-              Resources
+              Pricing
             </Link>
           </div>
 
