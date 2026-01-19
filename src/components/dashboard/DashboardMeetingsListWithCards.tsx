@@ -2,26 +2,27 @@
 
 import { useEffect, useState } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
-import { Video, Calendar } from 'lucide-react'
+import { Video, Calendar, X } from 'lucide-react'
 
 interface Meeting {
-  id: number
+  meeting_uuid_id: string
   title: string | null
   start_time: string | null
   meeting_url: string | null
   company_id: string | null
   bot_enabled: boolean
+  is_hidden: boolean
 }
 
-// Type for meeting data returned from Supabase (includes bot_enabled which may not be in generated types)
-// According to schema: bot_enabled boolean not null default true
+// Type for meeting data returned from Supabase
 type MeetingRow = {
-  id: number
+  meeting_uuid_id: string
   title: string | null
   start_time: string | null
   meeting_url: string | null
   company_id: string | null
   bot_enabled: boolean
+  is_hidden: boolean
 }
 
 interface DashboardMeetingsListWithCardsProps {
@@ -41,29 +42,30 @@ export default function DashboardMeetingsListWithCards({ filter = 'upcoming' }: 
         if (!user) return
 
         // Fetch both upcoming and past meetings
-        // Cast query result to handle bot_enabled column that exists in DB but may not be in generated types
         const queryResult = await supabase
           .from('meetings')
-          .select('id, title, start_time, meeting_url, company_id, bot_enabled')
+          .select('meeting_uuid_id, title, start_time, meeting_url, company_id, bot_enabled, is_hidden')
           .eq('user_id', user.id)
           .order('start_time', { ascending: false })
           .limit(50) // Fetch more to cover both upcoming and past
 
         if (queryResult.error) throw queryResult.error
         
-        // Cast data to MeetingRow[] to handle bot_enabled column that exists in DB but not in generated types
-        // Cast through unknown first as TypeScript suggests for type conversions
+        // Cast data to MeetingRow[]
         const rawData = queryResult.data as unknown as MeetingRow[] | null
         
-        // Map data to Meeting type
-        const meetingsWithBotEnabled: Meeting[] = (rawData || []).map((meeting) => ({
-          id: meeting.id,
-          title: meeting.title,
-          start_time: meeting.start_time,
-          meeting_url: meeting.meeting_url,
-          company_id: meeting.company_id,
-          bot_enabled: meeting.bot_enabled // Always present per schema (not null default true)
-        }))
+        // Map data to Meeting type and filter out hidden meetings
+        const meetingsWithBotEnabled: Meeting[] = (rawData || [])
+          .filter((meeting) => !meeting.is_hidden) // Filter out hidden meetings
+          .map((meeting) => ({
+            meeting_uuid_id: meeting.meeting_uuid_id,
+            title: meeting.title,
+            start_time: meeting.start_time,
+            meeting_url: meeting.meeting_url,
+            company_id: meeting.company_id,
+            bot_enabled: meeting.bot_enabled,
+            is_hidden: meeting.is_hidden
+          }))
         
         setAllMeetings(meetingsWithBotEnabled)
       } catch (err) {
@@ -86,28 +88,60 @@ export default function DashboardMeetingsListWithCards({ filter = 'upcoming' }: 
     return "Video Call";
   };
 
-  const handleRecordToggle = async (meetingId: number, newStatus: boolean) => {
+  const handleRecordToggle = async (meetingUuidId: string, newStatus: boolean) => {
     try {
-      // Update bot_enabled in database
-      // Use type assertion for update payload since bot_enabled may not be in generated types
-      const updatePayload: { bot_enabled: boolean } = { bot_enabled: newStatus }
-      const { error } = await supabase
-        .from('meetings')
-        .update(updatePayload as Record<string, unknown>)
-        .eq('id', meetingId)
+      // Call manage-meeting edge function
+      const { data, error } = await supabase.functions.invoke('manage-meeting', {
+        body: {
+          action: 'toggle_record',
+          meetingId: meetingUuidId,
+          shouldRecord: newStatus
+        }
+      })
 
       if (error) throw error
+
+      if (!data?.success) {
+        throw new Error(data?.message || 'Failed to toggle recording')
+      }
 
       // Optimistic update
       setAllMeetings(prevMeetings =>
         prevMeetings.map(meeting =>
-          meeting.id === meetingId
+          meeting.meeting_uuid_id === meetingUuidId
             ? { ...meeting, bot_enabled: newStatus }
             : meeting
         )
       )
     } catch (err) {
       console.error('Error updating recording status:', err)
+      // TODO: Show error toast/notification to user
+    }
+  }
+
+  const handleHide = async (meetingUuidId: string) => {
+    try {
+      // Call manage-meeting edge function
+      const { data, error } = await supabase.functions.invoke('manage-meeting', {
+        body: {
+          action: 'hide',
+          meetingId: meetingUuidId
+        }
+      })
+
+      if (error) throw error
+
+      if (!data?.success) {
+        throw new Error(data?.message || 'Failed to hide meeting')
+      }
+
+      // Optimistically remove from list
+      setAllMeetings(prevMeetings =>
+        prevMeetings.filter(meeting => meeting.meeting_uuid_id !== meetingUuidId)
+      )
+    } catch (err) {
+      console.error('Error hiding meeting:', err)
+      // TODO: Show error toast/notification to user
     }
   }
 
@@ -150,37 +184,52 @@ export default function DashboardMeetingsListWithCards({ filter = 'upcoming' }: 
     <>
       {sortedMeetings.map((meeting, index) => (
         <MeetingListItem
-          key={meeting.id}
+          key={meeting.meeting_uuid_id}
+          id={meeting.meeting_uuid_id}
           title={meeting.title || "Untitled Meeting"}
           startTime={meeting.start_time || new Date().toISOString()}
           platform={getPlatform(meeting.meeting_url)}
           isRecording={meeting.bot_enabled}
-          onRecordToggle={(newStatus) => handleRecordToggle(meeting.id, newStatus)}
+          onRecordToggle={async (newStatus) => await handleRecordToggle(meeting.meeting_uuid_id, newStatus)}
+          onHide={async () => await handleHide(meeting.meeting_uuid_id)}
           isLast={index === sortedMeetings.length - 1}
-          isPast={filter === 'past'}
         />
       ))}
     </>
   )
 }
 
-// Simple list item component for meetings
-function MeetingListItem({ title, startTime, platform = 'google_meet', isRecording, onRecordToggle, isLast, isPast = false }: {
+// Interface for MeetingListItem props
+interface MeetingListItemProps {
+  id: string; // This will hold the UUID (meeting_uuid_id)
   title: string;
   startTime: string;
   platform?: string;
-  isRecording: boolean;
-  onRecordToggle: (newStatus: boolean) => void;
+  isRecording: boolean; // Maps to 'bot_enabled'
+  onRecordToggle: (newStatus: boolean) => Promise<void>;
+  onHide: () => Promise<void>; // New prop for hiding
   isLast?: boolean;
-  isPast?: boolean;
-}) {
+}
+
+// Simple list item component for meetings
+function MeetingListItem({ id, title, startTime, platform = 'google_meet', isRecording, onRecordToggle, onHide, isLast }: MeetingListItemProps) {
   const dateObj = new Date(startTime);
   const month = dateObj.toLocaleString('default', { month: 'short' }).toUpperCase();
   const day = dateObj.getDate();
   const time = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const isPast = dateObj < new Date();
 
   return (
-    <div className={`p-6 flex items-center justify-between hover:bg-gray-50/50 transition-colors ${!isLast ? 'border-b border-gray-100' : ''}`}>
+    <div className={`p-6 flex items-center justify-between hover:bg-gray-50/50 transition-colors relative ${!isLast ? 'border-b border-gray-100' : ''}`}>
+      {/* Hide Button - Top Right */}
+      <button
+        onClick={() => onHide()}
+        className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-200 transition-colors text-gray-400 hover:text-gray-600"
+        aria-label="Hide meeting"
+      >
+        <X className="w-4 h-4" />
+      </button>
+
       {/* Date Badge */}
       <div className={`shrink-0 w-16 h-16 rounded-lg border flex flex-col items-center justify-center ${
         isPast 
@@ -196,7 +245,7 @@ function MeetingListItem({ title, startTime, platform = 'google_meet', isRecordi
       </div>
 
       {/* Main Info */}
-      <div className="flex-1 min-w-0 ml-5">
+      <div className="flex-1 min-w-0 ml-5 mr-4">
         <h4 className={`text-base font-bold truncate mb-1 ${isPast ? 'text-gray-500' : 'text-gray-900'}`} title={title}>
           {title}
         </h4>
@@ -223,6 +272,7 @@ function MeetingListItem({ title, startTime, platform = 'google_meet', isRecordi
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
               isRecording ? 'bg-green-500' : 'bg-gray-200'
             }`}
+            aria-label={isRecording ? 'Disable recording' : 'Enable recording'}
           >
             <span
               className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
