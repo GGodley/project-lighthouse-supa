@@ -88,63 +88,6 @@ export default function DashboardMeetingsListWithCards({ filter = 'upcoming' }: 
     return "Video Call";
   };
 
-  const handleRecordToggle = async (meetingUuidId: string, newStatus: boolean) => {
-    try {
-      // Call manage-meeting edge function
-      const { data, error } = await supabase.functions.invoke('manage-meeting', {
-        body: {
-          action: 'toggle_record',
-          meetingId: meetingUuidId,
-          shouldRecord: newStatus
-        }
-      })
-
-      if (error) throw error
-
-      if (!data?.success) {
-        throw new Error(data?.message || 'Failed to toggle recording')
-      }
-
-      // Optimistic update
-      setAllMeetings(prevMeetings =>
-        prevMeetings.map(meeting =>
-          meeting.meeting_uuid_id === meetingUuidId
-            ? { ...meeting, bot_enabled: newStatus }
-            : meeting
-        )
-      )
-    } catch (err) {
-      console.error('Error updating recording status:', err)
-      // TODO: Show error toast/notification to user
-    }
-  }
-
-  const handleHide = async (meetingUuidId: string) => {
-    try {
-      // Call manage-meeting edge function
-      const { data, error } = await supabase.functions.invoke('manage-meeting', {
-        body: {
-          action: 'hide',
-          meetingId: meetingUuidId
-        }
-      })
-
-      if (error) throw error
-
-      if (!data?.success) {
-        throw new Error(data?.message || 'Failed to hide meeting')
-      }
-
-      // Optimistically remove from list
-      setAllMeetings(prevMeetings =>
-        prevMeetings.filter(meeting => meeting.meeting_uuid_id !== meetingUuidId)
-      )
-    } catch (err) {
-      console.error('Error hiding meeting:', err)
-      // TODO: Show error toast/notification to user
-    }
-  }
-
   // Filter meetings based on filter prop
   const now = new Date()
   const filteredMeetings = allMeetings.filter(meeting => {
@@ -184,14 +127,46 @@ export default function DashboardMeetingsListWithCards({ filter = 'upcoming' }: 
     <>
       {sortedMeetings.map((meeting, index) => (
         <MeetingListItem
-          key={meeting.meeting_uuid_id}
-          id={meeting.meeting_uuid_id}
-          title={meeting.title || "Untitled Meeting"}
+          key={meeting.meeting_uuid_id} // Use UUID for key
+          id={meeting.meeting_uuid_id}  // Pass UUID as id
+          title={meeting.title || "Untitled"}
           startTime={meeting.start_time || new Date().toISOString()}
           platform={getPlatform(meeting.meeting_url)}
-          isRecording={meeting.bot_enabled}
-          onRecordToggle={async (newStatus) => await handleRecordToggle(meeting.meeting_uuid_id, newStatus)}
-          onHide={async () => await handleHide(meeting.meeting_uuid_id)}
+          isRecording={meeting.bot_enabled} // Map DB field to prop
+          onRecordToggle={async (status) => {
+            try {
+              const { data, error } = await supabase.functions.invoke('manage-meeting', {
+                body: { action: 'toggle_record', meetingId: meeting.meeting_uuid_id, shouldRecord: status }
+              });
+              if (error) throw error;
+              if (!data?.success) throw new Error(data?.message || 'Failed to toggle recording');
+              // Optimistically update local state
+              setAllMeetings(prevMeetings =>
+                prevMeetings.map(m =>
+                  m.meeting_uuid_id === meeting.meeting_uuid_id
+                    ? { ...m, bot_enabled: status }
+                    : m
+                )
+              );
+            } catch (err) {
+              console.error('Error updating recording status:', err);
+            }
+          }}
+          onHide={async () => {
+            try {
+              const { data, error } = await supabase.functions.invoke('manage-meeting', {
+                body: { action: 'hide', meetingId: meeting.meeting_uuid_id }
+              });
+              if (error) throw error;
+              if (!data?.success) throw new Error(data?.message || 'Failed to hide meeting');
+              // Optimistically remove from list
+              setAllMeetings(prevMeetings =>
+                prevMeetings.filter(m => m.meeting_uuid_id !== meeting.meeting_uuid_id)
+              );
+            } catch (err) {
+              console.error('Error hiding meeting:', err);
+            }
+          }}
           isLast={index === sortedMeetings.length - 1}
         />
       ))}
@@ -201,7 +176,7 @@ export default function DashboardMeetingsListWithCards({ filter = 'upcoming' }: 
 
 // Interface for MeetingListItem props
 interface MeetingListItemProps {
-  id: string; // This will hold the UUID (meeting_uuid_id)
+  id: string; // This will hold the UUID
   title: string;
   startTime: string;
   platform?: string;
