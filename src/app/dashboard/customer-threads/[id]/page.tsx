@@ -964,6 +964,25 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               contactName={formatPriority(nextStep.priority)}
               description={nextStep.description}
               className="h-full"
+              onGoToSource={
+                nextStep.meeting_id !== null
+                  ? () => {
+                      setSelectedEvent({
+                        id: `meeting-${nextStep.meeting_id}`,
+                        type: "meeting",
+                      });
+                      setActiveTab("timeline");
+                    }
+                  : nextStep.thread_id
+                  ? () => {
+                      setSelectedEvent({
+                        id: `thread-${nextStep.thread_id}`,
+                        type: "thread",
+                      });
+                      setActiveTab("timeline");
+                    }
+                  : undefined
+              }
             />
           ) : (
             <NextStepCard
@@ -1238,6 +1257,25 @@ export default function CompanyDetailDashboard({ params }: PageProps) {
               description={task.description}
               className="h-full"
               onStatusChange={(newStatus) => handleStatusUpdate(task.step_id, newStatus)}
+              onGoToSource={
+                task.meeting_id !== null
+                  ? () => {
+                      setSelectedEvent({
+                        id: `meeting-${task.meeting_id}`,
+                        type: "meeting",
+                      });
+                      setActiveTab("timeline");
+                    }
+                  : task.thread_id
+                  ? () => {
+                      setSelectedEvent({
+                        id: `thread-${task.thread_id}`,
+                        type: "thread",
+                      });
+                      setActiveTab("timeline");
+                    }
+                  : undefined
+              }
             />
           ))
         ) : (
