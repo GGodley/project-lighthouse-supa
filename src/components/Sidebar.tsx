@@ -65,7 +65,7 @@ export function Sidebar() {
     return (
       <Link
         href={href}
-        className={`group flex items-center ${isExpanded ? 'justify-between' : 'justify-center'} px-3 py-2 rounded-md text-[13px] font-medium transition-all duration-300 ${
+        className={`group flex items-center ${isExpanded ? 'justify-start' : 'justify-center'} px-3 py-2 rounded-md text-[13px] font-medium transition-all duration-300 ${
           isActive 
             ? 'bg-gray-100 text-gray-900' 
             : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
@@ -74,16 +74,23 @@ export function Sidebar() {
       >
         <div className={`flex items-center gap-3 overflow-hidden ${!isExpanded ? 'justify-center w-full' : ''}`}>
           <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-gray-900' : 'text-gray-400 group-hover:text-gray-600'}`} />
-          <span className={`whitespace-nowrap transition-all duration-200 ${
-            isExpanded 
-              ? 'opacity-100 translate-x-0 w-auto' 
-              : 'opacity-0 -translate-x-2 w-0 overflow-hidden'
-          }`}>
+          <span
+            className={`
+              whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out
+              ${isExpanded ? 'w-auto opacity-100 ml-3 translate-x-0' : 'w-0 opacity-0 ml-0 -translate-x-2'}
+            `}
+          >
             {label}
           </span>
         </div>
         {isExpanded && badge && (
-          <span className="ml-2 shrink-0 bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
+          <span
+            className={`
+              ml-auto shrink-0 bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap
+              transition-all duration-300
+              ${isExpanded ? 'opacity-100 scale-100' : 'opacity-0 scale-0 w-0'}
+            `}
+          >
             {badge}
           </span>
         )}
@@ -120,12 +127,19 @@ export function Sidebar() {
         `}
       >
         {/* Brand */}
-        <div className={`px-5 mb-6 flex items-center ${isExpanded ? 'gap-2.5' : 'justify-center'}`}>
-          <div className="w-6 h-6 bg-blue-600 rounded-lg shadow-sm flex items-center justify-center text-white shrink-0">
+        <div className={`px-5 mb-6 flex items-center transition-all duration-300 ${isExpanded ? 'gap-0' : 'justify-center'}`}>
+          <div className="w-6 h-6 bg-blue-600 rounded-lg shadow-sm flex items-center justify-center text-white shrink-0 z-10 relative">
               <LayoutGrid className="w-3.5 h-3.5" />
           </div>
-          <div className={`overflow-hidden transition-all duration-300 ${isExpanded ? 'w-auto opacity-100' : 'w-0 opacity-0'}`}>
-            <span className="font-bold text-gray-900 text-sm tracking-tight whitespace-nowrap">
+          {/* Smooth Text Reveal */}
+          <div
+            className={`
+              flex flex-col justify-center overflow-hidden whitespace-nowrap
+              transition-all duration-300 ease-in-out
+              ${isExpanded ? 'w-40 opacity-100 ml-3' : 'w-0 opacity-0 ml-0'}
+            `}
+          >
+            <span className="font-bold text-gray-900 text-sm tracking-tight">
               Lighthouse
             </span>
           </div>
