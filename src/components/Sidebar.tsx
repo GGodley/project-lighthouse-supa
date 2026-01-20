@@ -118,7 +118,7 @@ export function Sidebar() {
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         className={`
-          fixed top-0 left-0 h-full bg-white z-[9999]
+          fixed top-0 left-0 h-full bg-white z-[2147483647]
           border-r border-gray-200 flex flex-col
           transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1.0)]
           ${isExpanded ? 'w-72' : 'w-20'}
